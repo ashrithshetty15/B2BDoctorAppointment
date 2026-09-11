@@ -44,6 +44,11 @@ enum Language {
   KN
 }
 
+enum DoctorStatus {
+  ACTIVE
+  DISABLED
+}
+
 model Doctor {
   id       String @id @default(uuid())
   name     String
@@ -86,6 +91,8 @@ model Doctor {
 
   /// Simple per-doctor API key for the dashboard routes (MVP auth).
   apiKey String @unique @map("api_key")
+
+  status DoctorStatus @default(ACTIVE)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

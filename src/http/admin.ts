@@ -206,3 +206,91 @@ adminRouter.patch('/admin/doctor/:id', requireAdminKey, async (req, res) => {
 
   res.json({ id: doctor.id, updated: true });
 });
+
+/** List all doctors with pagination. */
+adminRouter.get('/admin/doctors', requireAdminKey, async (req, res) => {
+  const skip = Math.max(0, (parseInt(req.query.page as string) ?? 1) - 1) * 10;
+  const limit = 10;
+
+  const [doctors, total] = await Promise.all([
+    prisma.doctor.findMany({
+      skip,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+    }),
+    prisma.doctor.count(),
+  ]);
+
+  const pages = Math.ceil(total / limit);
+  res.json({
+    data: doctors,
+    pagination: {
+      page: Math.floor(skip / limit) + 1,
+      limit,
+      total,
+      pages,
+    },
+  });
+});
+
+/** Toggle doctor status between ACTIVE and DISABLED. */
+const statusToggleBody = z.object({
+  status: z.enum(['ACTIVE', 'DISABLED']).optional(),
+});
+
+adminRouter.post('/admin/doctor/:id/toggle-status', requireAdminKey, async (req, res) => {
+  const parsed = statusToggleBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid payload', issues: parsed.error.issues });
+    return;
+  }
+
+  const doctor = await prisma.doctor.findUnique({ where: { id: req.params['id'] ?? '' } });
+  if (!doctor) {
+    res.status(404).json({ error: 'Doctor not found' });
+    return;
+  }
+
+  const newStatus = parsed.data.status || (doctor.status === 'ACTIVE' ? 'DISABLED' : 'ACTIVE');
+
+  const updated = await prisma.doctor.update({
+    where: { id: doctor.id },
+    data: { status: newStatus },
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      updatedAt: true,
+    },
+  });
+
+  res.json(updated);
+});
+
+/** Rotate the API key for a doctor. Returns the new key once. */
+adminRouter.post('/admin/doctor/:id/rotate-key', requireAdminKey, async (req, res) => {
+  const doctor = await prisma.doctor.findUnique({ where: { id: req.params['id'] ?? '' } });
+  if (!doctor) {
+    res.status(404).json({ error: 'Doctor not found' });
+    return;
+  }
+
+  const newApiKey = `dk_${crypto.randomBytes(24).toString('hex')}`;
+
+  const updated = await prisma.doctor.update({
+    where: { id: doctor.id },
+    data: { apiKey: newApiKey },
+    select: {
+      id: true,
+      name: true,
+      apiKey: true,
+    },
+  });
+
+  res.json({
+    id: updated.id,
+    name: updated.name,
+    apiKey: updated.apiKey,
+    message: 'New API key generated. Save it now — it will not be shown again.',
+  });
+});
