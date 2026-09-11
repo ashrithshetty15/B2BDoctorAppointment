@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+coverage/
+.DS_Store
+
+# Machine-local Claude Code settings (shared settings.json may be committed)
+.claude/settings.local.json

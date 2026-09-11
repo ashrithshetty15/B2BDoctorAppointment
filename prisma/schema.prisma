@@ -1,0 +1,232 @@
+// Clinic token/appointment bot — MVP schema.
+//
+// NOTE: Section 2 of the spec was not supplied (the prompt still contained the
+// "[paste Section 2 schema here]" placeholder), so this is an inferred schema built
+// from the behavioural requirements in Sections 1-7 of the prompt. Field names that
+// the requirements called out explicitly are kept verbatim in spirit:
+//   booking_mode, daily_token_cap, avg_consult_time_mins, working_hours,
+//   consult_duration_mins, leave_dates, last_visit
+// mapped to camelCase Prisma fields with @map to snake_case columns.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum BookingMode {
+  TOKEN
+  SLOT
+  HYBRID
+}
+
+enum AppointmentType {
+  TOKEN
+  SLOT
+}
+
+enum AppointmentStatus {
+  BOOKED
+  ARRIVED
+  IN_PROGRESS
+  DONE
+  NO_SHOW
+  CANCELLED
+}
+
+/// Patient-facing language. Kannada is served as Kanglish (Latin transliteration)
+/// because most patients type in Latin script on WhatsApp.
+enum Language {
+  EN
+  KN
+}
+
+model Doctor {
+  id       String @id @default(uuid())
+  name     String
+  /// Clinic / practice display name used in patient messages.
+  clinicName String @map("clinic_name")
+  /// Doctor's own contact number (not the WhatsApp business sender).
+  phone    String
+
+  /// Meta WhatsApp Cloud API `phone_number_id` that patients message.
+  /// Inbound webhooks are routed to a Doctor via this value.
+  whatsappPhoneNumberId String? @unique @map("whatsapp_phone_number_id")
+
+  /// Set once at onboarding via the admin route — never over WhatsApp.
+  /// All conversation branching depends on this field.
+  bookingMode         BookingMode @default(TOKEN) @map("booking_mode")
+  bookingModeLockedAt DateTime?   @map("booking_mode_locked_at")
+
+  // ---- TOKEN mode config ----
+  dailyTokenCap Int @default(40) @map("daily_token_cap")
+
+  // ---- SLOT mode config ----
+  consultDurationMins Int @default(10) @map("consult_duration_mins")
+
+  /// Rolling average, updated after every "Done" action. Seeded from
+  /// consultDurationMins at onboarding.
+  avgConsultTimeMins Float @default(10) @map("avg_consult_time_mins")
+  /// Number of completed consults folded into avgConsultTimeMins so far.
+  consultSampleCount Int   @default(0) @map("consult_sample_count")
+
+  /// Weekly schedule:
+  /// { "mon": [{ "start": "09:30", "end": "13:00" }, { "start": "17:00", "end": "20:00" }], ... }
+  /// Keys: mon tue wed thu fri sat sun. A missing/empty key means a non-working day.
+  workingHours Json @map("working_hours")
+
+  /// Dates the doctor is unavailable (whole-day leave).
+  leaveDates DateTime[] @map("leave_dates") @db.Date
+
+  defaultLanguage Language @default(EN) @map("default_language")
+  timezone        String   @default("Asia/Kolkata")
+
+  /// Simple per-doctor API key for the dashboard routes (MVP auth).
+  apiKey String @unique @map("api_key")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  appointments Appointment[]
+  queueStates  QueueState[]
+  sessions     ConversationSession[]
+
+  @@map("doctors")
+}
+
+model Patient {
+  id    String  @id @default(uuid())
+  /// E.164 without the '+', as delivered by WhatsApp (e.g. 919876543210).
+  phone String  @unique
+  name  String?
+
+  language    Language  @default(EN)
+  lastVisitAt DateTime? @map("last_visit_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  appointments Appointment[]
+  sessions     ConversationSession[]
+
+  @@map("patients")
+}
+
+model Appointment {
+  id String @id @default(uuid())
+
+  doctorId  String @map("doctor_id")
+  patientId String @map("patient_id")
+
+  /// Calendar date of the appointment, in the doctor's timezone.
+  date DateTime @db.Date
+
+  type   AppointmentType
+  status AppointmentStatus @default(BOOKED)
+
+  // ---- TOKEN mode ----
+  /// Sequential per (doctor, date). Null for SLOT appointments.
+  tokenNumber Int? @map("token_number")
+
+  // ---- SLOT mode ----
+  slotStart DateTime? @map("slot_start")
+  slotEnd   DateTime? @map("slot_end")
+
+  // ---- Lifecycle timestamps ----
+  arrivedAt   DateTime? @map("arrived_at")
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  cancelledAt DateTime? @map("cancelled_at")
+
+  /// Actual consult length in minutes, recorded on "Done"; feeds the rolling average.
+  consultMins Int? @map("consult_mins")
+
+  // ---- Reminder bookkeeping (SLOT mode) ----
+  dayBeforeReminderSentAt  DateTime? @map("day_before_reminder_sent_at")
+  hourBeforeReminderSentAt DateTime? @map("hour_before_reminder_sent_at")
+
+  /// Last queue position pushed to this patient — used to suppress no-op updates.
+  lastNotifiedPosition Int? @map("last_notified_position")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  doctor  Doctor  @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, date, tokenNumber], name: "doctor_date_token")
+  @@unique([doctorId, slotStart], name: "doctor_slot_start")
+  @@index([doctorId, date, status])
+  @@index([patientId, date])
+  @@index([status, slotStart])
+  @@map("appointments")
+}
+
+/// One row per (doctor, date). Holds the token counter and the "now serving" pointer.
+model QueueState {
+  id String @id @default(uuid())
+
+  doctorId String   @map("doctor_id")
+  date     DateTime @db.Date
+
+  /// Highest token number issued so far today. Next token = lastIssuedToken + 1.
+  lastIssuedToken Int  @default(0) @map("last_issued_token")
+  /// Token currently with the doctor (IN_PROGRESS), if any.
+  nowServingToken Int? @map("now_serving_token")
+
+  /// Cumulative delay announced by the doctor, added to every ETA today.
+  delayMins Int     @default(0) @map("delay_mins")
+  /// Stop issuing new tokens for the day (cap reached or doctor closed the list).
+  isClosed  Boolean @default(false) @map("is_closed")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, date], name: "doctor_date")
+  @@map("queue_states")
+}
+
+/// Conversation state machine cursor. Keyed by (phone, doctorId) per the spec.
+/// Postgres-backed (rather than Redis) so state survives a Redis flush and is
+/// inspectable from the dashboard.
+model ConversationSession {
+  id String @id @default(uuid())
+
+  phone    String
+  doctorId String @map("doctor_id")
+
+  /// Current step name, e.g. "TOKEN_MAIN_MENU". Owned by the state machine layer.
+  step String
+  /// Arbitrary per-step scratch data (pending appointment id, retry counts, ...).
+  data Json @default("{}")
+
+  patientId String?  @map("patient_id")
+  language  Language @default(EN)
+
+  /// Idle expiry. An expired session is reset to the entry step on next inbound.
+  expiresAt DateTime @map("expires_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  doctor  Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  patient Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
+
+  @@unique([phone, doctorId], name: "phone_doctor")
+  @@index([expiresAt])
+  @@map("conversation_sessions")
+}
+
+/// Dedupe table for Meta webhook retries — Meta re-delivers on non-2xx and
+/// occasionally duplicates. Keyed by the provider's message id.
+model ProcessedMessage {
+  providerMessageId String   @id @map("provider_message_id")
+  processedAt       DateTime @default(now()) @map("processed_at")
+
+  @@map("processed_messages")
+}
