@@ -11,6 +11,9 @@ export default defineConfig({
       REDIS_URL: 'redis://localhost:6379',
       MESSAGING_PROVIDER: 'console',
       LOG_LEVEL: 'silent',
+      // Fixed so session signing is deterministic across runs; without it the
+      // module falls back to a per-process random key.
+      DASHBOARD_SESSION_SECRET: 'test-dashboard-session-secret-0123456789abcdef',
     },
   },
 });

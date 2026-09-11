@@ -11,7 +11,7 @@ import {
   notifyStatusChange,
 } from '../services/notifications';
 import { clinicToday, formatDateOnly, parseDateOnly } from '../utils/time';
-import { requireDoctorApiKey } from './middleware/auth';
+import { requireCsrf, requireDoctorAuth, requireDoctorScope } from './middleware/auth';
 
 /**
  * Dashboard API (requirement 6). Auth is one API key per doctor — see
@@ -22,7 +22,7 @@ export const dashboardRouter = Router();
 // ---------------------------------------------------------------------------
 // GET /doctor/:id/today — today's queue (TOKEN) or schedule (SLOT)
 // ---------------------------------------------------------------------------
-dashboardRouter.get('/doctor/:doctorId/today', requireDoctorApiKey, async (req, res) => {
+dashboardRouter.get('/doctor/:doctorId/today', requireDoctorScope, async (req, res) => {
   const doctor = req.doctor!;
   const dateParam = typeof req.query['date'] === 'string' ? req.query['date'] : null;
   const date = dateParam ? parseDateOnly(dateParam) : clinicToday(doctor.timezone);
@@ -107,7 +107,7 @@ const statusBody = z.object({
   status: z.enum(['arrived', 'in-progress', 'done', 'no-show']),
 });
 
-dashboardRouter.post('/appointment/:id/status', requireDoctorApiKey, async (req, res) => {
+dashboardRouter.post('/appointment/:id/status', requireDoctorAuth, requireCsrf, async (req, res) => {
   const doctor = req.doctor!;
   const parsed = statusBody.safeParse(req.body);
   if (!parsed.success) {
@@ -167,7 +167,7 @@ const delayBody = z.object({
   date: z.string().optional(),
 });
 
-dashboardRouter.post('/doctor/:doctorId/delay-broadcast', requireDoctorApiKey, async (req, res) => {
+dashboardRouter.post('/doctor/:doctorId/delay-broadcast', requireDoctorScope, requireCsrf, async (req, res) => {
   const doctor = req.doctor!;
   const parsed = delayBody.safeParse(req.body);
   if (!parsed.success) {
@@ -204,7 +204,7 @@ const leaveBody = z.object({
   cancelExisting: z.boolean().optional(),
 });
 
-dashboardRouter.post('/doctor/:doctorId/leave', requireDoctorApiKey, async (req, res) => {
+dashboardRouter.post('/doctor/:doctorId/leave', requireDoctorScope, requireCsrf, async (req, res) => {
   const doctor = req.doctor!;
   const parsed = leaveBody.safeParse(req.body);
   if (!parsed.success) {

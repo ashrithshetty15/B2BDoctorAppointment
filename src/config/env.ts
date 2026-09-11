@@ -18,8 +18,16 @@ const schema = z.object({
   WHATSAPP_APP_SECRET: z.string().optional(),
 
   DEFAULT_DOCTOR_ID: z.string().optional(),
+  /** Idle expiry for a patient's WhatsApp conversation state. */
   SESSION_TTL_MINUTES: z.coerce.number().int().positive().default(120),
   ADMIN_API_KEY: z.string().default('change-me'),
+
+  // ---- Dashboard web login ----
+  // Named DASHBOARD_* to keep them clearly distinct from SESSION_TTL_MINUTES
+  // above, which governs the unrelated WhatsApp conversation state.
+  /** HMAC key for dashboard session cookies. Required in production. */
+  DASHBOARD_SESSION_SECRET: z.string().min(32).optional(),
+  DASHBOARD_SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(30).default(7),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -33,4 +41,12 @@ export const env = parsed.data;
 
 if (env.MESSAGING_PROVIDER === 'whatsapp_cloud' && !env.WHATSAPP_ACCESS_TOKEN) {
   throw new Error('MESSAGING_PROVIDER=whatsapp_cloud requires WHATSAPP_ACCESS_TOKEN');
+}
+
+// Without a stable secret, dashboard cookies would be signed with a key that
+// changes on every restart — every doctor silently logged out on each deploy.
+if (env.NODE_ENV === 'production' && !env.DASHBOARD_SESSION_SECRET) {
+  throw new Error(
+    'DASHBOARD_SESSION_SECRET (>=32 chars) is required in production; generate one with: openssl rand -hex 32',
+  );
 }
