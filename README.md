@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Clinic Token & Appointment Bot — MVP backend
 
 WhatsApp booking bot for single-doctor clinics. Node 20 + TypeScript + Express +
@@ -290,3 +291,6 @@ and sending them as `type: "template"` is not built yet.
 | `npm run prisma:migrate` | create a new migration (needs a live DB) |
 | `npm run prisma:deploy` | apply migrations |
 | `npm run seed` | seed one TOKEN-mode doctor |
+=======
+# B2BDoctorAppointment
+>>>>>>> 02d69d2488bedd51efef47763223c57f06b534fb
