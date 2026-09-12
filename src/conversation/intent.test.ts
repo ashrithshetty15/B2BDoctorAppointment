@@ -25,6 +25,12 @@ describe('menuIntent', () => {
     expect(menuIntent('cancel')).toBe('CANCEL');
   });
 
+  it('maps Kannada-script keywords', () => {
+    expect(menuIntent('ಟೋಕನ್')).toBe('BOOK');
+    expect(menuIntent('ನನ್ನ ಟೋಕನ್')).toBe('STATUS');
+    expect(menuIntent('ರದ್ದು')).toBe('CANCEL');
+  });
+
   it('does not guess at unrelated text', () => {
     expect(menuIntent('kya haal hai')).toBe('UNKNOWN');
   });
@@ -45,9 +51,16 @@ describe('yes / no / restart', () => {
     expect(isNo('beda')).toBe(true);
   });
 
+  it('accepts Kannada-script confirmations', () => {
+    expect(isYes('ಹೌದು')).toBe(true);
+    expect(isNo('ಇಲ್ಲ')).toBe(true);
+    expect(isNo('ಬೇಡ')).toBe(true);
+  });
+
   it('recognises greetings as a restart', () => {
     expect(isRestart('hi')).toBe(true);
     expect(isRestart('namaskara')).toBe(true);
+    expect(isRestart('ನಮಸ್ಕಾರ')).toBe(true);
     expect(isRestart('book')).toBe(false);
   });
 });

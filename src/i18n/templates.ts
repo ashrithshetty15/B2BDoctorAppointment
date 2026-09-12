@@ -8,9 +8,9 @@ import type { Language } from '@prisma/client';
  * `TemplateSet`; TypeScript then forces every language to implement it, so a
  * language can never silently fall out of sync.
  *
- * Kannada (KN) is served as Kanglish — Kannada rendered in Latin script —
- * because that is how most patients type on WhatsApp. Swap the KN object for
- * native-script strings without touching any other file.
+ * Kannada (KN) is served in native Kannada script. Patients still frequently
+ * reply in Latin script, so `conversation/intent.ts` matches keywords in both
+ * scripts; menu digits stay ASCII for the same reason.
  */
 
 export type TemplateSet = {
@@ -181,91 +181,89 @@ const en: TemplateSet = {
 
 const kn: TemplateSet = {
   languagePrompt: () =>
-    'Swagatha! Nimma bhashe aayke maadi:\n\n1. English\n2. ಕನ್ನಡ (Kannada)\n\n1 athava 2 ottisi.',
-  languageInvalid: () => 'Dayavittu English ge 1, Kannada ge 2 ottisi.',
-  askName: ({ clinicName }) => `${clinicName} ge swagatha. Nimma hesaru enu? (Poorna hesaru type maadi)`,
-  nameInvalid: () => 'Dayavittu nimma hesarannu kaddapaksha 2 aksharagalalli type maadi.',
-  welcomeBack: ({ patientName, clinicName }) =>
-    `Matte swagatha, ${patientName}! — ${clinicName}`,
-  sessionExpired: () => 'Nimma session time out aagide, adhrinda modhalinda shuru maadutteve.',
+    'ಸ್ವಾಗತ! ನಿಮ್ಮ ಭಾಷೆ ಆಯ್ಕೆ ಮಾಡಿ:\n\n1. English\n2. ಕನ್ನಡ (Kannada)\n\n1 ಅಥವಾ 2 ಒತ್ತಿ.',
+  languageInvalid: () => 'ದಯವಿಟ್ಟು English ಗೆ 1, ಕನ್ನಡಕ್ಕೆ 2 ಒತ್ತಿ.',
+  askName: ({ clinicName }) => `${clinicName} ಗೆ ಸ್ವಾಗತ. ನಿಮ್ಮ ಹೆಸರು ಏನು? (ಪೂರ್ಣ ಹೆಸರು ಬರೆಯಿರಿ)`,
+  nameInvalid: () => 'ದಯವಿಟ್ಟು ನಿಮ್ಮ ಹೆಸರನ್ನು ಕನಿಷ್ಠ 2 ಅಕ್ಷರಗಳಲ್ಲಿ ಬರೆಯಿರಿ.',
+  welcomeBack: ({ patientName, clinicName }) => `ಮತ್ತೆ ಸ್ವಾಗತ, ${patientName}! — ${clinicName}`,
+  sessionExpired: () => 'ನಿಮ್ಮ ಸಂವಾದದ ಸಮಯ ಮುಗಿದಿದೆ, ಆದ್ದರಿಂದ ಮೊದಲಿನಿಂದ ಶುರು ಮಾಡುತ್ತೇವೆ.',
   errorGeneric: () =>
-    'Kshamisi, namma kadeyinda enadru thappagide. Swalpa hothina nantara punaha prayathnisi, athava clinic ge phone maadi.',
+    'ಕ್ಷಮಿಸಿ, ನಮ್ಮ ಕಡೆಯಿಂದ ಏನೋ ತಪ್ಪಾಗಿದೆ. ಸ್ವಲ್ಪ ಹೊತ್ತಿನ ನಂತರ ಪುನಃ ಪ್ರಯತ್ನಿಸಿ, ಅಥವಾ ಕ್ಲಿನಿಕ್‌ಗೆ ಫೋನ್ ಮಾಡಿ.',
   unknownInput: () =>
-    'Kshamisi, nanage arthavaagalilla. Dayavittu mele thorisiruva sankhyegalalli ondannu ottisi.',
+    'ಕ್ಷಮಿಸಿ, ನನಗೆ ಅರ್ಥವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮೇಲೆ ತೋರಿಸಿರುವ ಸಂಖ್ಯೆಗಳಲ್ಲಿ ಒಂದನ್ನು ಒತ್ತಿ.',
   doctorOnLeave: ({ doctorName, date }) =>
-    `Dr. ${doctorName} ${date} dina labhyavilla. Dayavittu bere dina prayathnisi.`,
+    `ಡಾ. ${doctorName} ${date} ದಿನ ಲಭ್ಯವಿಲ್ಲ. ದಯವಿಟ್ಟು ಬೇರೆ ದಿನ ಪ್ರಯತ್ನಿಸಿ.`,
   notConfigured: () =>
-    'Ee clinic innu WhatsApp booking ge siddhavaagilla. Dayavittu clinic ge neravaagi phone maadi.',
-  nowServingNone: () => 'innu shuru aagilla',
+    'ಈ ಕ್ಲಿನಿಕ್ ಇನ್ನೂ WhatsApp ಬುಕಿಂಗ್‌ಗೆ ಸಿದ್ಧವಾಗಿಲ್ಲ. ದಯವಿಟ್ಟು ಕ್ಲಿನಿಕ್‌ಗೆ ನೇರವಾಗಿ ಫೋನ್ ಮಾಡಿ.',
+  nowServingNone: () => 'ಇನ್ನೂ ಶುರುವಾಗಿಲ್ಲ',
 
   // ---- TOKEN mode ----
   tokenMainMenu: ({ doctorName, date }) =>
-    `Dr. ${doctorName} — ${date}\n\n1. Ivattu token book maadi\n2. Nanna token status nodi\n3. Nanna token cancel maadi\n\n1, 2 athava 3 ottisi.`,
+    `ಡಾ. ${doctorName} — ${date}\n\n1. ಇವತ್ತಿನ ಟೋಕನ್ ಬುಕ್ ಮಾಡಿ\n2. ನನ್ನ ಟೋಕನ್ ಸ್ಥಿತಿ ನೋಡಿ\n3. ನನ್ನ ಟೋಕನ್ ರದ್ದು ಮಾಡಿ\n\n1, 2 ಅಥವಾ 3 ಒತ್ತಿ.`,
   tokenConfirmPrompt: ({ doctorName, date }) =>
-    `Dr. ${doctorName} avara jothe ${date} ge token book maadabeka?\n\n1. Haudu, confirm maadi\n2. Illa, hindhe hogi`,
+    `ಡಾ. ${doctorName} ಅವರ ಜೊತೆ ${date} ಗೆ ಟೋಕನ್ ಬುಕ್ ಮಾಡಬೇಕೆ?\n\n1. ಹೌದು, ಖಚಿತಪಡಿಸಿ\n2. ಇಲ್ಲ, ಹಿಂದೆ ಹೋಗಿ`,
   tokenBooked: ({ tokenNumber, date, doctorName, nowServing, ahead, eta }) =>
-    `Nimma token confirm aagide.\n\n*Token #${tokenNumber}*\nDr. ${doctorName} — ${date}\nIga nadeyuttiruva token: ${nowServing}\nNimma munde iruva rogigalu: ${ahead}\nAndaaju kaayuva samaya: ${eta}\n\nQueue munde hodaage nimage message maadutteve. Status nodalu yaavaglaadaru 2 ottisi.`,
+    `ನಿಮ್ಮ ಟೋಕನ್ ಖಚಿತವಾಗಿದೆ.\n\n*ಟೋಕನ್ #${tokenNumber}*\nಡಾ. ${doctorName} — ${date}\nಈಗ ನಡೆಯುತ್ತಿರುವ ಟೋಕನ್: ${nowServing}\nನಿಮ್ಮ ಮುಂದೆ ಇರುವ ರೋಗಿಗಳು: ${ahead}\nಅಂದಾಜು ಕಾಯುವ ಸಮಯ: ${eta}\n\nಸರದಿ ಮುಂದೆ ಹೋದಾಗ ನಿಮಗೆ ಸಂದೇಶ ಕಳುಹಿಸುತ್ತೇವೆ. ಸ್ಥಿತಿ ನೋಡಲು ಯಾವಾಗಲಾದರೂ 2 ಒತ್ತಿ.`,
   tokenAlreadyBooked: ({ tokenNumber, ahead, eta }) =>
-    `Nimage ivattige aagale *token #${tokenNumber}* ide.\nNimma munde iruva rogigalu: ${ahead}\nAndaaju kaayuva samaya: ${eta}`,
+    `ನಿಮಗೆ ಇವತ್ತಿಗೆ ಈಗಾಗಲೇ *ಟೋಕನ್ #${tokenNumber}* ಇದೆ.\nನಿಮ್ಮ ಮುಂದೆ ಇರುವ ರೋಗಿಗಳು: ${ahead}\nಅಂದಾಜು ಕಾಯುವ ಸಮಯ: ${eta}`,
   tokenQueueFull: ({ doctorName }) =>
-    `Kshamisi, Dr. ${doctorName} avara ivattina ella tokengalu bharthi aagive. Dayavittu naale belagge message maadi.`,
-  tokenListClosed: () => 'Ivattige token booking muchchalaagide. Dayavittu naale prayathnisi.',
+    `ಕ್ಷಮಿಸಿ, ಡಾ. ${doctorName} ಅವರ ಇವತ್ತಿನ ಎಲ್ಲಾ ಟೋಕನ್‌ಗಳು ಭರ್ತಿಯಾಗಿವೆ. ದಯವಿಟ್ಟು ನಾಳೆ ಬೆಳಗ್ಗೆ ಸಂದೇಶ ಕಳುಹಿಸಿ.`,
+  tokenListClosed: () => 'ಇವತ್ತಿಗೆ ಟೋಕನ್ ಬುಕಿಂಗ್ ಮುಚ್ಚಲಾಗಿದೆ. ದಯವಿಟ್ಟು ನಾಳೆ ಪ್ರಯತ್ನಿಸಿ.',
   tokenStatus: ({ tokenNumber, nowServing, ahead, eta }) =>
-    `*Token #${tokenNumber}*\nIga nadeyuttiruva token: ${nowServing}\nNimma munde iruva rogigalu: ${ahead}\nAndaaju kaayuva samaya: ${eta}`,
+    `*ಟೋಕನ್ #${tokenNumber}*\nಈಗ ನಡೆಯುತ್ತಿರುವ ಟೋಕನ್: ${nowServing}\nನಿಮ್ಮ ಮುಂದೆ ಇರುವ ರೋಗಿಗಳು: ${ahead}\nಅಂದಾಜು ಕಾಯುವ ಸಮಯ: ${eta}`,
   tokenPositionUpdate: ({ tokenNumber, nowServing, ahead, eta }) =>
-    `Queue update — *token #${tokenNumber}*\nIga nadeyuttiruva token: ${nowServing}\nNimma munde iruva rogigalu: ${ahead}\nAndaaju kaayuva samaya: ${eta}`,
+    `ಸರದಿ ಅಪ್‌ಡೇಟ್ — *ಟೋಕನ್ #${tokenNumber}*\nಈಗ ನಡೆಯುತ್ತಿರುವ ಟೋಕನ್: ${nowServing}\nನಿಮ್ಮ ಮುಂದೆ ಇರುವ ರೋಗಿಗಳು: ${ahead}\nಅಂದಾಜು ಕಾಯುವ ಸಮಯ: ${eta}`,
   tokenUpNext: ({ tokenNumber }) =>
-    `Mundina sara nimmadu! *Token #${tokenNumber}* — dayavittu clinic ge bandu doctor room hora kaayiri.`,
+    `ಮುಂದಿನ ಸರದಿ ನಿಮ್ಮದು! *ಟೋಕನ್ #${tokenNumber}* — ದಯವಿಟ್ಟು ಕ್ಲಿನಿಕ್‌ಗೆ ಬಂದು ಡಾಕ್ಟರ್ ಕೊಠಡಿಯ ಹೊರಗೆ ಕಾಯಿರಿ.`,
   tokenYourTurn: ({ tokenNumber, doctorName }) =>
-    `Iga nimma sara. *Token #${tokenNumber}* — dayavittu Dr. ${doctorName} avarannu nodalu olage hogi.`,
+    `ಈಗ ನಿಮ್ಮ ಸರದಿ. *ಟೋಕನ್ #${tokenNumber}* — ದಯವಿಟ್ಟು ಡಾ. ${doctorName} ಅವರನ್ನು ನೋಡಲು ಒಳಗೆ ಹೋಗಿ.`,
   tokenCancelConfirm: ({ tokenNumber, date }) =>
-    `${date} ge iruva *token #${tokenNumber}* cancel maadabeka?\n\n1. Haudu, cancel maadi\n2. Illa, hage iralli`,
+    `${date} ಗೆ ಇರುವ *ಟೋಕನ್ #${tokenNumber}* ರದ್ದು ಮಾಡಬೇಕೆ?\n\n1. ಹೌದು, ರದ್ದು ಮಾಡಿ\n2. ಇಲ್ಲ, ಹಾಗೇ ಇರಲಿ`,
   tokenCancelled: ({ tokenNumber }) =>
-    `Token #${tokenNumber} cancel aagide. Matte book maadalu yaavaglaadaru message maadi.`,
-  tokenCancelAborted: () => 'Nimma token hage ide. Enu cancel aagilla.',
-  tokenNoActiveBooking: () =>
-    'Ivattige nimage yaava token-oo illa. Ondu book maadalu 1 ottisi.',
+    `ಟೋಕನ್ #${tokenNumber} ರದ್ದಾಗಿದೆ. ಮತ್ತೆ ಬುಕ್ ಮಾಡಲು ಯಾವಾಗಲಾದರೂ ಸಂದೇಶ ಕಳುಹಿಸಿ.`,
+  tokenCancelAborted: () => 'ನಿಮ್ಮ ಟೋಕನ್ ಹಾಗೇ ಇದೆ. ಏನೂ ರದ್ದಾಗಿಲ್ಲ.',
+  tokenNoActiveBooking: () => 'ಇವತ್ತಿಗೆ ನಿಮಗೆ ಯಾವ ಟೋಕನ್ ಕೂಡ ಇಲ್ಲ. ಒಂದು ಬುಕ್ ಮಾಡಲು 1 ಒತ್ತಿ.',
   tokenDelayBroadcast: ({ doctorName, delayMins, eta }) =>
-    `Suchane: Dr. ${doctorName} ivattu sumaaru ${delayMins} nimisha tadavaagi nadeyuttiddare. Asoukaryakke kshamisi.\nNimma hosa andaaju kaayuva samaya: ${eta}`,
+    `ಸೂಚನೆ: ಡಾ. ${doctorName} ಇವತ್ತು ಸುಮಾರು ${delayMins} ನಿಮಿಷ ತಡವಾಗಿ ನಡೆಯುತ್ತಿದ್ದಾರೆ. ಅನಾನುಕೂಲಕ್ಕೆ ಕ್ಷಮಿಸಿ.\nನಿಮ್ಮ ಹೊಸ ಅಂದಾಜು ಕಾಯುವ ಸಮಯ: ${eta}`,
   tokenVisitDone: ({ doctorName }) =>
-    `Dr. ${doctorName} avarannu bheti maadiddakke dhanyavaada. Beega gunavaagali. Matte book maadalu yaavaglaadaru message maadi.`,
+    `ಡಾ. ${doctorName} ಅವರನ್ನು ಭೇಟಿ ಮಾಡಿದ್ದಕ್ಕೆ ಧನ್ಯವಾದ. ಬೇಗ ಗುಣವಾಗಲಿ. ಮತ್ತೆ ಬುಕ್ ಮಾಡಲು ಯಾವಾಗಲಾದರೂ ಸಂದೇಶ ಕಳುಹಿಸಿ.`,
   tokenNoShow: ({ tokenNumber }) =>
-    `Token #${tokenNumber} karesalaayithu aadare neevu illade iddaddarinda adannu miss endu guruthisalaagide. Hosa token book maadalu 1 ottisi.`,
+    `ಟೋಕನ್ #${tokenNumber} ಕರೆಯಲಾಯಿತು, ಆದರೆ ನೀವು ಇಲ್ಲದ ಕಾರಣ ಅದನ್ನು ತಪ್ಪಿಸಲಾಗಿದೆ ಎಂದು ಗುರುತಿಸಲಾಗಿದೆ. ಹೊಸ ಟೋಕನ್ ಬುಕ್ ಮಾಡಲು 1 ಒತ್ತಿ.`,
   tokenBookingCancelledByClinic: ({ tokenNumber, date }) =>
-    `Kshamisi — doctor labhyavillade iruvudarinda ${date} ge iruva nimma *token #${tokenNumber}* cancel maadalaagide. Dayavittu bere dinakke matte book maadi.`,
+    `ಕ್ಷಮಿಸಿ — ಡಾಕ್ಟರ್ ಲಭ್ಯವಿಲ್ಲದ ಕಾರಣ ${date} ಗೆ ಇರುವ ನಿಮ್ಮ *ಟೋಕನ್ #${tokenNumber}* ರದ್ದು ಮಾಡಲಾಗಿದೆ. ದಯವಿಟ್ಟು ಬೇರೆ ದಿನಕ್ಕೆ ಮತ್ತೆ ಬುಕ್ ಮಾಡಿ.`,
 
   // ---- SLOT mode ----
   slotMainMenu: ({ doctorName }) =>
-    `Dr. ${doctorName}\n\n1. Appointment book maadi\n2. Nanna appointment nodi\n3. Nanna appointment cancel maadi\n\n1, 2 athava 3 ottisi.`,
-  slotPickDate: ({ options }) => `Dayavittu dinaanka aayke maadi:\n\n${options}\n\nSankhye ottisi.`,
+    `ಡಾ. ${doctorName}\n\n1. ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಬುಕ್ ಮಾಡಿ\n2. ನನ್ನ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ನೋಡಿ\n3. ನನ್ನ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ರದ್ದು ಮಾಡಿ\n\n1, 2 ಅಥವಾ 3 ಒತ್ತಿ.`,
+  slotPickDate: ({ options }) => `ದಯವಿಟ್ಟು ದಿನಾಂಕ ಆಯ್ಕೆ ಮಾಡಿ:\n\n${options}\n\nಸಂಖ್ಯೆ ಒತ್ತಿ.`,
   slotPickTime: ({ date, options }) =>
-    `${date} dina labhya iruva samayagalu:\n\n${options}\n\nNimage beku aada samayada sankhye ottisi.`,
+    `${date} ದಿನ ಲಭ್ಯವಿರುವ ಸಮಯಗಳು:\n\n${options}\n\nನಿಮಗೆ ಬೇಕಾದ ಸಮಯದ ಸಂಖ್ಯೆ ಒತ್ತಿ.`,
   slotNoneAvailable: ({ date }) =>
-    `Kshamisi, ${date} dina yaava samayavu khaali illa. Dayavittu bere dinaanka aayke maadi.`,
+    `ಕ್ಷಮಿಸಿ, ${date} ದಿನ ಯಾವ ಸಮಯವೂ ಖಾಲಿ ಇಲ್ಲ. ದಯವಿಟ್ಟು ಬೇರೆ ದಿನಾಂಕ ಆಯ್ಕೆ ಮಾಡಿ.`,
   slotConfirmPrompt: ({ doctorName, date, time }) =>
-    `Nimma appointment confirm maadabeka?\n\nDr. ${doctorName}\n${date}, ${time} ge\n\n1. Haudu, confirm maadi\n2. Illa, hindhe hogi`,
+    `ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಖಚಿತಪಡಿಸಬೇಕೆ?\n\nಡಾ. ${doctorName}\n${date}, ${time} ಗೆ\n\n1. ಹೌದು, ಖಚಿತಪಡಿಸಿ\n2. ಇಲ್ಲ, ಹಿಂದೆ ಹೋಗಿ`,
   slotBooked: ({ doctorName, clinicName, date, time }) =>
-    `Nimma appointment confirm aagide.\n\nDr. ${doctorName} — ${clinicName}\n*${date}, ${time} ge*\n\nHindina dina sanje mattu 1 gante modhalu nimage nenapisutteve. Cancel maadalu 3 ottisi.`,
+    `ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಖಚಿತವಾಗಿದೆ.\n\nಡಾ. ${doctorName} — ${clinicName}\n*${date}, ${time} ಗೆ*\n\nಹಿಂದಿನ ದಿನ ಸಂಜೆ ಮತ್ತು 1 ಗಂಟೆ ಮೊದಲು ನಿಮಗೆ ನೆನಪಿಸುತ್ತೇವೆ. ರದ್ದು ಮಾಡಲು 3 ಒತ್ತಿ.`,
   slotAlreadyBooked: ({ date, time }) =>
-    `Nimage aagale *${date}, ${time} ge* appointment ide. Modalu adannu cancel maadalu 3 ottisi.`,
-  slotTaken: () => 'Kshamisi, aa samaya iga thaane booking aayithu. Dayavittu bere ondu aayke maadi.',
+    `ನಿಮಗೆ ಈಗಾಗಲೇ *${date}, ${time} ಗೆ* ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಇದೆ. ಮೊದಲು ಅದನ್ನು ರದ್ದು ಮಾಡಲು 3 ಒತ್ತಿ.`,
+  slotTaken: () => 'ಕ್ಷಮಿಸಿ, ಆ ಸಮಯ ಈಗ ತಾನೇ ಬುಕ್ ಆಯಿತು. ದಯವಿಟ್ಟು ಬೇರೆ ಒಂದು ಆಯ್ಕೆ ಮಾಡಿ.',
   slotStatus: ({ doctorName, date, time }) =>
-    `Nimma appointment:\nDr. ${doctorName}\n*${date}, ${time} ge*`,
+    `ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್:\nಡಾ. ${doctorName}\n*${date}, ${time} ಗೆ*`,
   slotCancelConfirm: ({ date, time }) =>
-    `${date}, ${time} ge iruva nimma appointment cancel maadabeka?\n\n1. Haudu, cancel maadi\n2. Illa, hage iralli`,
+    `${date}, ${time} ಗೆ ಇರುವ ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ರದ್ದು ಮಾಡಬೇಕೆ?\n\n1. ಹೌದು, ರದ್ದು ಮಾಡಿ\n2. ಇಲ್ಲ, ಹಾಗೇ ಇರಲಿ`,
   slotCancelled: ({ date, time }) =>
-    `${date}, ${time} ge iruva nimma appointment cancel aagide. Matte book maadalu yaavaglaadaru message maadi.`,
+    `${date}, ${time} ಗೆ ಇರುವ ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ರದ್ದಾಗಿದೆ. ಮತ್ತೆ ಬುಕ್ ಮಾಡಲು ಯಾವಾಗಲಾದರೂ ಸಂದೇಶ ಕಳುಹಿಸಿ.`,
   slotReminderDayBefore: ({ doctorName, clinicName, date, time }) =>
-    `Nenapu: naale, *${date}, ${time} ge* ${clinicName} nalli Dr. ${doctorName} avara jothe nimma appointment ide. Cancel maadabekaadare 3 ottisi.`,
+    `ನೆನಪು: ನಾಳೆ, *${date}, ${time} ಗೆ* ${clinicName} ನಲ್ಲಿ ಡಾ. ${doctorName} ಅವರ ಜೊತೆ ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಇದೆ. ರದ್ದು ಮಾಡಬೇಕಾದರೆ 3 ಒತ್ತಿ.`,
   slotReminderHourBefore: ({ doctorName, time }) =>
-    `Nenapu: Dr. ${doctorName} avara jothe nimma appointment *${time} ge* — sumaaru 1 gante nantara. Dayavittu clinic kade horadi.`,
+    `ನೆನಪು: ಡಾ. ${doctorName} ಅವರ ಜೊತೆ ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ *${time} ಗೆ* — ಸುಮಾರು 1 ಗಂಟೆ ನಂತರ. ದಯವಿಟ್ಟು ಕ್ಲಿನಿಕ್ ಕಡೆ ಹೊರಡಿ.`,
   slotDelayBroadcast: ({ doctorName, delayMins }) =>
-    `Suchane: Dr. ${doctorName} ivattu sumaaru ${delayMins} nimisha tadavaagi nadeyuttiddare. Adakke anusaara bandu seri. Asoukaryakke kshamisi.`,
-  slotInvalidChoice: () => 'Dayavittu mele iruva pattiyinda ondu sankhye ottisi.',
+    `ಸೂಚನೆ: ಡಾ. ${doctorName} ಇವತ್ತು ಸುಮಾರು ${delayMins} ನಿಮಿಷ ತಡವಾಗಿ ನಡೆಯುತ್ತಿದ್ದಾರೆ. ಅದಕ್ಕೆ ಅನುಸಾರವಾಗಿ ಬನ್ನಿ. ಅನಾನುಕೂಲಕ್ಕೆ ಕ್ಷಮಿಸಿ.`,
+  slotInvalidChoice: () => 'ದಯವಿಟ್ಟು ಮೇಲೆ ಇರುವ ಪಟ್ಟಿಯಿಂದ ಒಂದು ಸಂಖ್ಯೆ ಒತ್ತಿ.',
 
   // ---- HYBRID mode ----
   hybridModeChoice: ({ doctorName }) =>
-    `Dr. ${doctorName} avarannu hege nodalu ista?\n\n1. Nirdhishta appointment samaya book maadi\n2. Token thegondu ivattu banni\n\n1 athava 2 ottisi.`,
+    `ಡಾ. ${doctorName} ಅವರನ್ನು ಹೇಗೆ ನೋಡಲು ಇಷ್ಟ?\n\n1. ನಿರ್ದಿಷ್ಟ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಸಮಯ ಬುಕ್ ಮಾಡಿ\n2. ಟೋಕನ್ ತೆಗೆದುಕೊಂಡು ಇವತ್ತು ಬನ್ನಿ\n\n1 ಅಥವಾ 2 ಒತ್ತಿ.`,
 };
 
 export const templates: Record<Language, TemplateSet> = { EN: en, KN: kn };

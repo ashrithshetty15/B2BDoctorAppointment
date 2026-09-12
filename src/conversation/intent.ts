@@ -1,7 +1,9 @@
 /**
  * Input normalisation. Patients type "1", "book", "token beku", or tap a button
  * whose payload the adapter flattened to text — flows should not each re-derive
- * that. Keyword lists cover English and Kanglish.
+ * that. Keyword lists cover English, Kanglish, and Kannada script: the bot
+ * replies in Kannada script, so patients answer in it even though the menus
+ * also accept numbers.
  */
 
 const RESTART_WORDS = [
@@ -15,14 +17,59 @@ const RESTART_WORDS = [
   'namaskar',
   'hii',
   'hlo',
+  'ನಮಸ್ಕಾರ',
+  'ನಮಸ್ತೆ',
+  'ಹಾಯ್',
+  'ಮೆನು',
+  'ಪ್ರಾರಂಭ',
+  'ಶುರು',
 ];
 
-const YES_WORDS = ['yes', 'y', 'ok', 'okay', 'confirm', 'haudu', 'howdu', 'ha', 'sari', 'yes please'];
-const NO_WORDS = ['no', 'n', 'cancel', 'back', 'illa', 'beda', 'bedа'];
+const YES_WORDS = [
+  'yes',
+  'y',
+  'ok',
+  'okay',
+  'confirm',
+  'haudu',
+  'howdu',
+  'ha',
+  'sari',
+  'yes please',
+  'ಹೌದು',
+  'ಸರಿ',
+  'ಆಯ್ತು',
+  'ಆಯಿತು',
+  'ಒಪ್ಪಿಗೆ',
+];
+const NO_WORDS = ['no', 'n', 'cancel', 'back', 'illa', 'beda', 'ಇಲ್ಲ', 'ಬೇಡ', 'ಹಿಂದೆ'];
 
-const BOOK_WORDS = ['book', 'booking', 'token', 'appointment', 'new', 'book maadi'];
-const STATUS_WORDS = ['status', 'position', 'where', 'queue', 'check', 'my token', 'nanna token'];
-const CANCEL_WORDS = ['cancel', 'cancel maadi', 'remove', 'radd'];
+const BOOK_WORDS = [
+  'book',
+  'booking',
+  'token',
+  'appointment',
+  'new',
+  'book maadi',
+  'ಟೋಕನ್',
+  'ಬುಕ್',
+  'ಅಪಾಯಿಂಟ್ಮೆಂಟ್',
+  'ಹೊಸ',
+];
+const STATUS_WORDS = [
+  'status',
+  'position',
+  'where',
+  'queue',
+  'check',
+  'my token',
+  'nanna token',
+  'ಸ್ಥಿತಿ',
+  'ಸರದಿ',
+  'ಎಲ್ಲಿ',
+  'ನನ್ನ ಟೋಕನ್',
+];
+const CANCEL_WORDS = ['cancel', 'cancel maadi', 'remove', 'radd', 'ರದ್ದು', 'ರದ್ದುಮಾಡಿ', 'ತೆಗೆದುಹಾಕಿ'];
 
 export function clean(input: string): string {
   return input.trim().toLowerCase().replace(/\s+/g, ' ');

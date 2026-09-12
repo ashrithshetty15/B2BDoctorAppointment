@@ -141,7 +141,7 @@ export async function runOnboarding(ctx: ConversationContext): Promise<Onboardin
 
 function languageFromWord(input: string): Language | null {
   const c = clean(input);
-  if (c === 'english' || c === 'en') return 'EN';
-  if (c === 'kannada' || c === 'kn') return 'KN';
+  if (c === 'english' || c === 'en' || c === 'ಇಂಗ್ಲಿಷ್') return 'EN';
+  if (c === 'kannada' || c === 'kn' || c === 'ಕನ್ನಡ') return 'KN';
   return null;
 }

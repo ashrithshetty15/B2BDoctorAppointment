@@ -38,7 +38,7 @@ files**:
 | 4. Token queue engine (cap, rolling average, async position pushes) | ✅ |
 | 5. Slot engine (generation from working hours) + reminders | ✅ engine + reminder jobs; needs the §4 flow to be reachable by patients |
 | 6. Dashboard API (4 routes, API key per doctor) | ✅ |
-| 7. Templates keyed `{language}.{templateName}`, EN + Kanglish | ✅ |
+| 7. Templates keyed `{language}.{templateName}`, EN + Kannada | ✅ |
 | 8. State machine decoupled from the WhatsApp API (adapter) | ✅ |
 
 Out of scope as instructed: payments, patient web app, EMR beyond
@@ -107,7 +107,7 @@ src/
   conversation/              ◄── state machine (no provider imports)
     engine.ts                orchestration: session → onboarding → flow → effects
     session.ts               (phone, doctor_id) state store, Postgres-backed
-    intent.ts                input normalisation (numbers + EN/Kanglish keywords)
+    intent.ts                input normalisation (numbers + EN/Kanglish/Kannada keywords)
     steps.ts                 every step name
     flows/onboarding.ts      language + name capture, mode-independent
     flows/token.ts           TOKEN MODE
@@ -171,8 +171,9 @@ curl -X POST localhost:3000/webhook -H 'content-type: application/json' \
   -d '{"from":"919876543210","text":"2"}'
 ```
 
-Kannada: send `2` at step 2 and every later message arrives in Kanglish. A
-patient can type `lang` at any point to switch.
+Kannada: send `2` at step 2 and every later message arrives in Kannada script.
+Replies are accepted in Kannada script or Latin/Kanglish. A patient can type
+`lang` at any point to switch.
 
 ### Dashboard
 

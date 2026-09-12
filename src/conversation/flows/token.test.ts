@@ -243,6 +243,6 @@ describe('language', () => {
     const result = await tokenFlow.handle({ ...ctx(Steps.TOKEN_MENU, ''), language: 'KN' });
 
     expect(result.replies[0]!.templateName).toBe('tokenMainMenu');
-    expect(result.replies[0]!.text).toContain('token book maadi');
+    expect(result.replies[0]!.text).toContain('ಟೋಕನ್ ಬುಕ್ ಮಾಡಿ');
   });
 });

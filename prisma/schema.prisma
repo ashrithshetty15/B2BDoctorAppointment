@@ -37,8 +37,8 @@ enum AppointmentStatus {
   CANCELLED
 }
 
-/// Patient-facing language. Kannada is served as Kanglish (Latin transliteration)
-/// because most patients type in Latin script on WhatsApp.
+/// Patient-facing language. Kannada is served in native Kannada script; inbound
+/// keywords are matched in both scripts since many patients still type in Latin.
 enum Language {
   EN
   KN
