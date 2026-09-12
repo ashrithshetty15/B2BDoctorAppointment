@@ -42,6 +42,14 @@ export interface SendResult {
   providerMessageId?: string;
 }
 
+/** A template message for business-initiated conversations (e.g., missed-call replies). */
+export interface TemplateMessage {
+  to: string;
+  templateName: string;
+  params?: string[];
+  channelAddress?: string;
+}
+
 /** Result of a provider webhook GET verification handshake. */
 export interface WebhookVerification {
   ok: boolean;
@@ -68,4 +76,7 @@ export interface MessagingAdapter {
   parseInbound(body: unknown): InboundMessage[];
 
   sendText(message: OutboundMessage): Promise<SendResult>;
+
+  /** Send a pre-approved template message (business-initiated, e.g., missed-call reply). */
+  sendTemplate?(message: TemplateMessage): Promise<SendResult>;
 }

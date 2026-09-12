@@ -61,6 +61,10 @@ model Doctor {
   /// Inbound webhooks are routed to a Doctor via this value.
   whatsappPhoneNumberId String? @unique @map("whatsapp_phone_number_id")
 
+  /// Exotel Missed Call virtual number that triggers auto-reply via WhatsApp.
+  /// Missed-call webhooks are routed to a Doctor via this value.
+  missedCallNumber String? @unique @map("missed_call_number")
+
   /// Set once at onboarding via the admin route — never over WhatsApp.
   /// All conversation branching depends on this field.
   bookingMode         BookingMode @default(TOKEN) @map("booking_mode")

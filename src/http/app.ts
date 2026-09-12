@@ -3,6 +3,7 @@ import pinoHttp from 'pino-http';
 import { prisma } from '../db/prisma';
 import { logger } from '../utils/logger';
 import { adminRouter } from './admin';
+import { callWebhookRouter } from './call-webhook';
 import { dashboardRouter } from './dashboard';
 import { webhookRouter } from './webhook';
 
@@ -48,9 +49,13 @@ export function createApp() {
     }),
   );
 
-  // NOTE: urlencoded is deliberately absent. The dashboard sends every mutation
-  // as fetch()+JSON so that a cross-site <form method="post"> cannot forge one;
-  // adding a urlencoded parser would quietly reopen that hole.
+  // Exotel sends call events as form-encoded data
+  app.use('/call-webhook', express.urlencoded({ extended: true }));
+
+  // NOTE: urlencoded is deliberately absent from the global config.
+  // The dashboard sends every mutation as fetch()+JSON so that a cross-site
+  // <form method="post"> cannot forge one; adding urlencoded globally would
+  // quietly reopen that hole. Only the call-webhook route uses it.
   app.use(express.json({ limit: '100kb' }));
 
   app.get('/health', async (_req, res) => {
@@ -64,6 +69,7 @@ export function createApp() {
   });
 
   app.use(webhookRouter);
+  app.use(callWebhookRouter);
   app.use(dashboardRouter);
   app.use(adminRouter);
 

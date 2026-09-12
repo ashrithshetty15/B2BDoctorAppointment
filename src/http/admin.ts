@@ -103,6 +103,7 @@ adminRouter.get('/admin/doctor/:id', requireAdminKey, async (req, res) => {
     bookingMode: doctor.bookingMode,
     bookingModeLockedAt: doctor.bookingModeLockedAt,
     whatsappPhoneNumberId: doctor.whatsappPhoneNumberId,
+    missedCallNumber: doctor.missedCallNumber,
     dailyTokenCap: doctor.dailyTokenCap,
     consultDurationMins: doctor.consultDurationMins,
     avgConsultTimeMins: Number(doctor.avgConsultTimeMins.toFixed(1)),
@@ -163,6 +164,7 @@ const configBody = z.object({
   consultDurationMins: z.coerce.number().int().min(1).max(180).optional(),
   defaultLanguage: z.enum(['EN', 'KN']).optional(),
   whatsappPhoneNumberId: z.string().optional(),
+  missedCallNumber: z.string().optional(),
   workingHours: workingHoursSchema.optional(),
   leaveDates: z.array(z.string()).optional(),
 });
@@ -192,6 +194,9 @@ adminRouter.patch('/admin/doctor/:id', requireAdminKey, async (req, res) => {
         ...(body.defaultLanguage ? { defaultLanguage: body.defaultLanguage } : {}),
         ...(body.whatsappPhoneNumberId
           ? { whatsappPhoneNumberId: body.whatsappPhoneNumberId }
+          : {}),
+        ...(body.missedCallNumber
+          ? { missedCallNumber: body.missedCallNumber }
           : {}),
         ...(body.workingHours ? { workingHours: body.workingHours as object } : {}),
         ...(leaveDates ? { leaveDates: leaveDates as Date[] } : {}),

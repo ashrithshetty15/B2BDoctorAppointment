@@ -6,6 +6,7 @@ import type {
   MessagingAdapter,
   OutboundMessage,
   SendResult,
+  TemplateMessage,
   WebhookVerification,
 } from '../types';
 
@@ -139,6 +140,53 @@ export class WhatsAppCloudAdapter implements MessagingAdapter {
     if (!res.ok) {
       // Thrown so BullMQ retries with backoff.
       throw new Error(`WhatsApp send failed (${res.status}): ${bodyText}`);
+    }
+
+    let providerMessageId: string | undefined;
+    try {
+      const parsed = JSON.parse(bodyText) as { messages?: Array<{ id?: string }> };
+      providerMessageId = parsed.messages?.[0]?.id;
+    } catch {
+      // Non-JSON success body — nothing to extract.
+    }
+
+    return providerMessageId ? { providerMessageId } : {};
+  }
+
+  async sendTemplate(message: TemplateMessage): Promise<SendResult> {
+    const phoneNumberId = message.channelAddress ?? env.WHATSAPP_PHONE_NUMBER_ID;
+    if (!phoneNumberId) {
+      throw new Error('No WhatsApp phone_number_id available to send from');
+    }
+
+    const url = `https://graph.facebook.com/${env.WHATSAPP_API_VERSION}/${phoneNumberId}/messages`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${env.WHATSAPP_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: message.to,
+        type: 'template',
+        template: {
+          name: message.templateName,
+          language: { code: 'en_US' },
+          ...(message.params && message.params.length > 0
+            ? {
+                body: {
+                  parameters: message.params.map((v) => ({ type: 'text', text: v })),
+                },
+              }
+            : {}),
+        },
+      }),
+    });
+
+    const bodyText = await res.text();
+    if (!res.ok) {
+      throw new Error(`WhatsApp template send failed (${res.status}): ${bodyText}`);
     }
 
     let providerMessageId: string | undefined;
