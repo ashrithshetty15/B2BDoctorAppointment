@@ -2,6 +2,8 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 
+RUN apk add --no-cache openssl
+
 COPY package*.json ./
 RUN npm ci
 
@@ -16,6 +18,8 @@ RUN npx tsc -p tsconfig.build.json
 FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+
+RUN apk add --no-cache openssl
 
 COPY package*.json ./
 RUN npm ci --omit=dev
