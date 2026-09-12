@@ -5,11 +5,13 @@ import { prisma } from '../../db/prisma';
 import { getDoctorByApiKey } from '../../domain/doctors';
 import { wantsHtml } from '../web/negotiate';
 import {
+  ADMIN_SESSION_COOKIE,
   CSRF_HEADER,
   SESSION_COOKIE,
   apiKeyFingerprint,
   csrfMatches,
   readCookie,
+  verifyAdminSessionToken,
   verifySessionToken,
 } from './session';
 
@@ -35,6 +37,8 @@ declare module 'express-serve-static-core' {
     authMode?: AuthMode;
     /** Present only for cookie auth — the value pages must echo back. */
     csrfToken?: string;
+    /** Present only for an authenticated operator session (the /app console). */
+    adminCsrfToken?: string;
   }
 }
 
@@ -194,5 +198,69 @@ export function requireAdminKey(req: Request, res: Response, next: NextFunction)
     res.status(401).json({ error: 'Invalid admin key' });
     return;
   }
+  next();
+}
+
+/**
+ * Operator auth for the /app console. Cookie-only by design: the header form
+ * already exists as requireAdminKey for programmatic callers, and accepting a
+ * header here would mean a page could be driven by a key pasted into a URL.
+ *
+ * Browser navigations bounce to the login page; anything else gets JSON.
+ */
+export function requireAdminSession(req: Request, res: Response, next: NextFunction): void {
+  const payload = verifyAdminSessionToken(readCookie(req, ADMIN_SESSION_COOKIE));
+
+  // Rotating ADMIN_API_KEY invalidates every outstanding operator cookie.
+  if (!payload || payload.k !== apiKeyFingerprint(env.ADMIN_API_KEY)) {
+    if (wantsHtml(req)) {
+      res.redirect(302, `/app/login?next=${encodeURIComponent(req.originalUrl)}`);
+      return;
+    }
+    res.status(401).json({ error: 'Not signed in' });
+    return;
+  }
+
+  req.adminCsrfToken = payload.csrf;
+  next();
+}
+
+/**
+ * CSRF for real HTML forms, which cannot set a header.
+ *
+ * requireCsrf covers the JSON API by demanding X-CSRF-Token. Server-rendered
+ * forms post urlencoded bodies instead, so the token travels in a hidden
+ * `_csrf` field. The Sec-Fetch-Site and Origin gates are kept identical —
+ * those are what make this safe without the header's implicit same-origin
+ * guarantee.
+ */
+export function requireFormCsrf(req: Request, res: Response, next: NextFunction): void {
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
+    next();
+    return;
+  }
+
+  const site = req.header('sec-fetch-site');
+  if (site && site !== 'same-origin' && site !== 'none') {
+    res.status(403).send('Cross-site request rejected');
+    return;
+  }
+
+  const origin = req.header('origin');
+  if (origin && origin !== `${req.protocol}://${req.get('host') ?? ''}`) {
+    res.status(403).send('Cross-origin request rejected');
+    return;
+  }
+
+  const submitted = (req.body as { _csrf?: unknown } | undefined)?._csrf;
+  if (
+    !req.adminCsrfToken ||
+    typeof submitted !== 'string' ||
+    !csrfMatches(req.adminCsrfToken, submitted)
+  ) {
+    res.status(403).send('CSRF token missing or invalid');
+    return;
+  }
+
   next();
 }

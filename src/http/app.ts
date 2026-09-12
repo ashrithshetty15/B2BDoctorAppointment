@@ -3,6 +3,7 @@ import pinoHttp from 'pino-http';
 import { prisma } from '../db/prisma';
 import { logger } from '../utils/logger';
 import { adminRouter } from './admin';
+import { appConsoleRouter } from './appConsole';
 import { callWebhookRouter } from './call-webhook';
 import { dashboardRouter } from './dashboard';
 import { webhookRouter } from './webhook';
@@ -52,10 +53,15 @@ export function createApp() {
   // Exotel sends call events as form-encoded data
   app.use('/call-webhook', express.urlencoded({ extended: true }));
 
-  // NOTE: urlencoded is deliberately absent from the global config.
-  // The dashboard sends every mutation as fetch()+JSON so that a cross-site
-  // <form method="post"> cannot forge one; adding urlencoded globally would
-  // quietly reopen that hole. Only the call-webhook route uses it.
+  // The operator console is server-rendered and posts real <form> bodies, so it
+  // needs urlencoded — but scoped to /app alone. Keeping it off the global
+  // config is deliberate: the JSON API's mutations (POST /appointment/:id/status,
+  // /doctor/:id/leave) stay structurally unable to accept a cross-site form post,
+  // independent of their CSRF token check. /app has its own token check in
+  // requireFormCsrf, which reads a hidden field instead of a header.
+  app.use('/app', express.urlencoded({ extended: false, limit: '100kb' }));
+
+  // NOTE: urlencoded is deliberately absent from the global config — see above.
   app.use(express.json({ limit: '100kb' }));
 
   app.get('/health', async (_req, res) => {
@@ -70,6 +76,7 @@ export function createApp() {
 
   app.use(webhookRouter);
   app.use(callWebhookRouter);
+  app.use(appConsoleRouter);
   app.use(dashboardRouter);
   app.use(adminRouter);
 

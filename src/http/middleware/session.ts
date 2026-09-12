@@ -160,3 +160,83 @@ export function csrfMatches(expected: string, provided: string | undefined): boo
   if (a.length !== b.length) return false;
   return crypto.timingSafeEqual(a, b);
 }
+
+/**
+ * Operator (admin) sessions — a separate credential from a doctor's, so they
+ * get a separate cookie and a separate signing key.
+ *
+ * The key derivation is the security-critical part. An admin payload is a
+ * doctor payload minus `d`, so sharing one MAC key would let a doctor's cookie
+ * verify as an admin's: every claim the admin check looks at would be present
+ * and correctly signed. Deriving a distinct key means a token minted for one
+ * audience simply fails the other's MAC, independently of payload shape.
+ *
+ * Revocation works as it does for doctors: the payload pins a fingerprint of
+ * ADMIN_API_KEY, so changing that env var logs every operator out.
+ */
+
+export const ADMIN_SESSION_COOKIE = 'clinic_admin';
+
+const ADMIN_VERSION = 'a1';
+
+const ADMIN_SESSION_KEY: Buffer = crypto
+  .createHmac('sha256', SESSION_KEY)
+  .update('admin-session')
+  .digest();
+
+export interface AdminSessionPayload {
+  /** Discriminator; also checked on verify as defence in depth. */
+  r: 'admin';
+  /** apiKeyFingerprint(env.ADMIN_API_KEY) at the time of login. */
+  k: string;
+  exp: number;
+  csrf: string;
+}
+
+function adminMac(payloadB64: string): Buffer {
+  return crypto.createHmac('sha256', ADMIN_SESSION_KEY).update(payloadB64).digest();
+}
+
+export function signAdminSession(payload: AdminSessionPayload): string {
+  const body = b64url(JSON.stringify(payload));
+  return `${ADMIN_VERSION}.${body}.${b64url(adminMac(body))}`;
+}
+
+export function verifyAdminSessionToken(
+  token: string | null | undefined,
+): AdminSessionPayload | null {
+  if (!token) return null;
+
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+
+  const [version, body, sig] = parts as [string, string, string];
+  if (version !== ADMIN_VERSION || !body || !sig) return null;
+
+  const expected = adminMac(body);
+  const provided = Buffer.from(sig, 'base64url');
+  if (provided.length !== expected.length) return null;
+  if (!crypto.timingSafeEqual(provided, expected)) return null;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+  } catch {
+    return null;
+  }
+
+  if (!parsed || typeof parsed !== 'object') return null;
+  const p = parsed as Partial<AdminSessionPayload>;
+  if (p.r !== 'admin' || typeof p.k !== 'string' || typeof p.csrf !== 'string') return null;
+  if (typeof p.exp !== 'number' || p.exp * 1000 <= Date.now()) return null;
+
+  return { r: 'admin', k: p.k, exp: p.exp, csrf: p.csrf };
+}
+
+export function setAdminSessionCookie(res: Response, token: string): void {
+  res.cookie(ADMIN_SESSION_COOKIE, token, sessionCookieOptions());
+}
+
+export function clearAdminSessionCookie(res: Response): void {
+  res.clearCookie(ADMIN_SESSION_COOKIE, { ...sessionCookieOptions(), maxAge: undefined });
+}
