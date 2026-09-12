@@ -16,7 +16,12 @@ interface Bucket {
 
 const MAX_TRACKED_KEYS = 1000;
 
-export function createRateLimiter(opts: { windowMs: number; max: number }) {
+export function createRateLimiter(opts: {
+  windowMs: number;
+  max: number;
+  /** Render the refusal instead of the default JSON — used by HTML pages. */
+  onLimit?: (req: Request, res: Response, retryAfterSecs: number) => void;
+}) {
   const buckets = new Map<string, Bucket>();
 
   function prune(now: number): void {
@@ -45,6 +50,10 @@ export function createRateLimiter(opts: { windowMs: number; max: number }) {
     if (bucket.count > opts.max) {
       const retryAfter = Math.ceil((bucket.resetAt - now) / 1000);
       res.set('Retry-After', String(retryAfter));
+      if (opts.onLimit) {
+        opts.onLimit(req, res, retryAfter);
+        return;
+      }
       res.status(429).json({ error: 'Too many attempts. Please try again later.' });
       return;
     }

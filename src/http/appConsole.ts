@@ -39,7 +39,18 @@ export const appConsoleRouter = Router();
  * attempts, not just failures, which is the conservative direction: a
  * successful login costs one of the ten.
  */
-const loginLimiter = createRateLimiter({ windowMs: 15 * 60_000, max: 10 });
+const loginLimiter = createRateLimiter({
+  windowMs: 15 * 60_000,
+  max: 10,
+  // This is a browser page, so refuse in HTML rather than the default JSON.
+  onLimit: (_req, res, retryAfterSecs) => {
+    const mins = Math.max(1, Math.ceil(retryAfterSecs / 60));
+    res
+      .status(429)
+      .type('html')
+      .send(loginPage({ error: `Too many attempts. Try again in about ${mins} minute${mins === 1 ? '' : 's'}.` }));
+  },
+});
 
 // ---- working hours <-> "09:30-13:00, 17:00-20:00" ----
 
@@ -155,7 +166,10 @@ appConsoleRouter.get('/app/login', (req, res) => {
 
 appConsoleRouter.post('/app/login', loginLimiter, (req, res) => {
   const body = (req.body ?? {}) as Record<string, unknown>;
-  const submitted = typeof body['key'] === 'string' ? body['key'] : '';
+  // Trimmed because the key is always pasted, and a copied line routinely
+  // carries a trailing newline or space. A key that differs only by
+  // surrounding whitespace is a paste artefact, never a real credential.
+  const submitted = typeof body['key'] === 'string' ? body['key'].trim() : '';
   const next = safeNextPath(typeof body['next'] === 'string' ? body['next'] : null);
 
   const expected = Buffer.from(env.ADMIN_API_KEY);
