@@ -65,6 +65,11 @@ model Doctor {
   /// Missed-call webhooks are routed to a Doctor via this value.
   missedCallNumber String? @unique @map("missed_call_number")
 
+  /// Dialable form of the clinic's WhatsApp number, digits only, e.g.
+  /// 15553012465. whatsappPhoneNumberId is Meta's opaque id and cannot be
+  /// dialled, so this is what builds the wa.me link and booking QR code.
+  whatsappNumber String? @map("whatsapp_number")
+
   /// Set once at onboarding via the admin route — never over WhatsApp.
   /// All conversation branching depends on this field.
   bookingMode         BookingMode @default(TOKEN) @map("booking_mode")

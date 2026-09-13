@@ -10,18 +10,20 @@ import {
   clinicToday,
   formatDateForPatient,
   formatDateOnly,
+  formatWait,
   parseDateOnly,
 } from '../utils/time';
+import { t } from '../i18n/templates';
+import { enqueueOutbound } from '../queue/queues';
 import { requireDoctorAuth, requireFormCsrf } from './middleware/auth';
 import {
   type QueueRow,
   bookingsPage,
   patientDetailPage,
   patientsPage,
-  queuePage,
-  queueTable,
   reportsPage,
 } from './web/doctorViews';
+import { delayConfirmPage, queueBody, queuePageV2 } from './web/queueView';
 import { errorPage } from './web/views';
 
 /**
@@ -75,6 +77,7 @@ async function loadDay(doctorId: string, date: Date) {
         tokenNumber: a.tokenNumber,
         slotStart: a.slotStart,
         patient: a.patient,
+        bookedAt: a.createdAt,
         arrivedAt: a.arrivedAt,
         startedAt: a.startedAt,
         completedAt: a.completedAt,
@@ -106,6 +109,20 @@ async function loadDay(doctorId: string, date: Date) {
 
 // ---- queue (today) ----
 
+/**
+ * Mean of the waits actually measured today (arrival to being called in).
+ * Null rather than 0 when nothing has been measured, so the UI can show a dash
+ * instead of implying a real zero-minute wait.
+ */
+function avgWaitToday(rows: QueueRow[]): number | null {
+  const waits = rows
+    .filter((r) => r.arrivedAt && r.startedAt)
+    .map((r) => (r.startedAt!.getTime() - r.arrivedAt!.getTime()) / 60_000)
+    .filter((m) => m >= 0);
+  if (waits.length === 0) return null;
+  return Math.round(waits.reduce((a, b) => a + b, 0) / waits.length);
+}
+
 doctorConsoleRouter.get('/app/queue', requireDoctorAuth, async (req, res) => {
   const doctor = req.doctor!;
   const today = clinicToday(doctor.timezone);
@@ -116,32 +133,71 @@ doctorConsoleRouter.get('/app/queue', requireDoctorAuth, async (req, res) => {
   }
 
   const csrfToken = req.csrfToken ?? '';
+  const avgWaitMins = avgWaitToday(day.rows);
 
-  // The poll asks for just the table; everything else on the page is static.
+  // The poll replaces only the live region — hero, action, stats and rows.
   if (req.query['fragment'] !== undefined) {
     res.type('html').send(
-      queueTable({
+      queueBody({
+        doctor: day.doctor,
         rows: day.rows,
         queue: day.queue,
+        avgWaitMins,
         csrfToken,
-        timezone: doctor.timezone,
       }).__html,
     );
     return;
   }
 
   res.type('html').send(
-    queuePage({
+    queuePageV2({
       doctor: day.doctor,
       rows: day.rows,
       queue: day.queue,
-      dateLabel: formatDateForPatient(today),
+      avgWaitMins,
       onLeave: day.onLeave,
       csrfToken,
       ...(typeof req.query['flash'] === 'string' ? { flash: req.query['flash'] } : {}),
     }),
   );
 });
+
+/**
+ * Re-send the "it's your turn" message to whoever is already in progress —
+ * for when a patient was called but did not hear it. Sends the same template
+ * the state machine uses rather than inventing a second wording.
+ */
+doctorConsoleRouter.post(
+  '/app/queue/:appointmentId/recall',
+  requireDoctorAuth,
+  requireFormCsrf,
+  async (req, res) => {
+    const doctor = req.doctor!;
+    const appointment = await prisma.appointment.findUnique({
+      where: { id: req.params['appointmentId'] ?? '' },
+      include: { patient: true },
+    });
+
+    if (!appointment || appointment.doctorId !== doctor.id) {
+      notFound(res, 'Appointment not found.');
+      return;
+    }
+
+    await enqueueOutbound({
+      to: appointment.patient.phone,
+      text: t(appointment.patient.language, 'tokenYourTurn', {
+        tokenNumber: appointment.tokenNumber ?? 0,
+        doctorName: doctor.name,
+      }),
+      templateName: 'tokenYourTurn',
+      ...(doctor.whatsappPhoneNumberId
+        ? { channelAddress: doctor.whatsappPhoneNumberId }
+        : {}),
+    });
+
+    res.redirect(302, `/app/queue?flash=${encodeURIComponent('Called again')}`);
+  },
+);
 
 // ---- queue actions ----
 
@@ -173,6 +229,49 @@ doctorConsoleRouter.post(
 );
 
 const delayBody = z.object({ delayMins: z.coerce.number().int().min(1).max(480) });
+
+/**
+ * Step one of announcing a delay: show the exact WhatsApp text and the real
+ * recipient count before anything leaves the building. Broadcasts are the one
+ * action here that cannot be taken back.
+ */
+doctorConsoleRouter.post(
+  '/app/queue/delay/confirm',
+  requireDoctorAuth,
+  requireFormCsrf,
+  async (req, res) => {
+    const doctor = req.doctor!;
+    const parsed = delayBody.safeParse(req.body);
+    if (!parsed.success) {
+      res.redirect(302, '/app/queue?flash=Enter+between+1+and+480+minutes');
+      return;
+    }
+
+    const date = clinicToday(doctor.timezone);
+    const recipients = await prisma.appointment.count({
+      where: { doctorId: doctor.id, date, status: { in: [...ACTIVE_TOKEN_STATUSES] } },
+    });
+
+    // Rendered with the doctor's own language so the preview matches what a
+    // patient on that language actually receives; per-patient language still
+    // applies at send time.
+    const messagePreview = t(doctor.defaultLanguage, 'tokenDelayBroadcast', {
+      doctorName: doctor.name,
+      delayMins: parsed.data.delayMins,
+      eta: formatWait(parsed.data.delayMins),
+    });
+
+    res.type('html').send(
+      delayConfirmPage({
+        doctor,
+        delayMins: parsed.data.delayMins,
+        recipients,
+        messagePreview,
+        csrfToken: req.csrfToken ?? '',
+      }),
+    );
+  },
+);
 
 doctorConsoleRouter.post(
   '/app/queue/delay',

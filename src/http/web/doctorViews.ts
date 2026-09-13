@@ -11,6 +11,8 @@ export interface QueueRow {
   tokenNumber: number | null;
   slotStart: Date | null;
   patient: { id: string; name: string | null; phone: string };
+  /** When the patient booked — the appointment's createdAt. */
+  bookedAt: Date | null;
   arrivedAt: Date | null;
   startedAt: Date | null;
   completedAt: Date | null;
@@ -170,100 +172,6 @@ export function queueTable(opts: {
           </table>
         `}
   `;
-}
-
-const POLL_SCRIPT = `
-// Refresh just the queue table so the doctor sees new bookings without losing
-// scroll position or any open menu. Silently skips a failed poll; the next one
-// re-syncs. Pauses while the tab is hidden to avoid pointless load.
-(function () {
-  var el = document.getElementById('queue');
-  if (!el) return;
-  var stampEl = document.getElementById('stamp');
-  var last = Date.now();
-
-  function tick() {
-    if (stampEl) {
-      var secs = Math.round((Date.now() - last) / 1000);
-      stampEl.textContent = secs < 60 ? 'updated ' + secs + 's ago'
-        : 'updated ' + Math.round(secs / 60) + 'm ago';
-    }
-  }
-  setInterval(tick, 1000);
-
-  async function refresh() {
-    if (document.hidden) return;
-    try {
-      var res = await fetch(window.location.pathname + '?fragment=1', {
-        headers: { 'x-requested-with': 'fetch' },
-      });
-      if (!res.ok) return;
-      el.innerHTML = await res.text();
-      last = Date.now();
-      tick();
-    } catch (e) { /* offline or server restart; next poll retries */ }
-  }
-  setInterval(refresh, 30000);
-  document.addEventListener('visibilitychange', function () {
-    if (!document.hidden) refresh();
-  });
-})();
-`;
-
-export function queuePage(opts: {
-  doctor: Doctor;
-  rows: QueueRow[];
-  queue: QueueState;
-  dateLabel: string;
-  onLeave: boolean;
-  csrfToken: string;
-  flash?: string;
-}): string {
-  return page(
-    {
-      title: 'Queue',
-      csrfToken: opts.csrfToken,
-      nav: nav('Queue', opts.doctor.clinicName),
-    },
-    html`
-      <div class="card">
-        <h2>Today — ${opts.dateLabel}</h2>
-        <p class="sub">
-          Dr. ${opts.doctor.name} · <span id="stamp" class="hint">updated just now</span>
-        </p>
-        ${opts.flash ? html`<div class="ok">${opts.flash}</div>` : ''}
-        ${opts.onLeave
-          ? html`<div class="caveat">You are marked on leave for this day.</div>`
-          : ''}
-        <div id="queue">
-          ${queueTable({
-            rows: opts.rows,
-            queue: opts.queue,
-            csrfToken: opts.csrfToken,
-            timezone: opts.doctor.timezone,
-          })}
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>Running late?</h2>
-        <p class="sub">Tells everyone still waiting, and adds to every estimate for the day.</p>
-        <form method="post" action="/app/queue/delay">
-          <input type="hidden" name="_csrf" value="${opts.csrfToken}" />
-          <div class="row">
-            <div>
-              <label for="delayMins">Delay (minutes)</label>
-              <input id="delayMins" name="delayMins" type="number" min="1" max="480" value="15" />
-            </div>
-          </div>
-          <button type="submit">Announce delay</button>
-        </form>
-      </div>
-    `,
-    html`<script>
-      ${raw(POLL_SCRIPT)}
-    </script>`,
-  );
 }
 
 export function bookingsPage(opts: {
