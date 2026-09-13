@@ -223,6 +223,34 @@ doctorConsoleRouter.post(
       return;
     }
 
+    // Only one patient may be in the room at a time. Two concurrent
+    // IN_PROGRESS rows make startedAt ambiguous, so the consult durations that
+    // feed avgConsultTimeMins — and therefore every patient's ETA — become
+    // meaningless. The UI hides the relevant buttons, but a form post can be
+    // replayed or crafted, so the rule is enforced here too.
+    if (status === 'IN_PROGRESS') {
+      const alreadyInRoom = await prisma.appointment.findFirst({
+        where: {
+          doctorId: doctor.id,
+          date: appointment.date,
+          status: 'IN_PROGRESS',
+          id: { not: appointment.id },
+        },
+        select: { tokenNumber: true },
+      });
+
+      if (alreadyInRoom) {
+        const token = alreadyInRoom.tokenNumber;
+        res.redirect(
+          302,
+          `/app/queue?flash=${encodeURIComponent(
+            `Finish with token ${token ?? '—'} before calling the next patient`,
+          )}`,
+        );
+        return;
+      }
+    }
+
     await applyStatusChange(appointment, doctor, status);
     res.redirect(302, '/app/queue');
   },

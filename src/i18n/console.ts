@@ -30,6 +30,8 @@ export interface ConsoleStrings {
   viaWhatsapp: string;
   recall: string;
   callIn: string;
+  finishCurrent: string;
+  oneAtATime: string;
   noShow: string;
   arrived: string;
   done: string;
@@ -72,6 +74,8 @@ const en: ConsoleStrings = {
   viaWhatsapp: 'WhatsApp',
   recall: 'Recall',
   callIn: 'Call in',
+  finishCurrent: 'Finish current patient',
+  oneAtATime: 'Finish with the current patient first',
   noShow: 'No show',
   arrived: 'Arrived',
   done: 'Done',
@@ -115,6 +119,8 @@ const kn: ConsoleStrings = {
   viaWhatsapp: 'ವಾಟ್ಸಾಪ್',
   recall: 'ಮತ್ತೆ ಕರೆಯಿರಿ',
   callIn: 'ಒಳಗೆ ಕರೆಯಿರಿ',
+  finishCurrent: 'ಈಗಿನ ರೋಗಿಯನ್ನು ಮುಗಿಸಿ',
+  oneAtATime: 'ಮೊದಲು ಈಗಿನ ರೋಗಿಯನ್ನು ಮುಗಿಸಿ',
   noShow: 'ಬಂದಿಲ್ಲ',
   arrived: 'ಬಂದಿದ್ದಾರೆ',
   done: 'ಮುಗಿಯಿತು',

@@ -104,7 +104,43 @@ function hero(opts: {
 
 // ---- primary action ----
 
-function callNextCta(next: QueueRow | undefined, s: ConsoleStrings, language: Language, csrfToken: string): RawHtml {
+/**
+ * The single primary action, which changes with the state of the room rather
+ * than ever being a dead disabled button.
+ *
+ * Only one patient may be in the room at a time — two concurrent IN_PROGRESS
+ * rows would corrupt the consult timings that drive every ETA. So while someone
+ * is in, the action is to finish with them; once the room is clear it becomes
+ * calling the next patient. That sequencing enforces the rule through the
+ * natural path rather than by blocking the doctor with an error.
+ */
+function primaryCta(opts: {
+  serving: QueueRow | undefined;
+  next: QueueRow | undefined;
+  s: ConsoleStrings;
+  language: Language;
+  csrfToken: string;
+}): RawHtml {
+  const { serving, next, s, language, csrfToken } = opts;
+
+  if (serving) {
+    return html`
+      <form method="post" action="/app/queue/${serving.appointmentId}/status">
+        <input type="hidden" name="_csrf" value="${csrfToken}" />
+        <input type="hidden" name="status" value="done" />
+        <button class="cta" type="submit">
+          <span>
+            <span class="lead">${s.finishCurrent}</span>
+            <span class="next"
+              >${s.callNextWith(serving.tokenNumber ?? 0, personName(serving.patient.name, language))}</span
+            >
+          </span>
+          <span class="chev" aria-hidden="true">✓</span>
+        </button>
+      </form>
+    `;
+  }
+
   if (!next) {
     return html`
       <button class="cta" type="button" disabled>
@@ -167,11 +203,14 @@ function stats(opts: {
 // ---- waiting rows ----
 
 /**
- * Call in appears on every waiting row, not just the hero CTA. The CTA always
- * calls the lowest waiting token, which strands the queue when that patient has
- * stepped outside — the doctor needs to take the next person who is actually
- * present. It is styled secondary rather than accent so the hero remains the
- * only accent-coloured control on the screen.
+ * Call in appears on every waiting row, not just the hero CTA, so the doctor can
+ * take whoever is actually present rather than only the lowest token — patients
+ * step outside. Styled secondary rather than accent so the hero remains the only
+ * accent-coloured control.
+ *
+ * `roomBusy` hides it while someone is in the room: the server rejects a second
+ * concurrent call anyway, and offering a button that will be refused is worse
+ * than not offering it.
  */
 function waitingRow(opts: {
   row: QueueRow;
@@ -180,8 +219,9 @@ function waitingRow(opts: {
   timezone: string;
   csrfToken: string;
   now: Date;
+  roomBusy: boolean;
 }): RawHtml {
-  const { row, s, language, timezone, csrfToken, now } = opts;
+  const { row, s, language, timezone, csrfToken, now, roomBusy } = opts;
   const mins = waitedMins(row, now);
   const overdue = mins >= OVERDUE_MINS;
   const since = waitingSince(row);
@@ -216,7 +256,8 @@ function waitingRow(opts: {
       </div>
       <div class="acts">
         ${row.status === 'BOOKED' ? act('arrived', s.arrived, 'ghost') : ''}
-        ${act('in-progress', s.callIn, 'secondary')} ${act('no-show', s.noShow, 'ghost')}
+        ${roomBusy ? '' : act('in-progress', s.callIn, 'secondary')}
+        ${act('no-show', s.noShow, 'ghost')}
       </div>
     </div>
   `;
@@ -314,7 +355,8 @@ export function queueBody(opts: {
   const anyToday = rows.length > 0;
 
   return html`
-    ${hero({ serving, s, language, now })} ${callNextCta(next, s, language, csrfToken)}
+    ${hero({ serving, s, language, now })}
+    ${primaryCta({ serving, next, s, language, csrfToken })}
     ${stats({ queue, avgWaitMins, s, language })}
     ${queue.delayMins > 0
       ? html`<div class="caveat">${s.delayActive(queue.delayMins)}</div>`
@@ -326,8 +368,19 @@ export function queueBody(opts: {
             ${serving ? servingRow({ row: serving, s, language, csrfToken }) : ''}
             ${alsoInRoom.map((row) => servingRow({ row, s, language, csrfToken }))}
             ${waitingRows.map((row) =>
-              waitingRow({ row, s, language, timezone: doctor.timezone, csrfToken, now }),
+              waitingRow({
+                row,
+                s,
+                language,
+                timezone: doctor.timezone,
+                csrfToken,
+                now,
+                roomBusy: serving !== undefined,
+              }),
             )}
+            ${serving && waitingRows.length > 0
+              ? html`<div class="qrow"><div class="body hint">${s.oneAtATime}</div></div>`
+              : ''}
             ${waitingRows.length === 0 && !serving
               ? html`<div class="qrow"><div class="body muted">${s.nobodyWaiting}</div></div>`
               : ''}
