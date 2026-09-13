@@ -166,6 +166,13 @@ function stats(opts: {
 
 // ---- waiting rows ----
 
+/**
+ * Call in appears on every waiting row, not just the hero CTA. The CTA always
+ * calls the lowest waiting token, which strands the queue when that patient has
+ * stepped outside — the doctor needs to take the next person who is actually
+ * present. It is styled secondary rather than accent so the hero remains the
+ * only accent-coloured control on the screen.
+ */
 function waitingRow(opts: {
   row: QueueRow;
   s: ConsoleStrings;
@@ -209,7 +216,7 @@ function waitingRow(opts: {
       </div>
       <div class="acts">
         ${row.status === 'BOOKED' ? act('arrived', s.arrived, 'ghost') : ''}
-        ${act('no-show', s.noShow, 'ghost')}
+        ${act('in-progress', s.callIn, 'secondary')} ${act('no-show', s.noShow, 'ghost')}
       </div>
     </div>
   `;
@@ -289,7 +296,17 @@ export function queueBody(opts: {
   const language = doctor.defaultLanguage;
   const s = c(language);
 
-  const serving = rows.find((r) => r.status === 'IN_PROGRESS');
+  // Calling someone in out of turn can leave more than one patient in progress
+  // — nothing forces the previous one to be closed first. The hero shows the
+  // most recently called, because that is who the doctor just summoned, and any
+  // others still render as rows below so a patient can never be stuck
+  // in-progress and invisible.
+  const inProgress = rows
+    .filter((r) => r.status === 'IN_PROGRESS')
+    .sort((a, b) => (b.startedAt?.getTime() ?? 0) - (a.startedAt?.getTime() ?? 0));
+  const serving = inProgress[0];
+  const alsoInRoom = inProgress.slice(1);
+
   const waitingRows = rows
     .filter((r) => r.status === 'BOOKED' || r.status === 'ARRIVED')
     .sort((a, b) => (a.tokenNumber ?? 0) - (b.tokenNumber ?? 0));
@@ -307,6 +324,7 @@ export function queueBody(opts: {
       ? html`
           <div class="card flush">
             ${serving ? servingRow({ row: serving, s, language, csrfToken }) : ''}
+            ${alsoInRoom.map((row) => servingRow({ row, s, language, csrfToken }))}
             ${waitingRows.map((row) =>
               waitingRow({ row, s, language, timezone: doctor.timezone, csrfToken, now }),
             )}

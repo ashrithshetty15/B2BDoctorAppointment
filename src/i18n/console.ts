@@ -29,6 +29,7 @@ export interface ConsoleStrings {
   waitedFor: (mins: string) => string;
   viaWhatsapp: string;
   recall: string;
+  callIn: string;
   noShow: string;
   arrived: string;
   done: string;
@@ -70,6 +71,7 @@ const en: ConsoleStrings = {
   waitedFor: (m) => `Waiting ${m}`,
   viaWhatsapp: 'WhatsApp',
   recall: 'Recall',
+  callIn: 'Call in',
   noShow: 'No show',
   arrived: 'Arrived',
   done: 'Done',
@@ -112,6 +114,7 @@ const kn: ConsoleStrings = {
   waitedFor: (m) => `ಕಾಯುತ್ತಿದ್ದಾರೆ ${m}`,
   viaWhatsapp: 'ವಾಟ್ಸಾಪ್',
   recall: 'ಮತ್ತೆ ಕರೆಯಿರಿ',
+  callIn: 'ಒಳಗೆ ಕರೆಯಿರಿ',
   noShow: 'ಬಂದಿಲ್ಲ',
   arrived: 'ಬಂದಿದ್ದಾರೆ',
   done: 'ಮುಗಿಯಿತು',
