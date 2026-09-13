@@ -1,4 +1,5 @@
 import { Worker } from 'bullmq';
+import { env } from '../config/env';
 import { prisma } from '../db/prisma';
 import { logger } from '../utils/logger';
 import { createRedisConnection } from './connection';
@@ -25,6 +26,7 @@ import {
 const workers = [
   new Worker<OutboundJob>(QUEUE_OUTBOUND, processOutbound, {
     connection: createRedisConnection(),
+    prefix: env.REDIS_QUEUE_PREFIX,
     // Meta's per-number throughput is generous but not unlimited; keep sends
     // orderly and well under any rate limit.
     concurrency: 5,
@@ -33,6 +35,7 @@ const workers = [
 
   new Worker<TokenEventJob>(QUEUE_TOKEN_EVENTS, processTokenEvent, {
     connection: createRedisConnection(),
+    prefix: env.REDIS_QUEUE_PREFIX,
     // Serialised per process: two concurrent recalcs for the same doctor would
     // race on lastNotifiedPosition.
     concurrency: 1,
@@ -40,6 +43,7 @@ const workers = [
 
   new Worker<ReminderJob>(QUEUE_REMINDERS, processReminder, {
     connection: createRedisConnection(),
+    prefix: env.REDIS_QUEUE_PREFIX,
     concurrency: 2,
   }),
 ];

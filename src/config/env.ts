@@ -8,6 +8,12 @@ const schema = z.object({
 
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1).default('redis://localhost:6379'),
+  /**
+   * BullMQ key namespace. Two stacks pointed at one Redis (e.g. a local console
+   * instance alongside the deployed one) would otherwise consume each other's
+   * jobs; giving one a different prefix keeps the queues disjoint.
+   */
+  REDIS_QUEUE_PREFIX: z.string().min(1).default('bull'),
 
   MESSAGING_PROVIDER: z.enum(['whatsapp_cloud', 'console']).default('console'),
 

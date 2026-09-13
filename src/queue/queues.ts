@@ -1,4 +1,5 @@
 import { Queue, type JobsOptions } from 'bullmq';
+import { env } from '../config/env';
 import { getRedis } from './connection';
 import { formatDateOnly } from '../utils/time';
 
@@ -61,6 +62,7 @@ export function getOutboundQueue(): Queue<OutboundJob> {
   if (!outboundQueue) {
     outboundQueue = new Queue<OutboundJob>(QUEUE_OUTBOUND, {
       connection: getRedis(),
+      prefix: env.REDIS_QUEUE_PREFIX,
       defaultJobOptions,
     });
   }
@@ -71,6 +73,7 @@ export function getTokenEventsQueue(): Queue<TokenEventJob> {
   if (!tokenEventsQueue) {
     tokenEventsQueue = new Queue<TokenEventJob>(QUEUE_TOKEN_EVENTS, {
       connection: getRedis(),
+      prefix: env.REDIS_QUEUE_PREFIX,
       defaultJobOptions,
     });
   }
@@ -81,6 +84,7 @@ export function getRemindersQueue(): Queue<ReminderJob> {
   if (!remindersQueue) {
     remindersQueue = new Queue<ReminderJob>(QUEUE_REMINDERS, {
       connection: getRedis(),
+      prefix: env.REDIS_QUEUE_PREFIX,
       defaultJobOptions,
     });
   }

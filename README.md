@@ -141,6 +141,36 @@ npm run dev:worker            # BullMQ worker (separate terminal)
 accepts a simplified inbound payload, so the whole TOKEN flow can be driven with
 curl and no Meta account.
 
+### Postman
+
+`postman/` holds a collection and environment covering the same ground as the curl
+sections below, plus the admin routes:
+
+```
+postman/clinic-bot.postman_collection.json
+postman/clinic-bot.local.postman_environment.json
+```
+
+Import both, pick the environment, then run folder **1 · Patient books a token**
+top to bottom followed by **2 · Doctor works the queue**. The first request in
+folder 2 captures `appointmentId` into the environment, so the status calls need
+no copy-paste.
+
+Two prerequisites, or every request appears to succeed while doing nothing:
+
+- **`MESSAGING_PROVIDER=console` and a blank `WHATSAPP_APP_SECRET`.** Under
+  `whatsapp_cloud` the simplified webhook body parses to zero messages (a silent
+  `200`), and an absent `X-Hub-Signature-256` is rejected with `401`.
+- **Run the worker too.** `POST /webhook` returns an empty `200`; replies only
+  ever surface in the worker's stdout as `[outbound]`.
+
+Both processes memoise the messaging adapter on first use, so restart them after
+changing `MESSAGING_PROVIDER`.
+
+If your `REDIS_URL` points at a Redis that a deployed instance also uses, set
+`REDIS_QUEUE_PREFIX` (e.g. `bull-local`) so the two workers do not consume each
+other's jobs.
+
 ### Drive the TOKEN flow end to end
 
 Each call returns `200` and the bot's reply appears in the **worker** log.

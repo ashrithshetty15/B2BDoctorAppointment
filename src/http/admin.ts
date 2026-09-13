@@ -214,8 +214,12 @@ adminRouter.patch('/admin/doctor/:id', requireAdminKey, async (req, res) => {
 
 /** List all doctors with pagination. */
 adminRouter.get('/admin/doctors', requireAdminKey, async (req, res) => {
-  const skip = Math.max(0, (parseInt(req.query.page as string) ?? 1) - 1) * 10;
+  // parseInt returns NaN (not null) for a missing ?page, and `NaN ?? 1` keeps
+  // the NaN — which propagated into `skip` and broke the query.
+  const parsedPage = Number.parseInt(String(req.query['page'] ?? ''), 10);
+  const page = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1;
   const limit = 10;
+  const skip = (page - 1) * limit;
 
   const [doctors, total] = await Promise.all([
     prisma.doctor.findMany({
@@ -230,7 +234,7 @@ adminRouter.get('/admin/doctors', requireAdminKey, async (req, res) => {
   res.json({
     data: doctors,
     pagination: {
-      page: Math.floor(skip / limit) + 1,
+      page,
       limit,
       total,
       pages,

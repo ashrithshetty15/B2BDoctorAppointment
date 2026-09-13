@@ -1,0 +1,500 @@
+{
+  "info": {
+    "name": "Clinic Token Bot",
+    "description": "Drives the full patient -> doctor flow over HTTP with no Meta involvement.\n\nPREREQUISITES\n1. .env must have MESSAGING_PROVIDER=console and a blank WHATSAPP_APP_SECRET.\n   In whatsapp_cloud mode the simple webhook bodies below parse to nothing (silent 200),\n   and a missing X-Hub-Signature-256 is rejected with 401.\n2. Run BOTH processes: `npm run dev` and `npm run dev:worker`.\n   POST /webhook returns an EMPTY 200 - the bot's reply text only ever appears in the\n   worker's stdout as `[outbound]`. Without the worker you see queue state change but\n   never the actual message.\n3. Each process memoizes the messaging adapter at first use, so restart both after any\n   change to MESSAGING_PROVIDER.\n\nRUN ORDER\nFolders are numbered. Run 1 top-to-bottom to book a token, then 2 to work the queue.\nThe first request in folder 2 captures {{appointmentId}} automatically.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "0 · Health",
+      "item": [
+        {
+          "name": "Health check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('API is up and the database answers', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().ok).to.eql(true);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] },
+            "description": "Also runs SELECT 1, so a 503 here means Postgres is unreachable."
+          }
+        }
+      ]
+    },
+    {
+      "name": "1 · Patient books a token",
+      "description": "Six webhook posts that walk a patient from first contact to a booked token.\nSame {{patientPhone}} throughout - the session is keyed on (phone, doctorId).\n\nWatch the WORKER terminal; each request produces one bot reply there.\n\nNo auth and no signature needed: the console adapter's verifySignature() returns true\nunconditionally, and its parseInbound accepts this hand-written shape.",
+      "item": [
+        {
+          "name": "1. \"hi\" -> language prompt",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('accepted', () => pm.response.to.have.status(200));",
+                  "console.log('Check the WORKER terminal for the bot reply.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"from\": \"{{patientPhone}}\",\n  \"text\": \"hi\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/webhook", "host": ["{{baseUrl}}"], "path": ["webhook"] },
+            "description": "New patient -> session starts at ENTRY, moves to AWAITING_LANGUAGE.\n\nchannelAddress is omitted, so it defaults to 'console', which matches no\nDoctor.whatsappPhoneNumberId - resolution falls through to DEFAULT_DOCTOR_ID."
+          }
+        },
+        {
+          "name": "2. \"1\" -> choose English",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"from\": \"{{patientPhone}}\",\n  \"text\": \"1\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/webhook", "host": ["{{baseUrl}}"], "path": ["webhook"] },
+            "description": "AWAITING_LANGUAGE -> AWAITING_NAME. Send \"2\" instead for Kannada, and every\nlater reply arrives in Kannada script."
+          }
+        },
+        {
+          "name": "3. name -> TOKEN menu",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"from\": \"{{patientPhone}}\",\n  \"text\": \"Postman Patient\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/webhook", "host": ["{{baseUrl}}"], "path": ["webhook"] },
+            "description": "AWAITING_NAME -> TOKEN_MENU. On later runs this patient already has a name, so\nthe flow skips straight to 'welcome back' and TOKEN_MENU."
+          }
+        },
+        {
+          "name": "4. \"1\" -> book, asks to confirm",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"from\": \"{{patientPhone}}\",\n  \"text\": \"1\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/webhook", "host": ["{{baseUrl}}"], "path": ["webhook"] },
+            "description": "TOKEN_MENU -> TOKEN_CONFIRM_BOOKING. \"book\" or \"token\" work too."
+          }
+        },
+        {
+          "name": "5. \"1\" -> confirm, TOKEN ISSUED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('accepted', () => pm.response.to.have.status(200));",
+                  "console.log('Token issued. The worker log shows the number, position and ETA.');",
+                  "console.log('Now run folder 2 to work this token as the doctor.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"from\": \"{{patientPhone}}\",\n  \"text\": \"1\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/webhook", "host": ["{{baseUrl}}"], "path": ["webhook"] },
+            "description": "The real mutation. issueToken() runs synchronously inside this request in the API\nprocess - it atomically increments last_issued_token, checks the daily cap, and\ncreates the Appointment row with status BOOKED.\n\nAlso accepts \"yes\", \"ok\", \"haudu\", \"sari\" or the Kannada forms."
+          }
+        },
+        {
+          "name": "6. \"2\" -> check status",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"from\": \"{{patientPhone}}\",\n  \"text\": \"2\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/webhook", "host": ["{{baseUrl}}"], "path": ["webhook"] },
+            "description": "Now-serving token, patients ahead, estimated wait. Stays on TOKEN_MENU."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2 · Doctor works the queue",
+      "description": "The doctor side. There is no dedicated 'next patient' endpoint: read today's queue,\npick the lowest-numbered BOOKED/ARRIVED token, and post statuses against its id.\n\nRun 'Today' first - it captures {{appointmentId}} for the three status calls.",
+      "item": [
+        {
+          "name": "Today's queue  (captures appointmentId)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test('returns the doctor and queue state', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(body).to.have.property('queue');",
+                  "});",
+                  "",
+                  "// Pick the next patient the doctor would actually call: lowest token still",
+                  "// waiting. Falls back to the first row so the status calls remain usable",
+                  "// even mid-consult.",
+                  "const active = (body.appointments || []).filter(a =>",
+                  "  ['BOOKED', 'ARRIVED', 'IN_PROGRESS'].includes(a.status));",
+                  "const next = active.sort((a, b) =>",
+                  "  (a.tokenNumber ?? 0) - (b.tokenNumber ?? 0))[0];",
+                  "",
+                  "if (next) {",
+                  "  pm.environment.set('appointmentId', next.appointmentId);",
+                  "  console.log(`appointmentId set -> token #${next.tokenNumber} (${next.status}) ${next.patient.name || ''}`);",
+                  "} else {",
+                  "  console.warn('No active appointments today. Run folder 1 first.');",
+                  "}",
+                  "",
+                  "console.log(`now serving: ${body.queue.nowServingToken ?? 'not started'} | waiting: ${body.queue.waiting} | delay: ${body.queue.delayMins}m`);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{doctorApiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/doctor/{{doctorId}}/today",
+              "host": ["{{baseUrl}}"],
+              "path": ["doctor", "{{doctorId}}", "today"]
+            },
+            "description": "Positions and ETAs are computed live on read, so this is always correct even if\nthe worker is not running.\n\nOptional ?date=YYYY-MM-DD. Guarded by requireDoctorScope: the key must belong to\nthe doctor in the path, else 403."
+          }
+        },
+        {
+          "name": "Mark ARRIVED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is ARRIVED', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().status).to.eql('ARRIVED');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{doctorApiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"arrived\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/appointment/{{appointmentId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["appointment", "{{appointmentId}}", "status"]
+            },
+            "description": "Patient checked in at reception. Stamps arrivedAt.\n\nAccepted values: arrived | in-progress | done | no-show. Note there is no\n'cancelled' here - cancellation happens through the patient flow or /leave."
+          }
+        },
+        {
+          "name": "Call them in  (IN_PROGRESS)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is IN_PROGRESS', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().status).to.eql('IN_PROGRESS');",
+                  "});",
+                  "console.log('QueueState.nowServingToken now points at this token.');",
+                  "console.log('The patient is queued a \"your turn\" message - see the worker log.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{doctorApiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"in-progress\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/appointment/{{appointmentId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["appointment", "{{appointmentId}}", "status"]
+            },
+            "description": "Sets startedAt (consult length is measured from here), advances\nQueueState.nowServingToken, and enqueues a position recalc so everyone behind\ngets a fresh ETA.\n\nRe-run 'Today's queue' afterwards to see nowServingToken change."
+          }
+        },
+        {
+          "name": "Mark DONE",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "pm.test('status is DONE', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(b.status).to.eql('DONE');",
+                  "});",
+                  "console.log(`consultMins: ${b.consultMins} | new avgConsultTimeMins: ${b.avgConsultTimeMins}`);",
+                  "console.log('Only counted if the appointment passed through in-progress first.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{doctorApiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"done\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/appointment/{{appointmentId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["appointment", "{{appointmentId}}", "status"]
+            },
+            "description": "Measures the consult from startedAt and folds it into the doctor's rolling\naverage (simple mean under 20 samples, then EWMA), which drives every future ETA.\n\nWARNING: there is no guard against repeating this. Posting 'done' twice folds a\nsecond sample into the average. Real consult length is clamped to 1-120 minutes.\n\nIf the doctor never marked in-progress there is no measurement, and the average\nis left alone."
+          }
+        },
+        {
+          "name": "Mark NO_SHOW  (alternative to done)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{doctorApiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"no-show\"\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/appointment/{{appointmentId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["appointment", "{{appointmentId}}", "status"]
+            },
+            "description": "Clears nowServingToken rather than leaving it pointing at this token, and does\nNOT touch the consult average. The patient is told they can rebook."
+          }
+        }
+      ]
+    },
+    {
+      "name": "3 · Doctor announcements",
+      "item": [
+        {
+          "name": "Broadcast a delay",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "pm.test('delay recorded', () => pm.response.to.have.status(200));",
+                  "console.log(`delay ${b.delayMins}m on ${b.date}; ${b.notified} patients queued a notice`);",
+                  "console.log('NOTE: notified = jobs ENQUEUED, not delivered.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{doctorApiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"delayMins\": 30\n}" },
+            "url": {
+              "raw": "{{baseUrl}}/doctor/{{doctorId}}/delay-broadcast",
+              "host": ["{{baseUrl}}"],
+              "path": ["doctor", "{{doctorId}}", "delay-broadcast"]
+            },
+            "description": "1-480 minutes. Persists to QueueState.delayMins, so it is added to every ETA for\nthe rest of the day - re-run 'Today's queue' and the etaMins values jump.\n\nOptional \"date\": \"YYYY-MM-DD\"."
+          }
+        },
+        {
+          "name": "Declare leave  (cancels that day)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{doctorApiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date\": \"2026-12-25\",\n  \"cancelExisting\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/doctor/{{doctorId}}/leave",
+              "host": ["{{baseUrl}}"],
+              "path": ["doctor", "{{doctorId}}", "leave"]
+            },
+            "description": "DESTRUCTIVE. Adds the date to leaveDates, closes the token list, and unless\ncancelExisting is false, CANCELS every BOOKED/ARRIVED/IN_PROGRESS appointment\nthat day and notifies each patient.\n\nThe date above is deliberately far future. Change it to today only if you mean\nto wipe today's queue."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4 · Admin (clinic management)",
+      "description": "Uses ADMIN_API_KEY, a different credential from the doctor key. The same operations\nare available as HTML at /app - see the operator console.",
+      "item": [
+        {
+          "name": "List doctors",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "pm.test('returns a page of doctors', () => pm.response.to.have.status(200));",
+                  "(b.data || []).forEach(d => console.log(`${d.name} | ${d.clinicName} | ${d.bookingMode} | cap ${d.dailyTokenCap} | ${d.id}`));",
+                  "console.log('Response includes each doctor apiKey - handy for setting doctorApiKey.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{adminApiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/doctors?page=1",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "doctors"],
+              "query": [{ "key": "page", "value": "1" }]
+            },
+            "description": "10 per page, newest first."
+          }
+        },
+        {
+          "name": "Get one doctor",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-api-key", "value": "{{adminApiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/doctor/{{doctorId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "doctor", "{{doctorId}}"]
+            },
+            "description": "Config only, no patient data. apiKey is deliberately NOT returned here."
+          }
+        },
+        {
+          "name": "Create a doctor",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  console.log('apiKey is shown ONCE, here:', pm.response.json().apiKey);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{adminApiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Doctor\",\n  \"clinicName\": \"Postman Clinic\",\n  \"phone\": \"919000000099\",\n  \"bookingMode\": \"TOKEN\",\n  \"dailyTokenCap\": 25,\n  \"consultDurationMins\": 15,\n  \"defaultLanguage\": \"EN\",\n  \"timezone\": \"Asia/Kolkata\",\n  \"workingHours\": {\n    \"mon\": [{ \"start\": \"09:30\", \"end\": \"13:00\" }, { \"start\": \"17:00\", \"end\": \"20:00\" }],\n    \"sat\": [{ \"start\": \"09:00\", \"end\": \"12:00\" }]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/doctor",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "doctor"]
+            },
+            "description": "bookingMode is WRITE-ONCE - it is locked at creation and changing it later needs\nan explicit force flag that resets in-flight conversations.\n\nCreates a real row. Delete it afterwards if you are pointed at production."
+          }
+        },
+        {
+          "name": "Update config (cap / consult time)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "x-api-key", "value": "{{adminApiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dailyTokenCap\": 35,\n  \"consultDurationMins\": 10\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/admin/doctor/{{doctorId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "doctor", "{{doctorId}}"]
+            },
+            "description": "This is how per-doctor token limits and consult durations are configured.\nAll fields optional. consultDurationMins is only the doctor's estimate - actual\nETAs use the learned avgConsultTimeMins once real consults are recorded."
+          }
+        },
+        {
+          "name": "Toggle ACTIVE / DISABLED",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{adminApiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": {
+              "raw": "{{baseUrl}}/admin/doctor/{{doctorId}}/toggle-status",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "doctor", "{{doctorId}}", "toggle-status"]
+            },
+            "description": "Empty body flips the current value; send {\"status\":\"ACTIVE\"} to set explicitly.\n\nKNOWN GAP: no auth middleware consults Doctor.status yet, so a DISABLED doctor's\nAPI key still works. The flag is recorded but not enforced."
+          }
+        },
+        {
+          "name": "Rotate doctor API key",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-api-key", "value": "{{adminApiKey}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/admin/doctor/{{doctorId}}/rotate-key",
+              "host": ["{{baseUrl}}"],
+              "path": ["admin", "doctor", "{{doctorId}}", "rotate-key"]
+            },
+            "description": "DESTRUCTIVE. Invalidates the old key immediately and signs out that doctor's\ndashboard sessions. The new key is shown once - update {{doctorApiKey}} or the\nrest of this collection stops working."
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [{ "key": "baseUrl", "value": "http://localhost:3000" }]
+}
