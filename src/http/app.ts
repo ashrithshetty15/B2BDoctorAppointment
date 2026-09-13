@@ -5,6 +5,7 @@ import { logger } from '../utils/logger';
 import { adminRouter } from './admin';
 import { appConsoleRouter } from './appConsole';
 import { callWebhookRouter } from './call-webhook';
+import { doctorConsoleRouter } from './doctorConsole';
 import { dashboardRouter } from './dashboard';
 import { webhookRouter } from './webhook';
 
@@ -77,6 +78,7 @@ export function createApp() {
   app.use(webhookRouter);
   app.use(callWebhookRouter);
   app.use(appConsoleRouter);
+  app.use(doctorConsoleRouter);
   app.use(dashboardRouter);
   app.use(adminRouter);
 

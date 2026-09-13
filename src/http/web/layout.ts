@@ -74,6 +74,21 @@ button.danger{background:var(--danger)}
 .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:500;background:#eceff2;color:var(--muted)}
 .pill.active{background:#e9f6ed;color:var(--ok)}
 .pill.disabled{background:#fdeceb;color:var(--danger)}
+.pill.booked{background:#eaf1fa;color:var(--accent)}
+.pill.arrived{background:#fff4e0;color:#8a5a00}
+.pill.in_progress{background:#e9f6ed;color:var(--ok);font-weight:600}
+.pill.done{background:#eceff2;color:var(--muted)}
+.pill.no_show{background:#fdeceb;color:var(--danger)}
+.pill.cancelled{background:#eceff2;color:var(--muted);text-decoration:line-through}
+.stat{display:flex;gap:24px;flex-wrap:wrap;margin-bottom:4px}
+.stat>div{flex:0 0 auto;min-width:110px}
+.stat .n{font-size:26px;font-weight:600;line-height:1.2}
+.stat .l{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.bar{height:8px;border-radius:4px;background:var(--accent);min-width:2px}
+.caveat{background:#fff8e6;border:1px solid #f0dca8;color:#7a5c00;padding:9px 12px;border-radius:6px;font-size:13px;margin:10px 0}
+.datenav{display:flex;gap:10px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
+.datenav .today{font-weight:600}
+td.num{font-variant-numeric:tabular-nums}
 code{background:#eceff2;padding:1px 5px;border-radius:4px;font-size:13px;word-break:break-all}
 .muted{color:var(--muted)}
 .login{max-width:380px;margin:9vh auto}
@@ -82,33 +97,58 @@ code{background:#eceff2;padding:1px 5px;border-radius:4px;font-size:13px;word-br
 @media(max-width:600px){main{padding:16px 12px}.card{padding:16px}}
 `;
 
+export interface NavLink {
+  href: string;
+  label: string;
+  /** Renders as the current page rather than a link. */
+  current?: boolean;
+}
+
 export interface LayoutOptions {
   title: string;
   /** Omitted on the login page, which has no session and no nav. */
   csrfToken?: string;
-  nav?: boolean;
+  /**
+   * Omit for pages with no session. `true` keeps the operator nav; pass an
+   * object for any other audience — the doctor console has its own links and
+   * its own logout route.
+   */
+  nav?: boolean | { brand: string; links: NavLink[]; logoutAction: string };
 }
 
-export function page(opts: LayoutOptions, body: RawHtml): string {
+const ADMIN_NAV: { brand: string; links: NavLink[]; logoutAction: string } = {
+  brand: 'Clinic Console',
+  links: [{ href: '/app/doctors', label: 'Doctors' }],
+  logoutAction: '/app/logout',
+};
+
+export function page(opts: LayoutOptions, body: RawHtml, extraHead?: RawHtml): string {
+  const nav = opts.nav === true ? ADMIN_NAV : opts.nav === false ? undefined : opts.nav;
+
   const head = html`
     <!doctype html>
     <html lang="en">
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
-        <title>${opts.title} · Clinic Console</title>
+        <title>${opts.title} · ${nav?.brand ?? 'Clinic Console'}</title>
         ${opts.csrfToken ? html`<meta name="csrf-token" content="${opts.csrfToken}" />` : ''}
         <style>
           ${raw(STYLES)}
         </style>
+        ${extraHead ?? ''}
       </head>
       <body>
-        ${opts.nav
+        ${nav
           ? html`<header class="top">
-              <h1>Clinic Console</h1>
+              <h1>${nav.brand}</h1>
               <nav>
-                <a href="/app/doctors">Doctors</a>
-                <form method="post" action="/app/logout">
+                ${nav.links.map((l) =>
+                  l.current
+                    ? html`<strong>${l.label}</strong>`
+                    : html`<a href="${l.href}">${l.label}</a>`,
+                )}
+                <form method="post" action="${nav.logoutAction}">
                   <input type="hidden" name="_csrf" value="${opts.csrfToken ?? ''}" />
                   <button class="secondary" style="margin:0;padding:6px 12px">Sign out</button>
                 </form>

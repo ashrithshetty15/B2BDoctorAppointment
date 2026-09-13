@@ -4,15 +4,19 @@ import { z } from 'zod';
 import { env } from '../config/env';
 import { prisma } from '../db/prisma';
 import { clinicToday } from '../utils/time';
-import { requireAdminSession, requireFormCsrf } from './middleware/auth';
+import { getDoctorByApiKey } from '../domain/doctors';
+import { requireAdminSession, requireDoctorAuth, requireFormCsrf } from './middleware/auth';
 import { createRateLimiter } from './middleware/rateLimit';
 import {
   apiKeyFingerprint,
   clearAdminSessionCookie,
+  clearSessionCookie,
   newCsrfToken,
   sessionExpiry,
   setAdminSessionCookie,
+  setSessionCookie,
   signAdminSession,
+  signSession,
 } from './middleware/session';
 import { safeNextPath } from './web/negotiate';
 import {
@@ -164,7 +168,14 @@ appConsoleRouter.get('/app/login', (req, res) => {
   res.type('html').send(loginPage({ next: next ?? undefined }));
 });
 
-appConsoleRouter.post('/app/login', loginLimiter, (req, res) => {
+/**
+ * One login page, two audiences. A doctor's key is prefixed `dk_` (see the
+ * generator in this file and in admin.ts), so the key's own shape selects which
+ * credential is being presented — no second page, and no way to probe whether a
+ * given string is "an admin key" versus "a doctor key" beyond what the prefix
+ * already announces.
+ */
+appConsoleRouter.post('/app/login', loginLimiter, async (req, res) => {
   const body = (req.body ?? {}) as Record<string, unknown>;
   // Trimmed because the key is always pasted, and a copied line routinely
   // carries a trailing newline or space. A key that differs only by
@@ -172,16 +183,45 @@ appConsoleRouter.post('/app/login', loginLimiter, (req, res) => {
   const submitted = typeof body['key'] === 'string' ? body['key'].trim() : '';
   const next = safeNextPath(typeof body['next'] === 'string' ? body['next'] : null);
 
+  const reject = (error = 'That key was not recognised.') =>
+    res
+      .status(401)
+      .type('html')
+      .send(loginPage({ error, next: next ?? undefined }));
+
+  if (submitted.startsWith('dk_')) {
+    const doctor = await getDoctorByApiKey(submitted);
+    if (!doctor) {
+      reject();
+      return;
+    }
+    // Neither doctorFromCookie nor getDoctorByApiKey consults status, so this
+    // is the one place a disabled account is actually turned away.
+    if (doctor.status !== 'ACTIVE') {
+      reject('That account is disabled. Contact the clinic administrator.');
+      return;
+    }
+
+    setSessionCookie(
+      res,
+      signSession({
+        d: doctor.id,
+        k: apiKeyFingerprint(doctor.apiKey),
+        exp: sessionExpiry(),
+        csrf: newCsrfToken(),
+      }),
+    );
+    res.redirect(302, next ?? '/app/queue');
+    return;
+  }
+
   const expected = Buffer.from(env.ADMIN_API_KEY);
   const provided = Buffer.from(submitted);
   const ok =
     provided.length === expected.length && crypto.timingSafeEqual(provided, expected);
 
   if (!ok) {
-    res
-      .status(401)
-      .type('html')
-      .send(loginPage({ error: 'That key was not recognised.', next: next ?? undefined }));
+    reject();
     return;
   }
 
@@ -196,6 +236,17 @@ appConsoleRouter.post('/app/login', loginLimiter, (req, res) => {
   );
   res.redirect(302, next ?? '/app/doctors');
 });
+
+/** Doctors get their own logout: a different cookie, and a different guard. */
+appConsoleRouter.post(
+  '/app/doctor-logout',
+  requireDoctorAuth,
+  requireFormCsrf,
+  (_req, res) => {
+    clearSessionCookie(res);
+    res.redirect(302, '/app/login');
+  },
+);
 
 appConsoleRouter.post('/app/logout', requireAdminSession, requireFormCsrf, (_req, res) => {
   clearAdminSessionCookie(res);

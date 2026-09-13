@@ -252,12 +252,15 @@ export function requireFormCsrf(req: Request, res: Response, next: NextFunction)
     return;
   }
 
+  // Whichever audience's auth ran before this middleware is the one that set a
+  // token: requireAdminSession sets adminCsrfToken, the doctor cookie path sets
+  // csrfToken. They can never be confused for each other — the two cookies are
+  // signed with separately derived MAC keys — and a route is always gated by
+  // exactly one of them. If neither is set the request is unauthenticated and
+  // must fail here regardless.
+  const expected = req.adminCsrfToken ?? req.csrfToken;
   const submitted = (req.body as { _csrf?: unknown } | undefined)?._csrf;
-  if (
-    !req.adminCsrfToken ||
-    typeof submitted !== 'string' ||
-    !csrfMatches(req.adminCsrfToken, submitted)
-  ) {
+  if (!expected || typeof submitted !== 'string' || !csrfMatches(expected, submitted)) {
     res.status(403).send('CSRF token missing or invalid');
     return;
   }

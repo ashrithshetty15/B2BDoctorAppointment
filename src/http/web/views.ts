@@ -39,12 +39,13 @@ export function loginPage(opts: { error?: string; next?: string }): string {
       <div class="login">
         <div class="card">
           <h2>Clinic Console</h2>
-          <p class="sub">Operator sign-in</p>
+          <p class="sub">Sign in with your access key</p>
           ${opts.error ? html`<div class="err">${opts.error}</div>` : ''}
           <form method="post" action="/app/login">
             ${opts.next ? html`<input type="hidden" name="next" value="${opts.next}" />` : ''}
-            <label for="key">Admin key</label>
+            <label for="key">Access key</label>
             <input id="key" name="key" type="password" autocomplete="current-password" autofocus />
+            <p class="hint">Doctors: your key begins with <code>dk_</code>.</p>
             <button type="submit">Sign in</button>
           </form>
         </div>
@@ -328,14 +329,15 @@ export function doctorFormPage(opts: {
   );
 }
 
-export function errorPage(opts: { title: string; message: string }): string {
+export function errorPage(opts: { title: string; message: string; backHref?: string }): string {
+  const back = opts.backHref ?? '/app/doctors';
   return page(
     { title: opts.title },
     html`
       <div class="card">
         <h2>${opts.title}</h2>
         <p class="sub">${opts.message}</p>
-        <a href="/app/doctors">Back to doctors</a>
+        <a href="${back}">Go back</a>
       </div>
     `,
   );
