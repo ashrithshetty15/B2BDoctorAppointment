@@ -25,6 +25,13 @@ export interface ConsoleStrings {
   reports: string;
   signOut: string;
   settings: string;
+  notesLabel: string;
+  notesHint: string;
+  notesPlaceholder: string;
+  addNote: string;
+  editNote: string;
+  saveNote: string;
+  noteSaved: string;
   noReportBody: string;
   backToPatients: string;
   seenCount: string;
@@ -133,6 +140,13 @@ const en: ConsoleStrings = {
   reports: 'Reports',
   signOut: 'Sign out',
   settings: 'Settings',
+  notesLabel: 'Remarks',
+  notesHint: 'Seen by you and your staff only — never sent to the patient.',
+  notesPlaceholder: 'e.g. follow-up for BP, needs a chair',
+  addNote: 'Add remark',
+  editNote: 'Edit remark',
+  saveNote: 'Save remark',
+  noteSaved: 'Remark saved',
   noReportBody: 'Once patients start booking, this is where you will see how the clinic is running.',
   backToPatients: 'Back to patients',
   seenCount: 'Seen',
@@ -242,6 +256,13 @@ const kn: ConsoleStrings = {
   reports: 'ವರದಿಗಳು',
   signOut: 'ಸೈನ್ ಔಟ್',
   settings: 'ಸೆಟ್ಟಿಂಗ್‌ಗಳು',
+  notesLabel: 'ಟಿಪ್ಪಣಿ',
+  notesHint: 'ನಿಮಗೆ ಮತ್ತು ನಿಮ್ಮ ಸಿಬ್ಬಂದಿಗೆ ಮಾತ್ರ ಕಾಣಿಸುತ್ತದೆ — ರೋಗಿಗೆ ಕಳುಹಿಸುವುದಿಲ್ಲ.',
+  notesPlaceholder: 'ಉದಾ. ಬಿಪಿ ಫಾಲೋ-ಅಪ್, ಕುರ್ಚಿ ಬೇಕು',
+  addNote: 'ಟಿಪ್ಪಣಿ ಸೇರಿಸಿ',
+  editNote: 'ಟಿಪ್ಪಣಿ ಬದಲಾಯಿಸಿ',
+  saveNote: 'ಟಿಪ್ಪಣಿ ಉಳಿಸಿ',
+  noteSaved: 'ಟಿಪ್ಪಣಿ ಉಳಿಸಲಾಗಿದೆ',
   noReportBody: 'ರೋಗಿಗಳು ಬುಕ್ ಮಾಡಲು ಶುರುವಾದ ಮೇಲೆ, ಕ್ಲಿನಿಕ್ ಹೇಗೆ ನಡೆಯುತ್ತಿದೆ ಎಂಬುದು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ.',
   backToPatients: 'ರೋಗಿಗಳಿಗೆ ಹಿಂತಿರುಗಿ',
   seenCount: 'ನೋಡಿದ್ದು',

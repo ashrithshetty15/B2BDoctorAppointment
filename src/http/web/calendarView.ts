@@ -146,7 +146,7 @@ export function slotBookPage(opts: {
   dateLabel: string;
   queueCount: number;
   csrfToken: string;
-  values?: { name?: string; phone?: string; language?: string };
+  values?: { name?: string; phone?: string; language?: string; notes?: string };
   error?: string;
 }): string {
   const s = c(opts.doctor.defaultLanguage);
@@ -192,6 +192,15 @@ export function slotBookPage(opts: {
               required
             />
             <p class="hint">${s.phoneHint}</p>
+
+            <label for="snotes">${s.notesLabel} <span class="hint">${s.notesHint}</span></label>
+            <textarea
+              id="snotes"
+              name="notes"
+              rows="2"
+              maxlength="500"
+              placeholder="${s.notesPlaceholder}"
+            >${v.notes ?? ''}</textarea>
 
             <label for="slang">${s.languageForPatient}</label>
             <select id="slang" name="language">

@@ -164,6 +164,34 @@ function stats(opts: {
   `;
 }
 
+/**
+ * The remark, shown inline and editable in place via <details> — no JavaScript,
+ * and the doctor never loses the queue to reach it. Collapsed when empty so an
+ * unused field costs no vertical space on a busy day.
+ */
+function noteBlock(opts: {
+  row: QueueRow;
+  s: ConsoleStrings;
+  csrfToken: string;
+  back: string;
+}): RawHtml {
+  const { row, s, csrfToken, back } = opts;
+  return html`
+    <details class="note" ${row.notes ? raw('open') : ''}>
+      <summary>${row.notes ? s.editNote : s.addNote}</summary>
+      ${row.notes ? html`<p class="notetext">${row.notes}</p>` : ''}
+      <form method="post" action="/app/appointment/${row.appointmentId}/note">
+        <input type="hidden" name="_csrf" value="${csrfToken}" />
+        <input type="hidden" name="back" value="${back}" />
+        <textarea name="notes" rows="2" maxlength="500" placeholder="${s.notesPlaceholder}">
+${row.notes ?? ''}</textarea
+        >
+        <button class="ghost" type="submit">${s.saveNote}</button>
+      </form>
+    </details>
+  `;
+}
+
 // ---- waiting rows ----
 
 /**
@@ -217,6 +245,7 @@ function waitingRow(opts: {
             : ''}
           <span class="wa">${WA_ICON}${s.viaWhatsapp}</span>
         </div>
+        ${noteBlock({ row, s, csrfToken, back: '/app/queue' })}
       </div>
       <div class="acts">
         ${row.status === 'BOOKED' ? act('arrived', s.arrived, 'ghost') : ''}
@@ -240,6 +269,7 @@ function servingRow(opts: {
       <div class="body">
         <div class="nm">${personName(row.patient.name, language)}</div>
         <div class="sub"><span class="pill in_progress">${s.nowServing}</span></div>
+        ${noteBlock({ row, s, csrfToken, back: '/app/queue' })}
       </div>
       <div class="acts">
         <form method="post" action="/app/queue/${row.appointmentId}/recall">
@@ -372,7 +402,7 @@ export function walkInPage(opts: {
   doctor: Doctor;
   queueCount: number;
   csrfToken: string;
-  values?: { name?: string; phone?: string; language?: string };
+  values?: { name?: string; phone?: string; language?: string; notes?: string };
   error?: string;
 }): string {
   const s = c(opts.doctor.defaultLanguage);
@@ -416,6 +446,15 @@ export function walkInPage(opts: {
               required
             />
             <p class="hint">${s.phoneHint}</p>
+
+            <label for="wnotes">${s.notesLabel} <span class="hint">${s.notesHint}</span></label>
+            <textarea
+              id="wnotes"
+              name="notes"
+              rows="2"
+              maxlength="500"
+              placeholder="${s.notesPlaceholder}"
+            >${v.notes ?? ''}</textarea>
 
             <label for="wlang">${s.languageForPatient}</label>
             <select id="wlang" name="language">

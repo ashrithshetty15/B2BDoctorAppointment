@@ -21,6 +21,7 @@ import { nowServingLabel } from '../i18n/format';
 import { t } from '../i18n/templates';
 import { enqueueOutbound } from '../queue/queues';
 import { requireDoctorAuth, requireFormCsrf } from './middleware/auth';
+import { safeNextPath } from './web/negotiate';
 import {
   type QueueRow,
   bookingsPage,
@@ -89,6 +90,7 @@ async function loadDay(doctorId: string, date: Date) {
         startedAt: a.startedAt,
         completedAt: a.completedAt,
         consultMins: a.consultMins,
+        notes: a.notes,
       };
 
       if (a.type !== 'TOKEN' || !ACTIVE.has(a.status)) return base;
@@ -222,6 +224,42 @@ doctorConsoleRouter.post(
   },
 );
 
+/**
+ * Edit a remark after booking. The desk captures context at the counter, but
+ * the useful note often arrives during the visit — a remark that could only be
+ * written at booking time would mostly go unwritten.
+ */
+const noteBody = z.object({ notes: z.string().trim().max(500) });
+
+doctorConsoleRouter.post(
+  '/app/appointment/:appointmentId/note',
+  requireDoctorAuth,
+  requireFormCsrf,
+  async (req, res) => {
+    const doctor = req.doctor!;
+    const s = c(doctor.defaultLanguage);
+    const parsed = noteBody.safeParse(req.body ?? {});
+
+    const appointment = await prisma.appointment.findUnique({
+      where: { id: req.params['appointmentId'] ?? '' },
+      select: { id: true, doctorId: true },
+    });
+    if (!appointment || appointment.doctorId !== doctor.id) {
+      notFound(res, 'Appointment not found.');
+      return;
+    }
+
+    await prisma.appointment.update({
+      where: { id: appointment.id },
+      // Empty clears the remark rather than storing a blank string.
+      data: { notes: parsed.success && parsed.data.notes ? parsed.data.notes : null },
+    });
+
+    const back = typeof req.body?.back === 'string' ? safeNextPath(req.body.back) : null;
+    res.redirect(302, `${back ?? '/app/queue'}?flash=${encodeURIComponent(s.noteSaved)}`);
+  },
+);
+
 // ---- calendar (SLOT / HYBRID) ----
 
 function shiftDate(date: Date, days: number): string {
@@ -289,6 +327,7 @@ const slotBookBody = z.object({
   name: z.string().trim().min(1),
   phone: z.string().trim().min(1),
   language: z.enum(['EN', 'KN']).optional(),
+  notes: z.string().trim().max(500).optional(),
 });
 
 doctorConsoleRouter.post(
@@ -315,6 +354,7 @@ doctorConsoleRouter.post(
       name: typeof body['name'] === 'string' ? body['name'] : '',
       phone: typeof body['phone'] === 'string' ? body['phone'] : '',
       language: typeof body['language'] === 'string' ? body['language'] : undefined,
+      notes: typeof body['notes'] === 'string' ? body['notes'] : '',
     };
 
     const reject = async (error: string) =>
@@ -372,6 +412,17 @@ doctorConsoleRouter.post(
       return;
     }
 
+    // Written after creation rather than threaded through issueToken/bookSlot:
+    // a remark is not part of the booking's correctness, and keeping it out of
+    // those functions leaves their signatures — and their race guarantees —
+    // alone. Only on a fresh row, so a re-submit never clobbers an existing one.
+    if (parsed.data.notes) {
+      await prisma.appointment.update({
+        where: { id: result.appointment.id },
+        data: { notes: parsed.data.notes },
+      });
+    }
+
     // The same confirmation the SLOT conversation flow will send once built.
     await enqueueOutbound({
       to: patient.phone,
@@ -413,6 +464,7 @@ const walkInBody = z.object({
   name: z.string().trim().min(1),
   phone: z.string().trim().min(1),
   language: z.enum(['EN', 'KN']).optional(),
+  notes: z.string().trim().max(500).optional(),
 });
 
 doctorConsoleRouter.post(
@@ -429,6 +481,7 @@ doctorConsoleRouter.post(
       name: typeof body['name'] === 'string' ? body['name'] : '',
       phone: typeof body['phone'] === 'string' ? body['phone'] : '',
       language: typeof body['language'] === 'string' ? body['language'] : undefined,
+      notes: typeof body['notes'] === 'string' ? body['notes'] : '',
     };
 
     const reject = async (error: string) =>
@@ -481,6 +534,17 @@ doctorConsoleRouter.post(
     if (result.alreadyExisted) {
       res.redirect(302, `/app/queue?flash=${encodeURIComponent(s.alreadyHasToken(token))}`);
       return;
+    }
+
+    // Written after creation rather than threaded through issueToken/bookSlot:
+    // a remark is not part of the booking's correctness, and keeping it out of
+    // those functions leaves their signatures — and their race guarantees —
+    // alone. Only on a fresh row, so a re-submit never clobbers an existing one.
+    if (parsed.data.notes) {
+      await prisma.appointment.update({
+        where: { id: result.appointment.id },
+        data: { notes: parsed.data.notes },
+      });
     }
 
     // Same confirmation a self-booking patient receives, in their language.

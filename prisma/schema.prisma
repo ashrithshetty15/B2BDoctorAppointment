@@ -171,6 +171,14 @@ model Appointment {
   /// Actual consult length in minutes, recorded on "Done"; feeds the rolling average.
   consultMins Int? @map("consult_mins")
 
+  /// Free-text remark captured by the desk at booking, or by the doctor during
+  /// the visit. Staff-only — never sent to the patient.
+  ///
+  /// Expect clinical content here in practice: it will hold symptoms and
+  /// sometimes a diagnosis, so it is patient health data with the handling
+  /// obligations that implies.
+  notes String? @map("notes")
+
   // ---- Reminder bookkeeping (SLOT mode) ----
   dayBeforeReminderSentAt  DateTime? @map("day_before_reminder_sent_at")
   hourBeforeReminderSentAt DateTime? @map("hour_before_reminder_sent_at")

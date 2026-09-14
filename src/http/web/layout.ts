@@ -369,6 +369,24 @@ a.prow .last{display:block;font-size:var(--t-xs);color:var(--ink-3);margin-top:2
   font-variant-numeric:tabular-nums}
 @media (max-width:600px){a.prow{padding:var(--s3) var(--s4);gap:var(--s3)}}
 
+/* Remark on a row: quiet until it has content, never competing with the name. */
+details.note{margin-top:var(--s2)}
+details.note>summary{
+  list-style:none;cursor:pointer;font-size:var(--t-xs);font-weight:650;
+  color:var(--ink-3);display:inline-flex;align-items:center;gap:4px;
+  padding:2px 0;min-height:24px;
+}
+details.note>summary::-webkit-details-marker{display:none}
+details.note>summary::before{content:'¸E';font-size:12px}
+details.note>summary:hover{color:var(--accent)}
+details.note .notetext{
+  margin:var(--s1) 0;padding:var(--s2) var(--s3);background:var(--warn-soft);
+  border-radius:var(--r-sm);font-size:var(--t-sm);color:var(--ink-2);
+  overflow-wrap:anywhere;white-space:pre-wrap;
+}
+details.note textarea{font-family:inherit;font-size:var(--t-sm);margin-top:var(--s1)}
+details.note button{margin-top:var(--s2)}
+
 /* ---- calendar slot rows ---- */
 .slotrow{display:flex;align-items:center;gap:var(--s4);padding:var(--s3) var(--s5);
   border-top:1px solid var(--line)}

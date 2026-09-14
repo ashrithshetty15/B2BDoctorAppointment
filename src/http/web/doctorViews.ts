@@ -20,6 +20,8 @@ export interface QueueRow {
   startedAt: Date | null;
   completedAt: Date | null;
   consultMins: number | null;
+  /** Staff-only remark; never shown to the patient. */
+  notes: string | null;
   ahead?: number;
   etaMins?: number;
 }
