@@ -59,6 +59,11 @@ export async function handleInboundMessage(inbound: InboundMessage): Promise<Han
 
   const patient = await findOrCreatePatient(inbound.from, { language: doctor.defaultLanguage });
 
+  // Opens the 24-hour window in which we may send this patient a free-form
+  // message. Stamped before the turn runs, not after: a turn that throws still
+  // means the patient messaged us, and the window opened regardless.
+  await markInboundSeen(patient.id);
+
   try {
     const replies = await runTurn(doctor, patient, inbound);
     await markProcessed(inbound.providerMessageId);
@@ -186,6 +191,22 @@ async function runEffects(effects: Effect[]): Promise<void> {
       default:
         break;
     }
+  }
+}
+
+/**
+ * Bookkeeping only — a failure here must never cost the patient their reply, so
+ * it is logged and swallowed. The cost of losing one stamp is that a cancellation
+ * puts this patient on the call list unnecessarily, which is the safe direction.
+ */
+async function markInboundSeen(patientId: string): Promise<void> {
+  try {
+    await prisma.patient.update({
+      where: { id: patientId },
+      data: { lastInboundAt: new Date() },
+    });
+  } catch (err) {
+    logger.warn({ err, patientId }, 'Could not stamp lastInboundAt');
   }
 }
 

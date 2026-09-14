@@ -23,7 +23,8 @@ export type WorkingHours = Partial<Record<DayKey, Window[]>>;
 
 export type DayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
 
-const DAY_KEYS: DayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+/** Canonical order, Monday first. Exported so nothing else redeclares it. */
+export const DAY_KEYS: DayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
 export interface Slot {
   start: Date;

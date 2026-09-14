@@ -1,28 +1,30 @@
 import type { Doctor } from '@prisma/client';
-import { c } from '../../i18n/console';
+import { type ConsoleStrings, c } from '../../i18n/console';
+import { type DayKey, DAY_KEYS } from '../../domain/slots';
 import { html, initials, page, raw } from './layout';
 import { doctorBottomNav, doctorHeader } from './nav';
 import { bookingLink, qrSvg } from './qr';
 
-const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
-const DAY_LABELS: Record<(typeof DAYS)[number], string> = {
-  mon: 'Monday',
-  tue: 'Tuesday',
-  wed: 'Wednesday',
-  thu: 'Thursday',
-  fri: 'Friday',
-  sat: 'Saturday',
-  sun: 'Sunday',
-};
+/** Weekday names are translated now; they used to be hardcoded English here. */
+function dayLabel(s: ConsoleStrings, day: DayKey): string {
+  const byDay: Record<DayKey, string> = {
+    mon: s.dayMon,
+    tue: s.dayTue,
+    wed: s.dayWed,
+    thu: s.dayThu,
+    fri: s.dayFri,
+    sat: s.daySat,
+    sun: s.daySun,
+  };
+  return byDay[day];
+}
 
-function windowsFor(workingHours: unknown, day: string): string {
-  if (!workingHours || typeof workingHours !== 'object') return '';
-  const value = (workingHours as Record<string, unknown>)[day];
-  if (!Array.isArray(value)) return '';
-  return value
-    .filter((w): w is { start: string; end: string } => !!w && typeof w === 'object')
-    .map((w) => `${String(w.start)}–${String(w.end)}`)
-    .join(', ');
+/** One closed day in the Time off list. */
+export interface LeaveDay {
+  /** YYYY-MM-DD, the value posted back. */
+  iso: string;
+  /** Human form, already localised by the caller. */
+  label: string;
 }
 
 /**
@@ -83,8 +85,17 @@ export function settingsPage(opts: {
   doctor: Doctor;
   queueCount: number;
   csrfToken: string;
+  /** Working hours as editable text, one field per day. */
+  hours: Record<DayKey, string>;
+  upcomingLeave: LeaveDay[];
+  /** Today in the clinic's timezone, YYYY-MM-DD — the date picker's floor. */
+  today: string;
   flash?: string;
   error?: string;
+  /** A malformed hours entry, e.g. "Monday: 25:00-26:00 must use 24-hour HH:MM times". */
+  hoursError?: string;
+  /** Bookings that the submitted hours would strand, already formatted. */
+  hoursClash?: string[];
 }): string {
   const { doctor } = opts;
   const s = c(doctor.defaultLanguage);
@@ -224,15 +235,74 @@ export function settingsPage(opts: {
 
         <div class="card">
           <h2>${s.workingHours}</h2>
-          <dl class="kv">
-            ${DAYS.map((day) => {
-              const windows = windowsFor(doctor.workingHours, day);
-              return html`<dt>${DAY_LABELS[day]}</dt>
-                <dd class="num">
-                  ${windows ? windows : html`<span class="muted">${s.closedDay}</span>`}
-                </dd>`;
-            })}
-          </dl>
+          <p class="sub">${s.hoursHint}</p>
+
+          ${opts.hoursError
+            ? html`<div class="err">${opts.hoursError}</div>`
+            : ''}
+          ${opts.hoursClash && opts.hoursClash.length > 0
+            ? html`
+                <div class="err">
+                  <strong>${s.hoursClashTitle}</strong>
+                  <ul class="clash">
+                    ${opts.hoursClash.map((cl) => html`<li>${cl}</li>`)}
+                  </ul>
+                  ${s.hoursClashBody}
+                </div>
+              `
+            : ''}
+
+          <form method="post" action="/app/settings/hours">
+            <input type="hidden" name="_csrf" value="${opts.csrfToken}" />
+            ${DAY_KEYS.map(
+              (day) => html`
+                <label for="hours_${day}">${dayLabel(s, day)}</label>
+                <input
+                  id="hours_${day}"
+                  name="hours_${day}"
+                  type="text"
+                  inputmode="numeric"
+                  autocomplete="off"
+                  value="${opts.hours[day] ?? ''}"
+                  placeholder="${s.closedDay}"
+                />
+              `,
+            )}
+            <p class="hint">${s.hoursExample}</p>
+            <button type="submit">${s.saveHours}</button>
+          </form>
+        </div>
+
+        <div class="card">
+          <h2>${s.timeOff}</h2>
+          <p class="sub">${s.timeOffSub}</p>
+
+          ${opts.upcomingLeave.length === 0
+            ? html`<p class="hint">${s.noTimeOff}</p>`
+            : html`
+                <dl class="kv">
+                  ${opts.upcomingLeave.map(
+                    (day) => html`
+                      <dt>${day.label}</dt>
+                      <dd>
+                        <form method="post" action="/app/day/reopen" class="inline">
+                          <input type="hidden" name="_csrf" value="${opts.csrfToken}" />
+                          <input type="hidden" name="date" value="${day.iso}" />
+                          <button class="secondary sm" type="submit">${s.reopenDay}</button>
+                        </form>
+                      </dd>
+                    `,
+                  )}
+                </dl>
+                <p class="hint">${s.reopenWarning}</p>
+              `}
+
+          <form method="post" action="/app/day/close/confirm">
+            <input type="hidden" name="_csrf" value="${opts.csrfToken}" />
+            <label for="closeDate">${s.closeDay}</label>
+            <input id="closeDate" name="date" type="date" min="${opts.today}" required />
+            <button class="secondary" type="submit">${s.closeDay}</button>
+          </form>
         </div>
 
         ${link

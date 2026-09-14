@@ -402,6 +402,28 @@ details.note button{margin-top:var(--s2)}
 .slotrow .acts button{margin:0;padding:var(--s2) var(--s4);min-height:38px;font-size:var(--t-sm)}
 @media (max-width:600px){.slotrow{padding:var(--s3) var(--s4);gap:var(--s3)}}
 
+/* ---- time off / day closure ---- */
+/* A form that sits inside a dl row without breaking the grid. */
+form.inline{margin:0;display:inline-block}
+button.sm{margin:0;width:auto;padding:var(--s1) var(--s3);min-height:34px;
+  font-size:var(--t-xs)}
+.clash{margin:var(--s2) 0;padding-left:var(--s5);font-weight:500}
+.clash li{margin:2px 0}
+/* The reachable / unreachable split on the close-day confirmation. */
+.reach{display:flex;flex-direction:column;gap:var(--s2);margin:var(--s4) 0}
+.reach .r{display:flex;align-items:flex-start;gap:var(--s3);padding:var(--s3);
+  border-radius:var(--r-sm);font-size:var(--t-sm);font-weight:600}
+.reach .r.yes{background:var(--ok-soft);color:var(--ok)}
+.reach .r.no{background:var(--warn-soft);color:var(--warn)}
+.reach .r .ic{flex:0 0 auto;line-height:1.4}
+.calllist{list-style:none;margin:var(--s3) 0 0;padding:0;
+  display:flex;flex-direction:column;gap:2px}
+.calllist li{display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap;
+  padding:var(--s2) var(--s3);background:var(--surface-2);border-radius:var(--r-sm)}
+.calllist .nm{font-weight:650;flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+.calllist a.tel{font-variant-numeric:tabular-nums;font-weight:650;
+  text-decoration:none;white-space:nowrap}
+
 /* Quiet label above a card, for pages with more than one section. */
 .secl{margin:var(--s5) 0 var(--s2);font-size:var(--t-xs);font-weight:700;
   text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3)}
@@ -501,7 +523,7 @@ details.note.up .hint{font-size:var(--t-xs);color:var(--ink-3);margin:var(--s1) 
 /* ---- forms ---- */
 label{display:block;margin:var(--s4) 0 var(--s1);font-weight:600;font-size:var(--t-sm)}
 .hint{font-weight:400;color:var(--ink-3);font-size:var(--t-sm)}
-input[type=text],input[type=number],input[type=password],select,textarea{
+input[type=text],input[type=number],input[type=password],input[type=date],select,textarea{
   width:100%;padding:var(--s3);border:1px solid var(--line-2);border-radius:var(--r-sm);
   font:inherit;background:var(--surface);color:inherit;min-height:var(--tap);
 }

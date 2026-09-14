@@ -134,6 +134,17 @@ model Patient {
   language    Language  @default(EN)
   lastVisitAt DateTime? @map("last_visit_at")
 
+  /// When this patient last sent us a message.
+  ///
+  /// WhatsApp only permits free-form messages within 24 hours of the patient's
+  /// last inbound message; outside that window a send is rejected, and our
+  /// adapter cannot tell that rejection from a transient failure. This column is
+  /// what lets the console say, before a doctor cancels a day, which patients
+  /// will actually be told and which need a phone call instead.
+  ///
+  /// Null for a patient who has only ever been booked at the desk.
+  lastInboundAt DateTime? @map("last_inbound_at")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

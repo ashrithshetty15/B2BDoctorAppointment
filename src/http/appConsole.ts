@@ -5,6 +5,8 @@ import { env } from '../config/env';
 import { prisma } from '../db/prisma';
 import { clinicToday } from '../utils/time';
 import { getDoctorByApiKey } from '../domain/doctors';
+import type { WorkingHours } from '../domain/slots';
+import { buildWorkingHours as buildHours, workingHoursToText } from '../domain/workingHours';
 import { requireAdminSession, requireDoctorAuth, requireFormCsrf } from './middleware/auth';
 import { createRateLimiter } from './middleware/rateLimit';
 import {
@@ -57,67 +59,11 @@ const loginLimiter = createRateLimiter({
 });
 
 // ---- working hours <-> "09:30-13:00, 17:00-20:00" ----
-
-interface Window {
-  start: string;
-  end: string;
-}
-
-const TIME = /^([01]?\d|2[0-3]):([0-5]\d)$/;
-
-function minutes(hhmm: string): number {
-  const [h, m] = hhmm.split(':') as [string, string];
-  return Number(h) * 60 + Number(m);
-}
-
-/** Throws with a human-readable reason; the caller renders it back into the form. */
-function parseDayWindows(label: string, input: string): Window[] {
-  const text = input.trim();
-  if (!text) return [];
-
-  const windows: Window[] = [];
-  for (const chunk of text.split(',')) {
-    const piece = chunk.trim();
-    if (!piece) continue;
-
-    const [start, end, ...rest] = piece.split('-').map((s) => s.trim());
-    if (!start || !end || rest.length > 0) {
-      throw new Error(`${label}: "${piece}" must look like 09:30-13:00`);
-    }
-    if (!TIME.test(start) || !TIME.test(end)) {
-      throw new Error(`${label}: "${piece}" must use 24-hour HH:MM times`);
-    }
-    if (minutes(end) <= minutes(start)) {
-      throw new Error(`${label}: "${piece}" ends before it starts`);
-    }
-    windows.push({ start, end });
-  }
-
-  windows.sort((a, b) => minutes(a.start) - minutes(b.start));
-  for (let i = 1; i < windows.length; i += 1) {
-    const prev = windows[i - 1] as Window;
-    const cur = windows[i] as Window;
-    if (minutes(cur.start) < minutes(prev.end)) {
-      throw new Error(`${label}: ${prev.start}-${prev.end} overlaps ${cur.start}-${cur.end}`);
-    }
-  }
-  return windows;
-}
-
-function formatDayWindows(value: unknown): string {
-  if (!Array.isArray(value)) return '';
-  return value
-    .filter((w): w is Window => !!w && typeof w === 'object' && 'start' in w && 'end' in w)
-    .map((w) => `${String(w.start)}-${String(w.end)}`)
-    .join(', ');
-}
+// The parser, formatter and Window type now live in domain/workingHours.ts, so
+// the doctor console and the admin JSON API validate identically.
 
 function hoursFromDoctor(workingHours: unknown): Record<Day, string> {
-  const out = emptyHours();
-  if (!workingHours || typeof workingHours !== 'object') return out;
-  const src = workingHours as Record<string, unknown>;
-  for (const day of DAYS) out[day] = formatDayWindows(src[day]);
-  return out;
+  return workingHoursToText(workingHours) as Record<Day, string>;
 }
 
 function hoursFromBody(body: Record<string, unknown>): Record<Day, string> {
@@ -312,7 +258,7 @@ appConsoleRouter.post(
       return;
     }
 
-    let workingHours: Record<string, Window[]>;
+    let workingHours: WorkingHours;
     try {
       workingHours = buildWorkingHours(values.hours);
     } catch (err) {
@@ -456,7 +402,7 @@ appConsoleRouter.post(
       return;
     }
 
-    let workingHours: Record<string, Window[]>;
+    let workingHours: WorkingHours;
     try {
       workingHours = buildWorkingHours(values.hours);
     } catch (err) {
@@ -535,11 +481,11 @@ appConsoleRouter.post(
   },
 );
 
-function buildWorkingHours(hours: Record<Day, string>): Record<string, Window[]> {
-  const out: Record<string, Window[]> = {};
-  for (const day of DAYS) {
-    const windows = parseDayWindows(day.toUpperCase(), hours[day]);
-    if (windows.length > 0) out[day] = windows;
-  }
-  return out;
+/** Operator-facing labels are the bare day key upper-cased, as they always were. */
+const ADMIN_DAY_LABELS = Object.fromEntries(
+  DAYS.map((day) => [day, day.toUpperCase()]),
+) as Record<Day, string>;
+
+function buildWorkingHours(hours: Record<Day, string>): WorkingHours {
+  return buildHours(hours, ADMIN_DAY_LABELS);
 }

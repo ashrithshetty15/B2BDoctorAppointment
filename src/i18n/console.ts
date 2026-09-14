@@ -107,6 +107,45 @@ export interface ConsoleStrings {
   clinicDetails: string;
   bookingConfig: string;
   workingHours: string;
+  // ---- weekday names (no keys existed before; settingsView hardcoded English) ----
+  dayMon: string;
+  dayTue: string;
+  dayWed: string;
+  dayThu: string;
+  dayFri: string;
+  daySat: string;
+  daySun: string;
+  // ---- doctor-editable hours ----
+  editHours: string;
+  hoursHint: string;
+  hoursExample: string;
+  saveHours: string;
+  hoursSaved: string;
+  hoursClashTitle: string;
+  hoursClashBody: string;
+  // ---- closing a day ----
+  timeOff: string;
+  timeOffSub: string;
+  closeDay: string;
+  closeToday: string;
+  closeTodaySub: string;
+  closeDayFor: (date: string) => string;
+  closeDayConfirm: string;
+  cancelsBookings: (n: number) => string;
+  nothingBooked: string;
+  willBeMessaged: (n: number) => string;
+  cannotBeMessaged: (n: number) => string;
+  cannotBeMessagedWhy: string;
+  dayClosed: string;
+  dayClosedSub: (n: number) => string;
+  callThesePatients: string;
+  everyoneNotified: string;
+  reopenDay: string;
+  reopenWarning: string;
+  dayReopened: string;
+  noTimeOff: string;
+  onLeaveThatDay: string;
+  pastDate: string;
   dailyCap: string;
   consultLength: string;
   learnedAverage: string;
@@ -208,7 +247,7 @@ const en: ConsoleStrings = {
   confirmBooking: 'Confirm booking',
   backToToday: 'Back to today',
   noSlotsTitle: 'No appointment times this day',
-  noSlotsBody: 'Working hours for this day are empty, or the clinic is closed. Set hours in the operator console.',
+  noSlotsBody: 'Working hours for this day are empty, or the clinic is closed. Set your hours in Settings.',
   slotTaken: 'That time was just taken. Pick another.',
   slotNotValid: 'That is not an appointment time for this day.',
   slotInPast: 'That time has already passed.',
@@ -242,6 +281,45 @@ const en: ConsoleStrings = {
   clinicDetails: 'Clinic',
   bookingConfig: 'Booking',
   workingHours: 'Working hours',
+  dayMon: 'Monday',
+  dayTue: 'Tuesday',
+  dayWed: 'Wednesday',
+  dayThu: 'Thursday',
+  dayFri: 'Friday',
+  daySat: 'Saturday',
+  daySun: 'Sunday',
+  editHours: 'Edit working hours',
+  hoursHint: 'Leave a day blank to close it. Separate a morning and evening session with a comma.',
+  hoursExample: 'e.g. 09:30-13:00, 17:00-20:00',
+  saveHours: 'Save hours',
+  hoursSaved: 'Working hours saved',
+  hoursClashTitle: 'These hours would leave existing bookings outside your working time',
+  hoursClashBody: 'Close those days or move the bookings first, then change your hours.',
+  timeOff: 'Time off',
+  timeOffSub: 'Close a day so nothing new can be booked, and cancel what already is.',
+  closeDay: 'Close this day',
+  closeToday: 'Close today',
+  closeTodaySub: 'Had an emergency? Cancel the rest of today and stop new bookings.',
+  closeDayFor: (date) => `Close ${date}?`,
+  closeDayConfirm: 'Close the day',
+  cancelsBookings: (n) => `${n} booking${n === 1 ? '' : 's'} will be cancelled.`,
+  nothingBooked: 'Nothing is booked that day — closing it just stops new bookings.',
+  willBeMessaged: (n) => `${n} patient${n === 1 ? '' : 's'} will be messaged on WhatsApp`,
+  cannotBeMessaged: (n) =>
+    `${n} patient${n === 1 ? '' : 's'} cannot be messaged — you will get their number${n === 1 ? '' : 's'}`,
+  cannotBeMessagedWhy:
+    'WhatsApp only allows a message within 24 hours of the patient writing to you. These patients need a phone call.',
+  dayClosed: 'Day closed',
+  dayClosedSub: (n) => `${n} booking${n === 1 ? '' : 's'} cancelled.`,
+  callThesePatients: 'Please call these patients — we could not message them',
+  everyoneNotified: 'Every patient was messaged.',
+  reopenDay: 'Reopen',
+  reopenWarning:
+    'Reopening only allows new bookings. Cancelled patients have already been told not to come and are not brought back.',
+  dayReopened: 'Day reopened for new bookings',
+  noTimeOff: 'No days closed.',
+  onLeaveThatDay: 'Already closed',
+  pastDate: 'That day has already passed.',
   dailyCap: 'Daily token cap',
   consultLength: 'Consult length',
   learnedAverage: 'Learned average',
@@ -378,6 +456,44 @@ const kn: ConsoleStrings = {
   clinicDetails: 'ಕ್ಲಿನಿಕ್',
   bookingConfig: 'ಬುಕಿಂಗ್',
   workingHours: 'ಕೆಲಸದ ಸಮಯ',
+  dayMon: 'ಸೋಮವಾರ',
+  dayTue: 'ಮಂಗಳವಾರ',
+  dayWed: 'ಬುಧವಾರ',
+  dayThu: 'ಗುರುವಾರ',
+  dayFri: 'ಶುಕ್ರವಾರ',
+  daySat: 'ಶನಿವಾರ',
+  daySun: 'ಭಾನುವಾರ',
+  editHours: 'ಕೆಲಸದ ಸಮಯ ಬದಲಾಯಿಸಿ',
+  hoursHint: 'ದಿನವನ್ನು ಮುಚ್ಚಲು ಖಾಲಿ ಬಿಡಿ. ಬೆಳಿಗ್ಗೆ ಮತ್ತು ಸಂಜೆಯ ಸಮಯವನ್ನು ಅಲ್ಪವಿರಾಮದಿಂದ ಬೇರ್ಪಡಿಸಿ.',
+  hoursExample: 'ಉದಾ. 09:30-13:00, 17:00-20:00',
+  saveHours: 'ಸಮಯ ಉಳಿಸಿ',
+  hoursSaved: 'ಕೆಲಸದ ಸಮಯ ಉಳಿಸಲಾಗಿದೆ',
+  hoursClashTitle: 'ಈ ಸಮಯದಿಂದ ಈಗಾಗಲೇ ಇರುವ ಕೆಲವು ಬುಕಿಂಗ್‌ಗಳು ಕೆಲಸದ ಸಮಯದ ಹೊರಗೆ ಉಳಿಯುತ್ತವೆ',
+  hoursClashBody: 'ಮೊದಲು ಆ ದಿನಗಳನ್ನು ಮುಚ್ಚಿ ಅಥವಾ ಬುಕಿಂಗ್ ಬದಲಾಯಿಸಿ, ನಂತರ ಸಮಯ ಬದಲಾಯಿಸಿ.',
+  timeOff: 'ರಜೆ',
+  timeOffSub: 'ಹೊಸ ಬುಕಿಂಗ್ ನಿಲ್ಲಿಸಲು ದಿನವನ್ನು ಮುಚ್ಚಿ, ಮತ್ತು ಇರುವ ಬುಕಿಂಗ್ ರದ್ದುಮಾಡಿ.',
+  closeDay: 'ಈ ದಿನ ಮುಚ್ಚಿ',
+  closeToday: 'ಇವತ್ತು ಮುಚ್ಚಿ',
+  closeTodaySub: 'ತುರ್ತು ಬಂತೇ? ಇವತ್ತಿನ ಉಳಿದ ಬುಕಿಂಗ್ ರದ್ದುಮಾಡಿ ಮತ್ತು ಹೊಸದನ್ನು ನಿಲ್ಲಿಸಿ.',
+  closeDayFor: (date) => `${date} ಮುಚ್ಚಬೇಕೇ?`,
+  closeDayConfirm: 'ದಿನ ಮುಚ್ಚಿ',
+  cancelsBookings: (n) => `${n} ಬುಕಿಂಗ್ ರದ್ದಾಗುತ್ತದೆ.`,
+  nothingBooked: 'ಆ ದಿನ ಯಾವುದೇ ಬುಕಿಂಗ್ ಇಲ್ಲ — ಮುಚ್ಚಿದರೆ ಹೊಸ ಬುಕಿಂಗ್ ಮಾತ್ರ ನಿಲ್ಲುತ್ತದೆ.',
+  willBeMessaged: (n) => `${n} ರೋಗಿಗೆ ವಾಟ್ಸಾಪ್‌ನಲ್ಲಿ ಸಂದೇಶ ಹೋಗುತ್ತದೆ`,
+  cannotBeMessaged: (n) => `${n} ರೋಗಿಗೆ ಸಂದೇಶ ಕಳುಹಿಸಲು ಆಗುವುದಿಲ್ಲ — ಅವರ ನಂಬರ್ ನಿಮಗೆ ಸಿಗುತ್ತದೆ`,
+  cannotBeMessagedWhy:
+    'ರೋಗಿ ನಿಮಗೆ ಸಂದೇಶ ಕಳುಹಿಸಿದ 24 ಗಂಟೆಯೊಳಗೆ ಮಾತ್ರ ವಾಟ್ಸಾಪ್ ಸಂದೇಶಕ್ಕೆ ಅವಕಾಶ ಕೊಡುತ್ತದೆ. ಇವರಿಗೆ ಫೋನ್ ಮಾಡಬೇಕು.',
+  dayClosed: 'ದಿನ ಮುಚ್ಚಲಾಗಿದೆ',
+  dayClosedSub: (n) => `${n} ಬುಕಿಂಗ್ ರದ್ದುಮಾಡಲಾಗಿದೆ.`,
+  callThesePatients: 'ಈ ರೋಗಿಗಳಿಗೆ ಫೋನ್ ಮಾಡಿ — ಅವರಿಗೆ ಸಂದೇಶ ಕಳುಹಿಸಲು ಆಗಲಿಲ್ಲ',
+  everyoneNotified: 'ಎಲ್ಲಾ ರೋಗಿಗಳಿಗೆ ಸಂದೇಶ ಕಳುಹಿಸಲಾಗಿದೆ.',
+  reopenDay: 'ಮತ್ತೆ ತೆರೆಯಿರಿ',
+  reopenWarning:
+    'ಮತ್ತೆ ತೆರೆದರೆ ಹೊಸ ಬುಕಿಂಗ್ ಮಾತ್ರ ಸಾಧ್ಯ. ರದ್ದಾದ ರೋಗಿಗಳಿಗೆ ಈಗಾಗಲೇ ಬರಬೇಡಿ ಎಂದು ತಿಳಿಸಲಾಗಿದೆ, ಅವರನ್ನು ಮರಳಿ ಸೇರಿಸುವುದಿಲ್ಲ.',
+  dayReopened: 'ಹೊಸ ಬುಕಿಂಗ್‌ಗೆ ದಿನ ಮತ್ತೆ ತೆರೆಯಲಾಗಿದೆ',
+  noTimeOff: 'ಯಾವುದೇ ದಿನ ಮುಚ್ಚಿಲ್ಲ.',
+  onLeaveThatDay: 'ಈಗಾಗಲೇ ಮುಚ್ಚಲಾಗಿದೆ',
+  pastDate: 'ಆ ದಿನ ಈಗಾಗಲೇ ಕಳೆದಿದೆ.',
   dailyCap: 'ದಿನದ ಟೋಕನ್ ಮಿತಿ',
   consultLength: 'ಸಮಾಲೋಚನೆ ಅವಧಿ',
   learnedAverage: 'ಕಲಿತ ಸರಾಸರಿ',

@@ -540,6 +540,35 @@ function delaySheet(opts: {
   `;
 }
 
+// ---- emergency: close today ----
+
+/**
+ * Deliberately a separate sheet from "running late", and below it: a delay is
+ * routine, walking out is not. Posts to the same confirm step the settings date
+ * picker uses, so there is one cancellation path rather than two.
+ */
+function closeTodaySheet(opts: {
+  s: ConsoleStrings;
+  today: string;
+  csrfToken: string;
+}): RawHtml {
+  const { s, today, csrfToken } = opts;
+  return html`
+    <details class="card">
+      <summary style="cursor:pointer;font-weight:650;list-style:none;min-height:44px;display:flex;align-items:center">
+        ${s.closeToday}
+      </summary>
+      <p class="sub" style="margin-top:12px">${s.closeTodaySub}</p>
+
+      <form method="post" action="/app/day/close/confirm">
+        <input type="hidden" name="_csrf" value="${csrfToken}" />
+        <input type="hidden" name="date" value="${today}" />
+        <button class="secondary" type="submit">${s.closeToday}</button>
+      </form>
+    </details>
+  `;
+}
+
 /** Step two: show the exact text and recipient count before anything is sent. */
 export function delayConfirmPage(opts: {
   doctor: Doctor;
@@ -629,6 +658,8 @@ export function queuePageV2(opts: {
   queue: QueueState;
   avgWaitMins: number | null;
   onLeave: boolean;
+  /** Today in the clinic's timezone, YYYY-MM-DD — what the close sheet posts. */
+  today: string;
   csrfToken: string;
   flash?: string;
 }): string {
@@ -675,6 +706,10 @@ export function queuePageV2(opts: {
           csrfToken: opts.csrfToken,
           doctorName: opts.doctor.name,
         })}
+
+        ${opts.onLeave
+          ? ''
+          : closeTodaySheet({ s, today: opts.today, csrfToken: opts.csrfToken })}
       </main>
       ${doctorBottomNav(navOpts)}
     `,

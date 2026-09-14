@@ -1,3 +1,4 @@
+import type { Doctor } from '@prisma/client';
 import { type Response, Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db/prisma';
@@ -5,6 +6,19 @@ import { applyStatusChange, toAppointmentStatus } from '../domain/appointments';
 import { buildReport, listPatientsForDoctor, patientHistory } from '../domain/reports';
 import { addDocument, deleteDocument, getDocumentForDoctor } from '../domain/documents';
 import { storage } from '../domain/storage';
+import {
+  type WithPatient,
+  closeDay,
+  previewDayClosure,
+  reopenDay,
+  upcomingLeave,
+} from '../domain/leave';
+import { type DayKey, type WorkingHours, DAY_KEYS } from '../domain/slots';
+import {
+  buildWorkingHours,
+  findHoursConflicts,
+  workingHoursToText,
+} from '../domain/workingHours';
 import { findOrCreatePatient, isPlausibleName, setPatientName } from '../domain/patients';
 import { bookSlot, getDaySchedule } from '../domain/slots';
 import { ACTIVE_TOKEN_STATUSES, computePosition, isOnLeave, issueToken } from '../domain/tokenQueue';
@@ -18,7 +32,7 @@ import {
   formatWait,
   parseDateOnly,
 } from '../utils/time';
-import { c } from '../i18n/console';
+import { type ConsoleStrings, c } from '../i18n/console';
 import { nowServingLabel } from '../i18n/format';
 import { t } from '../i18n/templates';
 import { enqueueOutbound } from '../queue/queues';
@@ -32,6 +46,7 @@ import {
   reportsPage,
 } from './web/doctorViews';
 import { calendarPage, slotBookPage } from './web/calendarView';
+import { type CallListEntry, closeDayConfirmPage, closeDayResultPage } from './web/leaveView';
 import { delayConfirmPage, queueBody, queuePageV2, walkInPage } from './web/queueView';
 import { settingsPage } from './web/settingsView';
 import { errorPage } from './web/views';
@@ -183,6 +198,7 @@ doctorConsoleRouter.get('/app/queue', requireDoctorAuth, async (req, res) => {
       queue: day.queue,
       avgWaitMins,
       onLeave: day.onLeave,
+      today: formatDateOnly(today),
       csrfToken,
       ...(typeof req.query['flash'] === 'string' ? { flash: req.query['flash'] } : {}),
     }),
@@ -916,20 +932,247 @@ doctorConsoleRouter.post(
   },
 );
 
+// ---- closing a day (emergency / leave) ----
+
+const dayBody = z.object({ date: z.string() });
+
+/** Shared by the confirm and commit steps: the date must be today or later. */
+function closableDate(doctor: Doctor, raw: unknown): Date | null {
+  const parsed = dayBody.safeParse({ date: raw });
+  if (!parsed.success) return null;
+  const date = parseDateOnly(parsed.data.date);
+  if (!date) return null;
+  // Closing a past day would cancel appointments that have already happened.
+  if (formatDateOnly(date) < formatDateOnly(clinicToday(doctor.timezone))) return null;
+  return date;
+}
+
+function callListFrom(doctor: Doctor, rows: WithPatient[]): CallListEntry[] {
+  return rows.map((a) => ({
+    name: a.patient.name ?? 'Unknown',
+    phone: a.patient.phone,
+    when: a.slotStart
+      ? formatTimeForPatient(a.slotStart, doctor.timezone)
+      : `#${a.tokenNumber ?? '?'}`,
+  }));
+}
+
+/**
+ * Step one of closing a day: show what will be cancelled, the exact message
+ * those patients receive, and — the part that does not exist anywhere else —
+ * how many of them we cannot reach at all.
+ */
+doctorConsoleRouter.post(
+  '/app/day/close/confirm',
+  requireDoctorAuth,
+  requireFormCsrf,
+  async (req, res) => {
+    const doctor = req.doctor!;
+    const s = c(doctor.defaultLanguage);
+    const date = closableDate(doctor, (req.body ?? {})['date']);
+    if (!date) {
+      res.redirect(302, `/app/settings?flash=${encodeURIComponent(s.pastDate)}`);
+      return;
+    }
+
+    const preview = await previewDayClosure(doctor, date);
+
+    res.type('html').send(
+      closeDayConfirmPage({
+        doctor,
+        date: formatDateOnly(date),
+        dateLabel: formatDateForPatient(date),
+        affected: preview.affected.length,
+        reachable: preview.reachable.length,
+        unreachable: callListFrom(doctor, preview.unreachable),
+        // The real text, in the doctor's language so they can read what they are
+        // about to send. Patients each get it in their own.
+        messagePreview: t(doctor.defaultLanguage, 'tokenBookingCancelledByClinic', {
+          tokenNumber: preview.affected[0]?.tokenNumber ?? 1,
+          date: formatDateForPatient(date),
+        }),
+        queueCount: await waitingCount(doctor.id, doctor.timezone),
+        csrfToken: req.csrfToken ?? '',
+      }),
+    );
+  },
+);
+
+/** Step two. Re-validates from scratch — it never trusts that step one ran. */
+doctorConsoleRouter.post(
+  '/app/day/close',
+  requireDoctorAuth,
+  requireFormCsrf,
+  async (req, res) => {
+    const doctor = req.doctor!;
+    const s = c(doctor.defaultLanguage);
+    const date = closableDate(doctor, (req.body ?? {})['date']);
+    if (!date) {
+      res.redirect(302, `/app/settings?flash=${encodeURIComponent(s.pastDate)}`);
+      return;
+    }
+
+    const { cancelled, unreachable } = await closeDay(doctor, date);
+
+    res.type('html').send(
+      closeDayResultPage({
+        doctor,
+        dateLabel: formatDateForPatient(date),
+        cancelled,
+        unreachable: callListFrom(doctor, unreachable),
+        queueCount: await waitingCount(doctor.id, doctor.timezone),
+        csrfToken: req.csrfToken ?? '',
+      }),
+    );
+  },
+);
+
+doctorConsoleRouter.post(
+  '/app/day/reopen',
+  requireDoctorAuth,
+  requireFormCsrf,
+  async (req, res) => {
+    const doctor = req.doctor!;
+    const s = c(doctor.defaultLanguage);
+    const raw = (req.body ?? {})['date'];
+    const date = typeof raw === 'string' ? parseDateOnly(raw) : null;
+    if (!date) {
+      notFound(res, 'That is not a date.');
+      return;
+    }
+
+    await reopenDay(doctor, date);
+    res.redirect(302, `/app/settings?flash=${encodeURIComponent(s.dayReopened)}`);
+  },
+);
+
 // ---- settings ----
+
+/** Weekday labels in the doctor's own language, for form labels and error text. */
+function dayLabels(s: ConsoleStrings): Record<DayKey, string> {
+  return {
+    mon: s.dayMon,
+    tue: s.dayTue,
+    wed: s.dayWed,
+    thu: s.dayThu,
+    fri: s.dayFri,
+    sat: s.daySat,
+    sun: s.daySun,
+  };
+}
+
+/** Everything the settings page needs beyond the doctor row itself. */
+async function settingsContext(doctor: Doctor, csrfToken: string) {
+  const s = c(doctor.defaultLanguage);
+  const today = clinicToday(doctor.timezone);
+  return {
+    doctor,
+    queueCount: await waitingCount(doctor.id, doctor.timezone),
+    csrfToken,
+    hours: workingHoursToText(doctor.workingHours),
+    upcomingLeave: upcomingLeave(doctor, today).map((d) => ({
+      iso: formatDateOnly(d),
+      label: formatDateForPatient(d),
+    })),
+    today: formatDateOnly(today),
+    s,
+  };
+}
 
 doctorConsoleRouter.get('/app/settings', requireDoctorAuth, async (req, res) => {
   const doctor = req.doctor!;
-  const s = c(doctor.defaultLanguage);
-  res.type('html').send(
-    settingsPage({
-      doctor,
-      queueCount: await waitingCount(doctor.id, doctor.timezone),
-      csrfToken: req.csrfToken ?? '',
-      ...(req.query['flash'] === 'saved' ? { flash: s.profileSaved } : {}),
-    }),
-  );
+  const ctx = await settingsContext(doctor, req.csrfToken ?? '');
+  const flash =
+    req.query['flash'] === 'saved'
+      ? ctx.s.profileSaved
+      : req.query['flash'] === 'hours'
+        ? ctx.s.hoursSaved
+        : typeof req.query['flash'] === 'string'
+          ? req.query['flash']
+          : undefined;
+
+  res.type('html').send(settingsPage({ ...ctx, ...(flash ? { flash } : {}) }));
 });
+
+/**
+ * The doctor sets their own hours. This used to be operator-only, which meant a
+ * clinic changing its evening session had to phone someone.
+ *
+ * Validation is domain/workingHours.ts — the same parser the operator console
+ * uses, so the two cannot disagree about what a valid day looks like.
+ */
+doctorConsoleRouter.post(
+  '/app/settings/hours',
+  requireDoctorAuth,
+  requireFormCsrf,
+  async (req, res) => {
+    const doctor = req.doctor!;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const s = c(doctor.defaultLanguage);
+    const labels = dayLabels(s);
+
+    const text = {} as Record<DayKey, string>;
+    for (const day of DAY_KEYS) {
+      const raw = body[`hours_${day}`];
+      text[day] = typeof raw === 'string' ? raw : '';
+    }
+
+    // Re-render the form with whatever the doctor typed, not with the stored
+    // values — losing their input to a typo in one field would be infuriating.
+    const reject = async (extra: { hoursError?: string; hoursClash?: string[] }) => {
+      const ctx = await settingsContext(doctor, req.csrfToken ?? '');
+      res.type('html').send(settingsPage({ ...ctx, hours: text, ...extra }));
+    };
+
+    let hours: WorkingHours;
+    try {
+      hours = buildWorkingHours(text, labels);
+    } catch (err) {
+      await reject({ hoursError: err instanceof Error ? err.message : 'Invalid hours' });
+      return;
+    }
+
+    // Refuse rather than strand a patient: the calendar is derived from working
+    // hours, so a booking outside them would simply stop being displayed while
+    // the patient still turns up.
+    const today = clinicToday(doctor.timezone);
+    const candidates = await prisma.appointment.findMany({
+      where: {
+        doctorId: doctor.id,
+        date: { gte: today },
+        status: { in: [...ACTIVE_TOKEN_STATUSES] },
+      },
+      select: {
+        id: true,
+        date: true,
+        type: true,
+        slotStart: true,
+        tokenNumber: true,
+        patient: { select: { name: true, phone: true } },
+      },
+      orderBy: [{ date: 'asc' }, { slotStart: 'asc' }, { tokenNumber: 'asc' }],
+    });
+
+    const clashes = findHoursConflicts(candidates, hours, doctor.timezone);
+    if (clashes.length > 0) {
+      await reject({
+        hoursClash: clashes.map((cl) => {
+          const when = cl.slotStart
+            ? `${formatDateForPatient(cl.date)} ${formatTimeForPatient(cl.slotStart, doctor.timezone)}`
+            : `${formatDateForPatient(cl.date)} #${cl.tokenNumber ?? '?'}`;
+          return `${when} — ${cl.patient.name ?? cl.patient.phone}`;
+        }),
+      });
+      return;
+    }
+
+    await prisma.doctor.update({
+      where: { id: doctor.id },
+      data: { workingHours: hours as object },
+    });
+    res.redirect(302, '/app/settings?flash=hours');
+  },
+);
 
 /**
  * A stored photo is rendered back into an <img src>, so the value has to be
@@ -965,19 +1208,15 @@ doctorConsoleRouter.post(
     const body = (req.body ?? {}) as Record<string, unknown>;
     const parsed = profileBody.safeParse(body);
 
+    // Refetched so the rest of the page (hours, time off) shows stored values
+    // even while this form is being re-rendered with an error.
     const render = (extra: { flash?: string; error?: string }) =>
       prisma.doctor
         .findUnique({ where: { id: doctor.id } })
-        .then(async (fresh) =>
-          res.type('html').send(
-            settingsPage({
-              doctor: fresh ?? doctor,
-              queueCount: await waitingCount(doctor.id, doctor.timezone),
-              csrfToken: req.csrfToken ?? '',
-              ...extra,
-            }),
-          ),
-        );
+        .then(async (fresh) => {
+          const ctx = await settingsContext(fresh ?? doctor, req.csrfToken ?? '');
+          res.type('html').send(settingsPage({ ...ctx, ...extra }));
+        });
 
     if (!parsed.success) {
       await render({ error: parsed.error.issues[0]?.message ?? 'Invalid input' });

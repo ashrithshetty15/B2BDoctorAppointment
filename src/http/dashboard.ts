@@ -1,15 +1,12 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db/prisma';
-import { applyStatusChange, cancelAppointment, toAppointmentStatus } from '../domain/appointments';
+import { applyStatusChange, toAppointmentStatus } from '../domain/appointments';
+import { closeDay, markDayClosed } from '../domain/leave';
 import { getAvailableSlots } from '../domain/slots';
 import { ACTIVE_TOKEN_STATUSES, computePosition, getOrCreateQueueState } from '../domain/tokenQueue';
-import { enqueueTokenQueueRecalc, cancelReminders } from '../queue/queues';
-import {
-  broadcastDelay,
-  notifyCancelledByClinic,
-  notifyStatusChange,
-} from '../services/notifications';
+import { enqueueTokenQueueRecalc } from '../queue/queues';
+import { broadcastDelay, notifyStatusChange } from '../services/notifications';
 import { clinicToday, formatDateOnly, parseDateOnly } from '../utils/time';
 import { requireCsrf, requireDoctorAuth, requireDoctorScope } from './middleware/auth';
 
@@ -218,45 +215,28 @@ dashboardRouter.post('/doctor/:doctorId/leave', requireDoctorScope, requireCsrf,
     return;
   }
 
-  const alreadyOnLeave = doctor.leaveDates.some(
-    (d) => formatDateOnly(d) === formatDateOnly(date),
-  );
-
-  if (!alreadyOnLeave) {
-    await prisma.doctor.update({
-      where: { id: doctor.id },
-      data: { leaveDates: { push: date } },
-    });
+  // cancelExisting:false marks the day as leave without touching what is already
+  // booked — the only case that does not go through closeDay.
+  if (parsed.data.cancelExisting === false) {
+    await markDayClosed(doctor, date);
+    res.json({ date: formatDateOnly(date), onLeave: true, cancelled: 0, messagesQueued: 0 });
+    return;
   }
 
-  // Stop new tokens being issued for that date.
-  await getOrCreateQueueState(doctor.id, date);
-  await prisma.queueState.update({
-    where: { doctor_date: { doctorId: doctor.id, date } },
-    data: { isClosed: true },
+  const { cancelled, messagesQueued, unreachable } = await closeDay(doctor, date);
+
+  res.json({
+    date: formatDateOnly(date),
+    onLeave: true,
+    cancelled,
+    // Queued, not delivered — see DayClosureResult.
+    messagesQueued,
+    // Patients outside the WhatsApp messaging window: cancelled, but not told.
+    // Callers that ignore this are choosing to leave them expecting a doctor.
+    unreachable: unreachable.map((a) => ({
+      name: a.patient.name,
+      phone: a.patient.phone,
+      ...(a.tokenNumber !== null ? { tokenNumber: a.tokenNumber } : {}),
+    })),
   });
-
-  let cancelled = 0;
-  let notified = 0;
-
-  if (parsed.data.cancelExisting !== false) {
-    const affected = await prisma.appointment.findMany({
-      where: {
-        doctorId: doctor.id,
-        date,
-        status: { in: [...ACTIVE_TOKEN_STATUSES] },
-      },
-      include: { patient: true },
-    });
-
-    for (const appointment of affected) {
-      await cancelAppointment(appointment.id);
-      await cancelReminders(appointment.id);
-      cancelled += 1;
-    }
-
-    ({ notified } = await notifyCancelledByClinic(doctor, affected));
-  }
-
-  res.json({ date: formatDateOnly(date), onLeave: true, cancelled, notified });
 });
