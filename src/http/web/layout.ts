@@ -270,7 +270,17 @@ button:disabled{cursor:not-allowed}
 .cta .lead{font-weight:650;letter-spacing:-.01em}
 .cta .next{font-size:var(--t-sm);font-weight:500;opacity:.92;margin-top:2px;
   overflow-wrap:anywhere}
-.cta .chev{font-size:var(--t-xl);opacity:.85;flex:0 0 auto}
+/* A circular chip, not a floating glyph. At low opacity on the accent a bare
+   tick reads as a status badge — "already done" — rather than as the control
+   that performs the action. The chip makes it unmistakably a target, and works
+   for either glyph. */
+.cta .chev{
+  flex:0 0 auto;width:40px;height:40px;border-radius:var(--r-pill);
+  background:rgba(255,255,255,.2);display:grid;place-items:center;
+  font-size:var(--t-lg);line-height:1;
+}
+.cta:hover .chev{background:rgba(255,255,255,.3)}
+.cta:active .chev{background:rgba(255,255,255,.36)}
 .cta:disabled{background:var(--surface-2);color:var(--ink-3);box-shadow:none;
   outline:1px solid var(--line)}
 
