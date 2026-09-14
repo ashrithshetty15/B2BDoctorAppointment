@@ -13,6 +13,7 @@ import {
   formatWait,
   parseDateOnly,
 } from '../utils/time';
+import { c } from '../i18n/console';
 import { t } from '../i18n/templates';
 import { enqueueOutbound } from '../queue/queues';
 import { requireDoctorAuth, requireFormCsrf } from './middleware/auth';
@@ -426,14 +427,100 @@ doctorConsoleRouter.get('/app/patients/:id', requireDoctorAuth, async (req, res)
 
 doctorConsoleRouter.get('/app/settings', requireDoctorAuth, async (req, res) => {
   const doctor = req.doctor!;
+  const s = c(doctor.defaultLanguage);
   res.type('html').send(
     settingsPage({
       doctor,
       queueCount: await waitingCount(doctor.id, doctor.timezone),
       csrfToken: req.csrfToken ?? '',
+      ...(req.query['flash'] === 'saved' ? { flash: s.profileSaved } : {}),
     }),
   );
 });
+
+/**
+ * A stored photo is rendered back into an <img src>, so the value has to be
+ * proven safe rather than trusted because our own script produced it — a form
+ * post can carry anything.
+ *
+ * Only raster data: URIs are accepted. SVG is deliberately excluded even though
+ * it is an image type: it can carry script, and this value is echoed into a
+ * page. `javascript:` and remote URLs fail the same check.
+ */
+const PHOTO_PREFIX = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/;
+const PHOTO_MAX_BYTES = 400_000;
+
+function validPhoto(value: unknown): string | null {
+  if (typeof value !== 'string' || value === '') return null;
+  if (value.length > PHOTO_MAX_BYTES) return null;
+  return PHOTO_PREFIX.test(value) ? value : null;
+}
+
+const profileBody = z.object({
+  name: z.string().trim().min(2, 'Your name needs at least 2 characters').max(80),
+  clinicName: z.string().trim().min(2, 'Clinic name needs at least 2 characters').max(120),
+  specialty: z.string().trim().max(80).optional(),
+  qualification: z.string().trim().max(120).optional(),
+});
+
+doctorConsoleRouter.post(
+  '/app/settings/profile',
+  requireDoctorAuth,
+  requireFormCsrf,
+  async (req, res) => {
+    const doctor = req.doctor!;
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const parsed = profileBody.safeParse(body);
+
+    const render = (extra: { flash?: string; error?: string }) =>
+      prisma.doctor
+        .findUnique({ where: { id: doctor.id } })
+        .then(async (fresh) =>
+          res.type('html').send(
+            settingsPage({
+              doctor: fresh ?? doctor,
+              queueCount: await waitingCount(doctor.id, doctor.timezone),
+              csrfToken: req.csrfToken ?? '',
+              ...extra,
+            }),
+          ),
+        );
+
+    if (!parsed.success) {
+      await render({ error: parsed.error.issues[0]?.message ?? 'Invalid input' });
+      return;
+    }
+
+    const submittedPhoto = body['photo'];
+    const removing = body['removePhoto'] === '1';
+
+    // Distinguish "no new photo chosen" (leave it alone) from "remove it".
+    let photoUpdate: { photo: string | null } | Record<string, never> = {};
+    if (removing) {
+      photoUpdate = { photo: null };
+    } else if (typeof submittedPhoto === 'string' && submittedPhoto !== '') {
+      const photo = validPhoto(submittedPhoto);
+      if (!photo) {
+        await render({ error: 'That image could not be used. Try a JPG, PNG or WebP under 400KB.' });
+        return;
+      }
+      photoUpdate = { photo };
+    }
+
+    await prisma.doctor.update({
+      where: { id: doctor.id },
+      data: {
+        name: parsed.data.name,
+        clinicName: parsed.data.clinicName,
+        specialty: parsed.data.specialty || null,
+        qualification: parsed.data.qualification || null,
+        ...photoUpdate,
+      },
+    });
+
+    res.redirect(302, '/app/settings?flash=saved');
+  },
+);
 
 // ---- reports ----
 

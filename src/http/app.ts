@@ -60,7 +60,10 @@ export function createApp() {
   // /doctor/:id/leave) stay structurally unable to accept a cross-site form post,
   // independent of their CSRF token check. /app has its own token check in
   // requireFormCsrf, which reads a hidden field instead of a header.
-  app.use('/app', express.urlencoded({ extended: false, limit: '100kb' }));
+  // 600kb, not 100kb: the doctor's profile photo posts as a base64 data URI in a
+  // normal form field. The browser downscales to a 256px square first, so a
+  // typical payload is a few KB; the route caps the decoded value at 400KB.
+  app.use('/app', express.urlencoded({ extended: false, limit: '600kb' }));
 
   // NOTE: urlencoded is deliberately absent from the global config — see above.
   app.use(express.json({ limit: '100kb' }));

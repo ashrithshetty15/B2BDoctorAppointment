@@ -45,6 +45,8 @@ function navFor(
     queueCount,
     csrfToken,
     s: c(doctor.defaultLanguage),
+    photo: doctor.photo,
+    specialty: doctor.specialty,
   };
 }
 

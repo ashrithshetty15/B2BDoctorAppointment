@@ -25,6 +25,17 @@ export interface ConsoleStrings {
   reports: string;
   signOut: string;
   settings: string;
+  profile: string;
+  profileSub: string;
+  doctorNameLabel: string;
+  clinicNameLabel: string;
+  specialtyLabel: string;
+  qualificationLabel: string;
+  photoLabel: string;
+  photoHint: string;
+  removePhoto: string;
+  saveProfile: string;
+  profileSaved: string;
   clinicDetails: string;
   bookingConfig: string;
   workingHours: string;
@@ -82,6 +93,17 @@ const en: ConsoleStrings = {
   reports: 'Reports',
   signOut: 'Sign out',
   settings: 'Settings',
+  profile: 'Profile',
+  profileSub: 'This is how your clinic appears to you and to your team.',
+  doctorNameLabel: 'Your name',
+  clinicNameLabel: 'Clinic name',
+  specialtyLabel: 'Specialty',
+  qualificationLabel: 'Qualifications',
+  photoLabel: 'Photo',
+  photoHint: 'Square works best. Resized automatically before saving.',
+  removePhoto: 'Remove photo',
+  saveProfile: 'Save profile',
+  profileSaved: 'Profile updated',
   clinicDetails: 'Clinic',
   bookingConfig: 'Booking',
   workingHours: 'Working hours',
@@ -140,6 +162,17 @@ const kn: ConsoleStrings = {
   reports: 'ವರದಿಗಳು',
   signOut: 'ಸೈನ್ ಔಟ್',
   settings: 'ಸೆಟ್ಟಿಂಗ್‌ಗಳು',
+  profile: 'ಪ್ರೊಫೈಲ್',
+  profileSub: 'ನಿಮ್ಮ ಕ್ಲಿನಿಕ್ ಹೀಗೆ ಕಾಣಿಸುತ್ತದೆ.',
+  doctorNameLabel: 'ನಿಮ್ಮ ಹೆಸರು',
+  clinicNameLabel: 'ಕ್ಲಿನಿಕ್ ಹೆಸರು',
+  specialtyLabel: 'ಪರಿಣತಿ',
+  qualificationLabel: 'ವಿದ್ಯಾರ್ಹತೆ',
+  photoLabel: 'ಫೋಟೋ',
+  photoHint: 'ಚೌಕಾಕಾರ ಉತ್ತಮ. ಉಳಿಸುವ ಮೊದಲು ತಾನಾಗಿ ಗಾತ್ರ ಬದಲಾಗುತ್ತದೆ.',
+  removePhoto: 'ಫೋಟೋ ತೆಗೆಯಿರಿ',
+  saveProfile: 'ಪ್ರೊಫೈಲ್ ಉಳಿಸಿ',
+  profileSaved: 'ಪ್ರೊಫೈಲ್ ನವೀಕರಿಸಲಾಗಿದೆ',
   clinicDetails: 'ಕ್ಲಿನಿಕ್',
   bookingConfig: 'ಬುಕಿಂಗ್',
   workingHours: 'ಕೆಲಸದ ಸಮಯ',

@@ -121,6 +121,17 @@ header.top nav{margin-left:auto;display:flex;gap:var(--s4);align-items:center}
   background:var(--accent-soft);color:var(--accent);
   display:grid;place-items:center;font-weight:650;font-size:var(--t-sm);letter-spacing:.02em;
 }
+.avatar.lg{width:84px;height:84px;flex:0 0 84px;font-size:var(--t-xl)}
+.avatar img{width:100%;height:100%;border-radius:var(--r-pill);object-fit:cover;display:block}
+.photorow{display:flex;gap:var(--s4);align-items:flex-start;flex-wrap:wrap;margin-bottom:var(--s2)}
+.photobox{flex:0 0 auto}
+img.photo{width:84px;height:84px;border-radius:var(--r-pill);object-fit:cover;
+  box-shadow:var(--shadow-1);display:block}
+.checkline{display:flex;align-items:center;gap:var(--s2);font-weight:500;margin-top:var(--s2)}
+.checkline input{width:auto;min-height:auto}
+input[type=file]{width:100%;padding:var(--s2);border:1px dashed var(--line-2);
+  border-radius:var(--r-sm);background:var(--surface-2);font:inherit;font-size:var(--t-sm);
+  min-height:var(--tap)}
 .ident .who{min-width:0}
 .ident .clinic{font-weight:650;font-size:var(--t-md);line-height:1.25;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

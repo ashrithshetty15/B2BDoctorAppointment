@@ -70,6 +70,17 @@ model Doctor {
   /// dialled, so this is what builds the wa.me link and booking QR code.
   whatsappNumber String? @map("whatsapp_number")
 
+  // ---- Profile, editable by the doctor themselves ----
+  /// e.g. "General Physician", "Paediatrician".
+  specialty     String? @map("specialty")
+  /// e.g. "MBBS, MD" — shown alongside the name.
+  qualification String? @map("qualification")
+
+  /// Avatar as a data: URI, downscaled in the browser before upload.
+  /// Stored in the row rather than on disk because the container filesystem is
+  /// ephemeral and there is no object storage; a 256px avatar is a few KB.
+  photo String? @map("photo")
+
   /// Set once at onboarding via the admin route — never over WhatsApp.
   /// All conversation branching depends on this field.
   bookingMode         BookingMode @default(TOKEN) @map("booking_mode")

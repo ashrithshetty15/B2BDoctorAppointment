@@ -20,6 +20,10 @@ export interface DoctorNavOptions {
   queueCount: number;
   csrfToken: string;
   s: ConsoleStrings;
+  /** Data URI avatar; initials are the fallback. */
+  photo?: string | null;
+  /** Shown under the clinic name when set. */
+  specialty?: string | null;
 }
 
 const ICONS: Record<DoctorTab, RawHtml> = {
@@ -71,13 +75,17 @@ export function doctorHeader(opts: DoctorNavOptions): RawHtml {
       <div class="ident">
         <div class="who">
           <div class="clinic">${clinicName}</div>
-          <div class="doc">Dr. ${doctorName}</div>
+          <div class="doc">
+            Dr. ${doctorName}${opts.specialty ? html` · ${opts.specialty}` : ''}
+          </div>
         </div>
       </div>
 
       <details class="menu">
         <summary class="avatar-btn" aria-label="${s.account}" role="button">
-          <span class="avatar" aria-hidden="true">${initials(doctorName)}</span>
+          <span class="avatar" aria-hidden="true">
+            ${opts.photo ? html`<img src="${opts.photo}" alt="" />` : initials(doctorName)}
+          </span>
         </summary>
         <div class="sheet">
           <a href="/app/settings">${s.settings}</a>

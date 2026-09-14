@@ -430,6 +430,8 @@ export function delayConfirmPage(opts: {
     queueCount: opts.recipients,
     csrfToken: opts.csrfToken,
     s,
+    photo: opts.doctor.photo,
+    specialty: opts.doctor.specialty,
   };
   return page(
     { title: s.runningLate, csrfToken: opts.csrfToken },
@@ -512,6 +514,8 @@ export function queuePageV2(opts: {
     queueCount: opts.queue.waiting,
     csrfToken: opts.csrfToken,
     s,
+    photo: opts.doctor.photo,
+    specialty: opts.doctor.specialty,
   };
 
   return page(
