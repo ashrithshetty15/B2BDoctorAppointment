@@ -47,6 +47,7 @@ function navFor(
     s: c(doctor.defaultLanguage),
     photo: doctor.photo,
     specialty: doctor.specialty,
+    bookingMode: doctor.bookingMode,
   };
 }
 

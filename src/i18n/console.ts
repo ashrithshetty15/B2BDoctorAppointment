@@ -25,6 +25,21 @@ export interface ConsoleStrings {
   reports: string;
   signOut: string;
   settings: string;
+  calendar: string;
+  bookedCount: string;
+  freeCount: string;
+  slotFree: string;
+  slotPast: string;
+  bookThisSlot: string;
+  confirmBooking: string;
+  backToToday: string;
+  noSlotsTitle: string;
+  noSlotsBody: string;
+  slotTaken: string;
+  slotNotValid: string;
+  slotInPast: string;
+  patientHasSlot: string;
+  slotBooked: (time: string, name: string) => string;
   addWalkIn: string;
   addWalkInSub: string;
   patientNameLabel: string;
@@ -107,6 +122,21 @@ const en: ConsoleStrings = {
   reports: 'Reports',
   signOut: 'Sign out',
   settings: 'Settings',
+  calendar: 'Calendar',
+  bookedCount: 'Booked',
+  freeCount: 'Free',
+  slotFree: 'Free',
+  slotPast: 'Passed',
+  bookThisSlot: 'Book',
+  confirmBooking: 'Confirm booking',
+  backToToday: 'Back to today',
+  noSlotsTitle: 'No appointment times this day',
+  noSlotsBody: 'Working hours for this day are empty, or the clinic is closed. Set hours in the operator console.',
+  slotTaken: 'That time was just taken. Pick another.',
+  slotNotValid: 'That is not an appointment time for this day.',
+  slotInPast: 'That time has already passed.',
+  patientHasSlot: 'That patient already has an appointment that day',
+  slotBooked: (time, name) => `${time} booked for ${name}`,
   addWalkIn: 'Add walk-in',
   addWalkInSub: 'For a patient at the desk or on the phone. They get the same WhatsApp updates.',
   patientNameLabel: 'Patient name',
@@ -190,6 +220,21 @@ const kn: ConsoleStrings = {
   reports: 'ವರದಿಗಳು',
   signOut: 'ಸೈನ್ ಔಟ್',
   settings: 'ಸೆಟ್ಟಿಂಗ್‌ಗಳು',
+  calendar: 'ಕ್ಯಾಲೆಂಡರ್',
+  bookedCount: 'ಬುಕ್ ಆಗಿದೆ',
+  freeCount: 'ಖಾಲಿ',
+  slotFree: 'ಖಾಲಿ',
+  slotPast: 'ಕಳೆದಿದೆ',
+  bookThisSlot: 'ಬುಕ್ ಮಾಡಿ',
+  confirmBooking: 'ಬುಕಿಂಗ್ ಖಚಿತಪಡಿಸಿ',
+  backToToday: 'ಇವತ್ತಿಗೆ ಹಿಂತಿರುಗಿ',
+  noSlotsTitle: 'ಈ ದಿನ ಯಾವ ಸಮಯವೂ ಇಲ್ಲ',
+  noSlotsBody: 'ಈ ದಿನಕ್ಕೆ ಕೆಲಸದ ಸಮಯ ಇಲ್ಲ, ಅಥವಾ ಕ್ಲಿನಿಕ್ ಮುಚ್ಚಿದೆ.',
+  slotTaken: 'ಆ ಸಮಯ ಈಗ ತಾನೇ ಬುಕ್ ಆಯಿತು. ಬೇರೆ ಆಯ್ಕೆ ಮಾಡಿ.',
+  slotNotValid: 'ಅದು ಈ ದಿನದ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಸಮಯ ಅಲ್ಲ.',
+  slotInPast: 'ಆ ಸಮಯ ಈಗಾಗಲೇ ಕಳೆದಿದೆ.',
+  patientHasSlot: 'ಆ ರೋಗಿಗೆ ಆ ದಿನ ಈಗಾಗಲೇ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಇದೆ',
+  slotBooked: (time, name) => `${name} ಅವರಿಗೆ ${time} ಬುಕ್ ಮಾಡಲಾಗಿದೆ`,
   addWalkIn: 'ವಾಕ್-ಇನ್ ಸೇರಿಸಿ',
   addWalkInSub: 'ಕೌಂಟರ್‌ನಲ್ಲಿ ಅಥವಾ ಫೋನ್‌ನಲ್ಲಿರುವ ರೋಗಿಗೆ. ಅವರಿಗೂ ಅದೇ ವಾಟ್ಸಾಪ್ ಮಾಹಿತಿ ಸಿಗುತ್ತದೆ.',
   patientNameLabel: 'ರೋಗಿಯ ಹೆಸರು',

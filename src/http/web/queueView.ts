@@ -386,6 +386,7 @@ export function walkInPage(opts: {
     s,
     photo: opts.doctor.photo,
     specialty: opts.doctor.specialty,
+    bookingMode: opts.doctor.bookingMode,
   };
 
   return page(
@@ -518,6 +519,7 @@ export function delayConfirmPage(opts: {
     s,
     photo: opts.doctor.photo,
     specialty: opts.doctor.specialty,
+    bookingMode: opts.doctor.bookingMode,
   };
   return page(
     { title: s.runningLate, csrfToken: opts.csrfToken },
@@ -602,6 +604,7 @@ export function queuePageV2(opts: {
     s,
     photo: opts.doctor.photo,
     specialty: opts.doctor.specialty,
+    bookingMode: opts.doctor.bookingMode,
   };
 
   return page(

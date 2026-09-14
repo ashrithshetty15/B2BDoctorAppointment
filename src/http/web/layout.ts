@@ -317,6 +317,19 @@ button.ghost:hover{background:var(--surface-2);filter:none}
 .wa svg{width:13px;height:13px;fill:currentColor}
 .waited.over{color:var(--warn);font-weight:650}
 
+/* ---- calendar slot rows ---- */
+.slotrow{display:flex;align-items:center;gap:var(--s4);padding:var(--s3) var(--s5);
+  border-top:1px solid var(--line)}
+.slotrow:first-child{border-top:0}
+.slotrow.taken{background:var(--accent-soft)}
+.slotrow.past{opacity:.5}
+.slottime{font-variant-numeric:tabular-nums;font-weight:700;font-size:var(--t-md);
+  min-width:56px;flex:0 0 auto}
+.slotrow .body{flex:1 1 auto;min-width:0}
+.slotrow .acts{flex:0 0 auto}
+.slotrow .acts button{margin:0;padding:var(--s2) var(--s4);min-height:38px;font-size:var(--t-sm)}
+@media (max-width:600px){.slotrow{padding:var(--s3) var(--s4);gap:var(--s3)}}
+
 /* ---- pills ---- */
 .pill{display:inline-block;padding:3px 10px;border-radius:var(--r-pill);
   font-size:var(--t-xs);font-weight:650;background:var(--surface-2);color:var(--ink-3);

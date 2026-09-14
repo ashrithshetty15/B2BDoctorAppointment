@@ -106,6 +106,7 @@ export function settingsPage(opts: {
     s,
     photo: opts.doctor.photo,
     specialty: opts.doctor.specialty,
+    bookingMode: opts.doctor.bookingMode,
   };
   const link = doctor.whatsappNumber ? bookingLink(doctor.whatsappNumber) : null;
 

@@ -1,4 +1,4 @@
-import type { Doctor } from '@prisma/client';
+import { type Appointment, type Doctor, Prisma } from '@prisma/client';
 import { DateTime } from 'luxon';
 import { prisma } from '../db/prisma';
 import { atLocalTime, formatDateOnly } from '../utils/time';
@@ -106,6 +106,109 @@ export async function getAvailableSlots(
   const takenMs = new Set(booked.map((b) => b.slotStart!.getTime()));
 
   return candidates.filter((s) => !takenMs.has(s.start.getTime()) && s.start.getTime() > now.getTime());
+}
+
+export type BookSlotResult =
+  | { ok: true; appointment: Appointment; alreadyExisted?: boolean }
+  | { ok: false; reason: 'ON_LEAVE' | 'NOT_A_SLOT' | 'IN_PAST' | 'TAKEN' | 'PATIENT_HAS_SLOT' };
+
+/**
+ * Book a specific time. The counterpart to issueToken, with the same
+ * guarantees.
+ *
+ * Race safety comes from the @@unique([doctorId, slotStart]) constraint rather
+ * than from checking first: two people at the desk can submit the same slot in
+ * the same instant, and a read-then-write would let both through. The insert is
+ * the check — a duplicate raises P2002 and becomes TAKEN.
+ *
+ * The requested time must be one generate_slots would produce, so a crafted
+ * form cannot book 03:00 or a time that straddles two real slots.
+ */
+export async function bookSlot(
+  doctor: Doctor,
+  patientId: string,
+  date: Date,
+  slotStart: Date,
+  now: Date = new Date(),
+): Promise<BookSlotResult> {
+  if (isOnLeave(doctor, date)) return { ok: false, reason: 'ON_LEAVE' };
+
+  const slot = generateSlots(doctor, date).find(
+    (s) => s.start.getTime() === slotStart.getTime(),
+  );
+  if (!slot) return { ok: false, reason: 'NOT_A_SLOT' };
+  if (slot.start.getTime() <= now.getTime()) return { ok: false, reason: 'IN_PAST' };
+
+  // One appointment per patient per day, matching the token rule — a second is
+  // far more likely a double submit than a genuine intention.
+  const existing = await prisma.appointment.findFirst({
+    where: {
+      doctorId: doctor.id,
+      patientId,
+      date,
+      type: 'SLOT',
+      status: { in: ['BOOKED', 'ARRIVED', 'IN_PROGRESS'] },
+    },
+  });
+  if (existing) return { ok: true, appointment: existing, alreadyExisted: true };
+
+  try {
+    const appointment = await prisma.appointment.create({
+      data: {
+        doctorId: doctor.id,
+        patientId,
+        date,
+        type: 'SLOT',
+        status: 'BOOKED',
+        slotStart: slot.start,
+        slotEnd: slot.end,
+      },
+    });
+    return { ok: true, appointment };
+  } catch (err) {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === 'P2002'
+    ) {
+      return { ok: false, reason: 'TAKEN' };
+    }
+    throw err;
+  }
+}
+
+/** Every slot for a day with who holds it — the calendar's data. */
+export interface CalendarSlot {
+  start: Date;
+  end: Date;
+  appointment: (Appointment & { patient: { id: string; name: string | null; phone: string } }) | null;
+  isPast: boolean;
+}
+
+export async function getDaySchedule(
+  doctor: Doctor,
+  date: Date,
+  now: Date = new Date(),
+): Promise<CalendarSlot[]> {
+  const slots = generateSlots(doctor, date);
+
+  const booked = await prisma.appointment.findMany({
+    where: { doctorId: doctor.id, date, type: 'SLOT', slotStart: { not: null } },
+    include: { patient: { select: { id: true, name: true, phone: true } } },
+  });
+
+  // Cancelled slots free up again, so the latest non-cancelled row wins.
+  const byStart = new Map<number, (typeof booked)[number]>();
+  for (const a of booked) {
+    if (a.status === 'CANCELLED') continue;
+    byStart.set(a.slotStart!.getTime(), a);
+  }
+
+  return slots.map((s) => ({
+    start: s.start,
+    end: s.end,
+    appointment: byStart.get(s.start.getTime()) ?? null,
+    isPast: s.start.getTime() <= now.getTime(),
+  }));
 }
 
 /** Next N dates (from `from`, inclusive) that have at least one free slot. */

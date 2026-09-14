@@ -4,13 +4,15 @@ import { prisma } from '../db/prisma';
 import { applyStatusChange, toAppointmentStatus } from '../domain/appointments';
 import { buildReport, listPatientsForDoctor, patientHistory } from '../domain/reports';
 import { findOrCreatePatient, isPlausibleName, setPatientName } from '../domain/patients';
-import { ACTIVE_TOKEN_STATUSES, computePosition, issueToken } from '../domain/tokenQueue';
+import { bookSlot, getDaySchedule } from '../domain/slots';
+import { ACTIVE_TOKEN_STATUSES, computePosition, isOnLeave, issueToken } from '../domain/tokenQueue';
 import { broadcastDelay } from '../services/notifications';
 import { logger } from '../utils/logger';
 import {
   clinicToday,
   formatDateForPatient,
   formatDateOnly,
+  formatTimeForPatient,
   formatWait,
   parseDateOnly,
 } from '../utils/time';
@@ -26,6 +28,7 @@ import {
   patientsPage,
   reportsPage,
 } from './web/doctorViews';
+import { calendarPage, slotBookPage } from './web/calendarView';
 import { delayConfirmPage, queueBody, queuePageV2, walkInPage } from './web/queueView';
 import { settingsPage } from './web/settingsView';
 import { errorPage } from './web/views';
@@ -216,6 +219,180 @@ doctorConsoleRouter.post(
     });
 
     res.redirect(302, `/app/queue?flash=${encodeURIComponent('Called again')}`);
+  },
+);
+
+// ---- calendar (SLOT / HYBRID) ----
+
+function shiftDate(date: Date, days: number): string {
+  const d = new Date(date);
+  d.setUTCDate(d.getUTCDate() + days);
+  return formatDateOnly(d);
+}
+
+doctorConsoleRouter.get('/app/calendar', requireDoctorAuth, async (req, res) => {
+  const doctor = req.doctor!;
+  const today = clinicToday(doctor.timezone);
+  const requested =
+    typeof req.query['date'] === 'string' ? parseDateOnly(req.query['date']) : null;
+  const date = requested ?? today;
+
+  const [slots, queueCount] = await Promise.all([
+    getDaySchedule(doctor, date),
+    waitingCount(doctor.id, doctor.timezone),
+  ]);
+
+  res.type('html').send(
+    calendarPage({
+      doctor,
+      slots,
+      date: formatDateOnly(date),
+      prevDate: shiftDate(date, -1),
+      nextDate: shiftDate(date, 1),
+      dateLabel: formatDateForPatient(date),
+      isToday: formatDateOnly(date) === formatDateOnly(today),
+      onLeave: isOnLeave(doctor, date),
+      queueCount,
+      csrfToken: req.csrfToken ?? '',
+      ...(typeof req.query['flash'] === 'string' ? { flash: req.query['flash'] } : {}),
+    }),
+  );
+});
+
+doctorConsoleRouter.get('/app/calendar/book', requireDoctorAuth, async (req, res) => {
+  const doctor = req.doctor!;
+  const date = typeof req.query['date'] === 'string' ? parseDateOnly(req.query['date']) : null;
+  const slotIso = typeof req.query['slot'] === 'string' ? req.query['slot'] : '';
+  const slotStart = new Date(slotIso);
+
+  if (!date || Number.isNaN(slotStart.getTime())) {
+    notFound(res, 'That appointment time could not be found.');
+    return;
+  }
+
+  res.type('html').send(
+    slotBookPage({
+      doctor,
+      date: formatDateOnly(date),
+      slotIso,
+      slotLabel: formatTimeForPatient(slotStart, doctor.timezone),
+      dateLabel: formatDateForPatient(date),
+      queueCount: await waitingCount(doctor.id, doctor.timezone),
+      csrfToken: req.csrfToken ?? '',
+    }),
+  );
+});
+
+const slotBookBody = z.object({
+  date: z.string(),
+  slot: z.string(),
+  name: z.string().trim().min(1),
+  phone: z.string().trim().min(1),
+  language: z.enum(['EN', 'KN']).optional(),
+});
+
+doctorConsoleRouter.post(
+  '/app/calendar/book',
+  requireDoctorAuth,
+  requireFormCsrf,
+  async (req, res) => {
+    const doctor = req.doctor!;
+    const s = c(doctor.defaultLanguage);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const parsed = slotBookBody.safeParse(body);
+
+    const rawDate = typeof body['date'] === 'string' ? body['date'] : '';
+    const rawSlot = typeof body['slot'] === 'string' ? body['slot'] : '';
+    const date = parseDateOnly(rawDate);
+    const slotStart = new Date(rawSlot);
+
+    if (!date || Number.isNaN(slotStart.getTime())) {
+      notFound(res, 'That appointment time could not be found.');
+      return;
+    }
+
+    const values = {
+      name: typeof body['name'] === 'string' ? body['name'] : '',
+      phone: typeof body['phone'] === 'string' ? body['phone'] : '',
+      language: typeof body['language'] === 'string' ? body['language'] : undefined,
+    };
+
+    const reject = async (error: string) =>
+      res.type('html').send(
+        slotBookPage({
+          doctor,
+          date: rawDate,
+          slotIso: rawSlot,
+          slotLabel: formatTimeForPatient(slotStart, doctor.timezone),
+          dateLabel: formatDateForPatient(date),
+          queueCount: await waitingCount(doctor.id, doctor.timezone),
+          csrfToken: req.csrfToken ?? '',
+          values,
+          error,
+        }),
+      );
+
+    if (!parsed.success || !isPlausibleName(values.name)) {
+      await reject(s.invalidName);
+      return;
+    }
+
+    const phone = values.phone.replace(/\D/g, '');
+    if (phone.length < 10 || phone.length > 15) {
+      await reject(s.invalidPhone);
+      return;
+    }
+
+    const patient = await findOrCreatePatient(phone, {
+      name: values.name.trim(),
+      ...(parsed.data.language ? { language: parsed.data.language } : {}),
+    });
+    if (!patient.name) await setPatientName(patient.id, values.name.trim());
+
+    const result = await bookSlot(doctor, patient.id, date, slotStart);
+
+    if (!result.ok) {
+      const message = {
+        TAKEN: s.slotTaken,
+        NOT_A_SLOT: s.slotNotValid,
+        IN_PAST: s.slotInPast,
+        ON_LEAVE: s.onLeaveShort,
+        PATIENT_HAS_SLOT: s.patientHasSlot,
+      }[result.reason];
+      await reject(message);
+      return;
+    }
+
+    const when = formatTimeForPatient(slotStart, doctor.timezone);
+    if (result.alreadyExisted) {
+      res.redirect(
+        302,
+        `/app/calendar?date=${rawDate}&flash=${encodeURIComponent(s.patientHasSlot)}`,
+      );
+      return;
+    }
+
+    // The same confirmation the SLOT conversation flow will send once built.
+    await enqueueOutbound({
+      to: patient.phone,
+      text: t(patient.language, 'slotBooked', {
+        doctorName: doctor.name,
+        clinicName: doctor.clinicName,
+        date: formatDateForPatient(date),
+        time: when,
+      }),
+      templateName: 'slotBooked',
+      ...(doctor.whatsappPhoneNumberId
+        ? { channelAddress: doctor.whatsappPhoneNumberId }
+        : {}),
+    });
+
+    res.redirect(
+      302,
+      `/app/calendar?date=${rawDate}&flash=${encodeURIComponent(
+        s.slotBooked(when, values.name.trim()),
+      )}`,
+    );
   },
 );
 
