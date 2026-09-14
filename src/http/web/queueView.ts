@@ -326,6 +326,11 @@ export function queueBody(opts: {
       ? html`<div class="caveat">${s.delayActive(queue.delayMins)}</div>`
       : ''}
     ${queue.isClosed ? html`<div class="caveat">${s.listClosed}</div>` : ''}
+    <div class="walkin-bar">
+      <a href="/app/queue/walk-in"
+        ><button class="secondary" type="button">+ ${s.addWalkIn}</button></a
+      >
+    </div>
     ${anyToday
       ? html`
           <div class="card flush">
@@ -352,6 +357,87 @@ export function queueBody(opts: {
         `
       : html`<div class="card">${emptyState(doctor, s)}</div>`}
   `;
+}
+
+/**
+ * Booking a patient who is at the desk or on the phone rather than on WhatsApp.
+ * Most clinic volume arrives this way, and without it the queue on screen would
+ * not match the queue in the room.
+ *
+ * A number is required because the token is only worth having if the patient
+ * can be told when their turn comes — that is the whole product. The desk can
+ * take a relative's number for a patient without a phone.
+ */
+export function walkInPage(opts: {
+  doctor: Doctor;
+  queueCount: number;
+  csrfToken: string;
+  values?: { name?: string; phone?: string; language?: string };
+  error?: string;
+}): string {
+  const s = c(opts.doctor.defaultLanguage);
+  const v = opts.values ?? {};
+  const navOpts = {
+    clinicName: opts.doctor.clinicName,
+    doctorName: opts.doctor.name,
+    current: 'queue' as const,
+    queueCount: opts.queueCount,
+    csrfToken: opts.csrfToken,
+    s,
+    photo: opts.doctor.photo,
+    specialty: opts.doctor.specialty,
+  };
+
+  return page(
+    { title: s.addWalkIn, csrfToken: opts.csrfToken },
+    html`
+      ${doctorHeader(navOpts)}
+      <main>
+        <div class="card">
+          <h2>${s.addWalkIn}</h2>
+          <p class="sub">${s.addWalkInSub}</p>
+          ${opts.error ? html`<div class="err">${opts.error}</div>` : ''}
+
+          <form method="post" action="/app/queue/walk-in">
+            <input type="hidden" name="_csrf" value="${opts.csrfToken}" />
+
+            <label for="wname">${s.patientNameLabel}</label>
+            <input id="wname" name="name" type="text" value="${v.name ?? ''}" autofocus required />
+
+            <label for="wphone">${s.patientPhoneLabel}</label>
+            <input
+              id="wphone"
+              name="phone"
+              type="text"
+              inputmode="numeric"
+              value="${v.phone ?? ''}"
+              placeholder="919876543210"
+              required
+            />
+            <p class="hint">${s.phoneHint}</p>
+
+            <label for="wlang">${s.languageForPatient}</label>
+            <select id="wlang" name="language">
+              ${['EN', 'KN'].map(
+                (l) =>
+                  html`<option value="${l}" ${(v.language ?? opts.doctor.defaultLanguage) === l ? 'selected' : ''}>
+                    ${l === 'KN' ? 'ಕನ್ನಡ' : 'English'}
+                  </option>`,
+              )}
+            </select>
+
+            <div class="actions" style="margin-top:18px">
+              <button type="submit">${s.issueToken}</button>
+              <a href="/app/queue"
+                ><button class="secondary" type="button">${s.cancel}</button></a
+              >
+            </div>
+          </form>
+        </div>
+      </main>
+      ${doctorBottomNav(navOpts)}
+    `,
+  );
 }
 
 // ---- running late sheet ----

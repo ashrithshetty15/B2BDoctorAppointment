@@ -285,6 +285,11 @@ button.ghost:hover{background:var(--surface-2);filter:none}
 .stats .s.busy .n{color:var(--warn)}
 .stats .s.busy .l{color:var(--warn)}
 
+/* Secondary, and set apart from the hero: booking a walk-in is frequent but is
+   never the thing the doctor is mid-way through doing. */
+.walkin-bar{display:flex;justify-content:flex-end;margin:0 0 var(--s3)}
+.walkin-bar button{margin:0}
+
 /* ---- queue rows ---- */
 .qrow{
   display:flex;align-items:center;gap:var(--s4);padding:var(--s4) var(--s5);

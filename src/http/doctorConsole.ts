@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { prisma } from '../db/prisma';
 import { applyStatusChange, toAppointmentStatus } from '../domain/appointments';
 import { buildReport, listPatientsForDoctor, patientHistory } from '../domain/reports';
-import { ACTIVE_TOKEN_STATUSES, computePosition } from '../domain/tokenQueue';
+import { findOrCreatePatient, isPlausibleName, setPatientName } from '../domain/patients';
+import { ACTIVE_TOKEN_STATUSES, computePosition, issueToken } from '../domain/tokenQueue';
 import { broadcastDelay } from '../services/notifications';
 import { logger } from '../utils/logger';
 import {
@@ -14,6 +15,7 @@ import {
   parseDateOnly,
 } from '../utils/time';
 import { c } from '../i18n/console';
+import { nowServingLabel } from '../i18n/format';
 import { t } from '../i18n/templates';
 import { enqueueOutbound } from '../queue/queues';
 import { requireDoctorAuth, requireFormCsrf } from './middleware/auth';
@@ -24,7 +26,7 @@ import {
   patientsPage,
   reportsPage,
 } from './web/doctorViews';
-import { delayConfirmPage, queueBody, queuePageV2 } from './web/queueView';
+import { delayConfirmPage, queueBody, queuePageV2, walkInPage } from './web/queueView';
 import { settingsPage } from './web/settingsView';
 import { errorPage } from './web/views';
 
@@ -214,6 +216,118 @@ doctorConsoleRouter.post(
     });
 
     res.redirect(302, `/app/queue?flash=${encodeURIComponent('Called again')}`);
+  },
+);
+
+// ---- walk-in booking ----
+
+doctorConsoleRouter.get('/app/queue/walk-in', requireDoctorAuth, async (req, res) => {
+  const doctor = req.doctor!;
+  res.type('html').send(
+    walkInPage({
+      doctor,
+      queueCount: await waitingCount(doctor.id, doctor.timezone),
+      csrfToken: req.csrfToken ?? '',
+    }),
+  );
+});
+
+const walkInBody = z.object({
+  name: z.string().trim().min(1),
+  phone: z.string().trim().min(1),
+  language: z.enum(['EN', 'KN']).optional(),
+});
+
+doctorConsoleRouter.post(
+  '/app/queue/walk-in',
+  requireDoctorAuth,
+  requireFormCsrf,
+  async (req, res) => {
+    const doctor = req.doctor!;
+    const s = c(doctor.defaultLanguage);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const parsed = walkInBody.safeParse(body);
+
+    const values = {
+      name: typeof body['name'] === 'string' ? body['name'] : '',
+      phone: typeof body['phone'] === 'string' ? body['phone'] : '',
+      language: typeof body['language'] === 'string' ? body['language'] : undefined,
+    };
+
+    const reject = async (error: string) =>
+      res.type('html').send(
+        walkInPage({
+          doctor,
+          queueCount: await waitingCount(doctor.id, doctor.timezone),
+          csrfToken: req.csrfToken ?? '',
+          values,
+          error,
+        }),
+      );
+
+    if (!parsed.success || !isPlausibleName(values.name)) {
+      await reject(s.invalidName);
+      return;
+    }
+
+    // Stored the way WhatsApp delivers them: E.164 digits, no '+'. A number
+    // typed with spaces or a leading + must land in the same shape as one that
+    // arrived over the webhook, or the same person becomes two patients.
+    const phone = values.phone.replace(/\D/g, '');
+    if (phone.length < 10 || phone.length > 15) {
+      await reject(s.invalidPhone);
+      return;
+    }
+
+    const patient = await findOrCreatePatient(phone, {
+      name: values.name.trim(),
+      ...(parsed.data.language ? { language: parsed.data.language } : {}),
+    });
+
+    // Name only fills a blank; a patient who told the bot their own name keeps it.
+    if (!patient.name) await setPatientName(patient.id, values.name.trim());
+
+    const result = await issueToken(doctor, patient.id, clinicToday(doctor.timezone));
+
+    if (!result.ok) {
+      const message =
+        result.reason === 'CAP_REACHED'
+          ? s.capReached
+          : result.reason === 'LIST_CLOSED'
+            ? s.listClosedShort
+            : s.onLeaveShort;
+      await reject(message);
+      return;
+    }
+
+    const token = result.appointment.tokenNumber ?? 0;
+    if (result.alreadyExisted) {
+      res.redirect(302, `/app/queue?flash=${encodeURIComponent(s.alreadyHasToken(token))}`);
+      return;
+    }
+
+    // Same confirmation a self-booking patient receives, in their language.
+    const position = await computePosition(result.appointment, doctor);
+    await enqueueOutbound({
+      to: patient.phone,
+      text: t(patient.language, 'tokenBooked', {
+        tokenNumber: token,
+        date: formatDateForPatient(result.appointment.date),
+        doctorName: doctor.name,
+        nowServing: nowServingLabel(patient.language, position.nowServingToken),
+        ahead: position.ahead,
+        eta: formatWait(Math.round(position.etaMins)),
+      }),
+      templateName: 'tokenBooked',
+      ...(doctor.whatsappPhoneNumberId
+        ? { channelAddress: doctor.whatsappPhoneNumberId }
+        : {}),
+    });
+
+    res.redirect(
+      302,
+      `/app/queue?flash=${encodeURIComponent(s.tokenIssued(token, values.name.trim()))}`,
+    );
   },
 );
 

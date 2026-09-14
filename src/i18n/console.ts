@@ -25,6 +25,20 @@ export interface ConsoleStrings {
   reports: string;
   signOut: string;
   settings: string;
+  addWalkIn: string;
+  addWalkInSub: string;
+  patientNameLabel: string;
+  patientPhoneLabel: string;
+  phoneHint: string;
+  languageForPatient: string;
+  issueToken: string;
+  tokenIssued: (token: number, name: string) => string;
+  alreadyHasToken: (token: number) => string;
+  capReached: string;
+  listClosedShort: string;
+  onLeaveShort: string;
+  invalidPhone: string;
+  invalidName: string;
   profile: string;
   profileSub: string;
   doctorNameLabel: string;
@@ -93,6 +107,20 @@ const en: ConsoleStrings = {
   reports: 'Reports',
   signOut: 'Sign out',
   settings: 'Settings',
+  addWalkIn: 'Add walk-in',
+  addWalkInSub: 'For a patient at the desk or on the phone. They get the same WhatsApp updates.',
+  patientNameLabel: 'Patient name',
+  patientPhoneLabel: 'WhatsApp number',
+  phoneHint: 'With country code, e.g. 919876543210',
+  languageForPatient: 'Language for their messages',
+  issueToken: 'Issue token',
+  tokenIssued: (t, n) => `Token ${t} issued to ${n}`,
+  alreadyHasToken: (t) => `That patient already holds token ${t} today`,
+  capReached: 'Today is full — the daily token limit has been reached',
+  listClosedShort: 'Token list is closed for today',
+  onLeaveShort: 'You are marked on leave today',
+  invalidPhone: 'Enter a valid number with country code, digits only',
+  invalidName: 'Enter the patient name',
   profile: 'Profile',
   profileSub: 'This is how your clinic appears to you and to your team.',
   doctorNameLabel: 'Your name',
@@ -162,6 +190,20 @@ const kn: ConsoleStrings = {
   reports: 'ವರದಿಗಳು',
   signOut: 'ಸೈನ್ ಔಟ್',
   settings: 'ಸೆಟ್ಟಿಂಗ್‌ಗಳು',
+  addWalkIn: 'ವಾಕ್-ಇನ್ ಸೇರಿಸಿ',
+  addWalkInSub: 'ಕೌಂಟರ್‌ನಲ್ಲಿ ಅಥವಾ ಫೋನ್‌ನಲ್ಲಿರುವ ರೋಗಿಗೆ. ಅವರಿಗೂ ಅದೇ ವಾಟ್ಸಾಪ್ ಮಾಹಿತಿ ಸಿಗುತ್ತದೆ.',
+  patientNameLabel: 'ರೋಗಿಯ ಹೆಸರು',
+  patientPhoneLabel: 'ವಾಟ್ಸಾಪ್ ಸಂಖ್ಯೆ',
+  phoneHint: 'ದೇಶದ ಕೋಡ್ ಸಹಿತ, ಉದಾ. 919876543210',
+  languageForPatient: 'ಅವರ ಸಂದೇಶಗಳ ಭಾಷೆ',
+  issueToken: 'ಟೋಕನ್ ನೀಡಿ',
+  tokenIssued: (t, n) => `${n} ಅವರಿಗೆ ಟೋಕನ್ ${t} ನೀಡಲಾಗಿದೆ`,
+  alreadyHasToken: (t) => `ಆ ರೋಗಿಗೆ ಇವತ್ತು ಈಗಾಗಲೇ ಟೋಕನ್ ${t} ಇದೆ`,
+  capReached: 'ಇವತ್ತು ಭರ್ತಿಯಾಗಿದೆ — ದಿನದ ಟೋಕನ್ ಮಿತಿ ಮುಗಿದಿದೆ',
+  listClosedShort: 'ಇವತ್ತಿಗೆ ಟೋಕನ್ ಪಟ್ಟಿ ಮುಚ್ಚಲಾಗಿದೆ',
+  onLeaveShort: 'ಇವತ್ತು ನೀವು ರಜೆಯಲ್ಲಿದ್ದೀರಿ',
+  invalidPhone: 'ದೇಶದ ಕೋಡ್ ಸಹಿತ ಸರಿಯಾದ ಸಂಖ್ಯೆ ನಮೂದಿಸಿ, ಅಂಕಿಗಳು ಮಾತ್ರ',
+  invalidName: 'ರೋಗಿಯ ಹೆಸರು ನಮೂದಿಸಿ',
   profile: 'ಪ್ರೊಫೈಲ್',
   profileSub: 'ನಿಮ್ಮ ಕ್ಲಿನಿಕ್ ಹೀಗೆ ಕಾಣಿಸುತ್ತದೆ.',
   doctorNameLabel: 'ನಿಮ್ಮ ಹೆಸರು',
