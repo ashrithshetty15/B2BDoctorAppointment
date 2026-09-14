@@ -1,7 +1,8 @@
+import { DateTime } from 'luxon';
 import type { Doctor } from '@prisma/client';
 import type { PatientRow, ReportSummary } from '../../domain/reports';
-import { formatWait } from '../../utils/time';
-import { c } from '../../i18n/console';
+import { formatDateForPatient, formatWait } from '../../utils/time';
+import { type ConsoleStrings, c } from '../../i18n/console';
 import { type RawHtml, html, initials, page, raw } from './layout';
 import { type DoctorNavOptions, type DoctorTab, doctorBottomNav, doctorHeader } from './nav';
 import { bookingLink, qrSvg } from './qr';
@@ -240,24 +241,187 @@ export function patientsPage(opts: {
   );
 }
 
+/** One document attached to a visit; the bytes themselves are never loaded here. */
+export interface VisitDocument {
+  id: string;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  createdAt: Date;
+}
+
+export interface VisitRow {
+  id: string;
+  date: Date;
+  status: string;
+  tokenNumber: number | null;
+  slotStart: Date | null;
+  consultMins: number | null;
+  arrivedAt: Date | null;
+  startedAt: Date | null;
+  notes: string | null;
+  documents: VisitDocument[];
+}
+
+/** "12 Sep", or "12 Sep 2025" once the year stops being the obvious one. */
+function visitDate(date: Date, thisYear: number): string {
+  const full = formatDateForPatient(date);
+  const year = DateTime.fromJSDate(date, { zone: 'utc' }).year;
+  return year === thisYear ? full : `${full} ${year}`;
+}
+
+function fileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function docIcon(contentType: string): string {
+  return contentType === 'application/pdf' ? '📄' : '🖼️';
+}
+
+/**
+ * Documents for one visit, plus the picker. The file is turned into a data: URI
+ * by the script at the foot of the page — there is no multipart parser, and the
+ * same trick already backs the profile photo.
+ */
+function documentsBlock(opts: {
+  visit: VisitRow;
+  s: ConsoleStrings;
+  csrfToken: string;
+  accept: string;
+  hint: string;
+}): RawHtml {
+  const { visit, s, csrfToken } = opts;
+  return html`
+    ${visit.documents.length > 0
+      ? html`<div class="docs">
+          ${visit.documents.map(
+            (d) => html`
+              <div class="doc">
+                <span class="ic" aria-hidden="true">${docIcon(d.contentType)}</span>
+                <a class="nm" href="/app/document/${d.id}">${d.filename}</a>
+                <span class="sz">${fileSize(d.sizeBytes)}</span>
+                <form
+                  method="post"
+                  action="/app/document/${d.id}/delete"
+                  onsubmit="return confirm('${s.confirmRemoveDocument}')"
+                >
+                  <input type="hidden" name="_csrf" value="${csrfToken}" />
+                  <input type="hidden" name="back" value="/app/patients" />
+                  <button class="del" type="submit">${s.removeDocument}</button>
+                </form>
+              </div>
+            `,
+          )}
+        </div>`
+      : ''}
+
+    <details class="note up">
+      <summary>${s.addDocument}</summary>
+      <form method="post" action="/app/appointment/${visit.id}/document" class="docform">
+        <input type="hidden" name="_csrf" value="${csrfToken}" />
+        <input type="file" accept="${opts.accept}" data-doc-file />
+        <input type="hidden" name="filename" data-doc-name />
+        <input type="hidden" name="file" data-doc-data />
+        <p class="hint">${opts.hint}</p>
+        <button type="submit">${s.uploadDocument}</button>
+      </form>
+    </details>
+  `;
+}
+
+/**
+ * Encodes the chosen file into the form as a data: URI, downscaling images on
+ * the way. The downscale is what makes this viable: a phone photo of a
+ * prescription is several MB, and the /app body limit leaves room for ~400KB.
+ *
+ * PDFs pass through untouched, so a large one is rejected — the hint says so
+ * rather than letting the doctor find out at submit time.
+ */
+const docScript = (maxBytes: number, maxLabel: string) => `
+(function(){
+  var MAX=${maxBytes}, LIMIT=${JSON.stringify(maxLabel)};
+  document.querySelectorAll('form.docform').forEach(function(form){
+    var file=form.querySelector('[data-doc-file]');
+    var name=form.querySelector('[data-doc-name]');
+    var data=form.querySelector('[data-doc-data]');
+    if(!file||!name||!data) return;
+
+    form.addEventListener('submit',function(e){
+      if(!data.value){ e.preventDefault(); alert('Choose a file first.'); }
+    });
+
+    file.addEventListener('change',function(){
+      var f=file.files&&file.files[0];
+      data.value=''; name.value='';
+      if(!f) return;
+      if(!/^(image\\/(jpeg|png|webp)|application\\/pdf)$/.test(f.type)){
+        alert('Please choose a JPG, PNG, WebP or PDF file.');
+        file.value=''; return;
+      }
+      name.value=f.name;
+
+      var reader=new FileReader();
+      reader.onload=function(){
+        if(f.type==='application/pdf'){
+          if(f.size>MAX){
+            alert('That PDF is too large. Please use one under '+LIMIT+'.');
+            file.value=''; name.value=''; return;
+          }
+          data.value=reader.result; return;
+        }
+        var img=new Image();
+        img.onload=function(){
+          // Long edge to 1600px: legible for a report or a prescription, and
+          // small enough to survive base64 through the form.
+          var S=1600, w=img.width, h=img.height;
+          if(w>S||h>S){ var r=Math.min(S/w,S/h); w=Math.round(w*r); h=Math.round(h*r); }
+          var cv=document.createElement('canvas');
+          cv.width=w; cv.height=h;
+          cv.getContext('2d').drawImage(img,0,0,w,h);
+          var q=0.85, out=cv.toDataURL('image/jpeg',q);
+          // Step the quality down rather than rejecting a dense scan outright.
+          while(out.length*0.75>MAX&&q>0.4){ q-=0.15; out=cv.toDataURL('image/jpeg',q); }
+          if(out.length*0.75>MAX){
+            alert('That image is too large even after resizing.');
+            file.value=''; name.value=''; return;
+          }
+          data.value=out;
+        };
+        img.src=reader.result;
+      };
+      reader.readAsDataURL(f);
+    });
+  });
+})();
+`;
+
 export function patientDetailPage(opts: {
   doctor: Doctor;
   patient: { id: string; name: string | null; phone: string; language: string };
-  appointments: {
-    id: string;
-    date: Date;
-    status: string;
-    tokenNumber: number | null;
-    consultMins: number | null;
-    arrivedAt: Date | null;
-    startedAt: Date | null;
-  }[];
+  appointments: VisitRow[];
+  totalVisits: number;
+  accepted: readonly string[];
+  /** Real ceiling from the active storage driver — the hint must not overstate it. */
+  maxBytes: number;
   queueCount: number;
   csrfToken: string;
+  flash?: string;
+  error?: string;
 }): string {
   const s = c(opts.doctor.defaultLanguage);
   const done = opts.appointments.filter((a) => a.status === 'DONE').length;
   const noShow = opts.appointments.filter((a) => a.status === 'NO_SHOW').length;
+  const thisYear = DateTime.now().setZone(opts.doctor.timezone).year;
+  const accept = opts.accepted.join(',');
+  // Built from the driver's actual cap rather than stated in the string: a hint
+  // promising more than the server accepts sends the doctor off to pick a file
+  // that is then rejected.
+  const hint = (
+    opts.accepted.includes('application/pdf') ? s.uploadHintAll : s.uploadHintImages
+  ).replace('{size}', fileSize(opts.maxBytes));
+  const hidden = opts.totalVisits - opts.appointments.length;
 
   return page(
     {
@@ -268,6 +432,8 @@ export function patientDetailPage(opts: {
     html`
       ${doctorHeader(navFor(opts.doctor, 'patients', opts.queueCount, opts.csrfToken))}
       <main>
+        ${opts.flash ? html`<div class="ok">${opts.flash}</div>` : ''}
+        ${opts.error ? html`<div class="err">${opts.error}</div>` : ''}
         <div class="card">
           <div class="phead">
             <span class="avatar lg" aria-hidden="true">${initials(opts.patient.name ?? '')}</span>
@@ -296,22 +462,55 @@ export function patientDetailPage(opts: {
           </div>
         </div>
 
+        <h3 class="secl">${s.visitHistory}</h3>
         <div class="card flush">
-
-          ${opts.appointments.map(
-            (a) => html`
-              <div class="slotrow ${a.status === 'NO_SHOW' || a.status === 'CANCELLED' ? 'past' : ''}">
-                <div class="slottime">${a.date.toISOString().slice(5, 10)}</div>
-                <div class="body">
-                  <div class="sub" style="margin:0">
-                    ${statusPill(a.status)}
-                    ${a.tokenNumber !== null ? html`<span>#${a.tokenNumber}</span>` : ''}
-                    ${a.consultMins !== null ? html`<span>${a.consultMins} min</span>` : ''}
-                  </div>
+          ${opts.appointments.length === 0
+            ? html`<div class="tlmore">${s.noVisitsYet}</div>`
+            : html`
+                <div class="tl ${opts.appointments.length === 1 ? 'single' : ''}">
+                  ${opts.appointments.map((a) => {
+                    const bad = a.status === 'NO_SHOW' || a.status === 'CANCELLED';
+                    // arrivedAt → startedAt is the wait the patient actually had;
+                    // both are already fetched and were previously thrown away.
+                    const waited =
+                      a.arrivedAt && a.startedAt
+                        ? formatWait((a.startedAt.getTime() - a.arrivedAt.getTime()) / 60000)
+                        : null;
+                    return html`
+                      <div class="visit ${a.status === 'DONE' ? 'v-ok' : bad ? 'v-bad' : ''}">
+                        <div class="vhead">
+                          <span class="vdate">${visitDate(a.date, thisYear)}</span>
+                          ${statusPill(a.status)}
+                        </div>
+                        <div class="vmeta">
+                          ${a.tokenNumber !== null ? html`<span>#${a.tokenNumber}</span>` : ''}
+                          ${a.slotStart
+                            ? html`<span>${timeOnly(a.slotStart, opts.doctor.timezone)}</span>`
+                            : ''}
+                          ${waited ? html`<span>${s.waited} ${waited}</span>` : ''}
+                          ${a.consultMins !== null ? html`<span>${a.consultMins} min</span>` : ''}
+                        </div>
+                        ${/* .notetext is white-space:pre-wrap, so the template's
+                              own indentation would render as a leading indent —
+                              keep the content flush. */ ''}
+                        ${a.notes
+                          ? html`<p class="notetext"><strong>${s.remarkLabel}:</strong> ${a.notes}</p>`
+                          : ''}
+                        ${documentsBlock({
+                          visit: a,
+                          s,
+                          csrfToken: opts.csrfToken,
+                          accept,
+                          hint,
+                        })}
+                      </div>
+                    `;
+                  })}
                 </div>
-              </div>
-              `,
-          )}
+                ${hidden > 0
+                  ? html`<div class="tlmore">+ ${hidden} ${s.moreVisits}</div>`
+                  : ''}
+              `}
         </div>
 
         <a href="/app/patients"
@@ -320,6 +519,9 @@ export function patientDetailPage(opts: {
       </main>
       ${doctorBottomNav(navFor(opts.doctor, 'patients', opts.queueCount, opts.csrfToken))}
     `,
+    html`<script>
+      ${raw(docScript(opts.maxBytes, fileSize(opts.maxBytes)))}
+    </script>`,
   );
 }
 

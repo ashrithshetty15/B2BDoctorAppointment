@@ -288,8 +288,14 @@ export async function listPatientsForDoctor(doctorId: string): Promise<PatientRo
     .sort((a, b) => (b.lastVisit?.getTime() ?? 0) - (a.lastVisit?.getTime() ?? 0));
 }
 
+/**
+ * Most recent visits first, capped: a patient who has been coming for years
+ * would otherwise render every appointment they ever had in one page.
+ */
+export const PATIENT_HISTORY_LIMIT = 50;
+
 export async function patientHistory(doctorId: string, patientId: string) {
-  const [patient, appointments] = await Promise.all([
+  const [patient, appointments, totalVisits] = await Promise.all([
     prisma.patient.findUnique({
       where: { id: patientId },
       select: { id: true, name: true, phone: true, language: true, createdAt: true },
@@ -297,6 +303,7 @@ export async function patientHistory(doctorId: string, patientId: string) {
     prisma.appointment.findMany({
       where: { doctorId, patientId },
       orderBy: [{ date: 'desc' }, { tokenNumber: 'desc' }],
+      take: PATIENT_HISTORY_LIMIT,
       select: {
         id: true,
         date: true,
@@ -308,9 +315,26 @@ export async function patientHistory(doctorId: string, patientId: string) {
         startedAt: true,
         completedAt: true,
         consultMins: true,
+        // The remark the desk or the doctor wrote on the queue. Without this the
+        // patient page — the one place anyone goes looking for it later — showed
+        // nothing at all.
+        notes: true,
+        documents: {
+          orderBy: { createdAt: 'asc' },
+          // inlineData is deliberately absent: on the db driver it is the whole
+          // file, and this query loads up to 50 visits' worth of rows.
+          select: {
+            id: true,
+            filename: true,
+            contentType: true,
+            sizeBytes: true,
+            createdAt: true,
+          },
+        },
       },
     }),
+    prisma.appointment.count({ where: { doctorId, patientId } }),
   ]);
 
-  return { patient, appointments };
+  return { patient, appointments, totalVisits };
 }

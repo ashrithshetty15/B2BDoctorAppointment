@@ -3,6 +3,8 @@ import { z } from 'zod';
 import { prisma } from '../db/prisma';
 import { applyStatusChange, toAppointmentStatus } from '../domain/appointments';
 import { buildReport, listPatientsForDoctor, patientHistory } from '../domain/reports';
+import { addDocument, deleteDocument, getDocumentForDoctor } from '../domain/documents';
+import { storage } from '../domain/storage';
 import { findOrCreatePatient, isPlausibleName, setPatientName } from '../domain/patients';
 import { bookSlot, getDaySchedule } from '../domain/slots';
 import { ACTIVE_TOKEN_STATUSES, computePosition, isOnLeave, issueToken } from '../domain/tokenQueue';
@@ -758,7 +760,10 @@ doctorConsoleRouter.get('/app/patients', requireDoctorAuth, async (req, res) => 
 
 doctorConsoleRouter.get('/app/patients/:id', requireDoctorAuth, async (req, res) => {
   const doctor = req.doctor!;
-  const { patient, appointments } = await patientHistory(doctor.id, req.params['id'] ?? '');
+  const { patient, appointments, totalVisits } = await patientHistory(
+    doctor.id,
+    req.params['id'] ?? '',
+  );
 
   // Scoped by construction: patientHistory filters on doctorId, so a patient who
   // has never booked with this doctor comes back with an empty list.
@@ -772,11 +777,144 @@ doctorConsoleRouter.get('/app/patients/:id', requireDoctorAuth, async (req, res)
       doctor,
       patient,
       appointments,
+      totalVisits,
+      accepted: storage().capabilities.acceptedTypes,
+      maxBytes: storage().capabilities.maxBytes,
       queueCount: await waitingCount(doctor.id, doctor.timezone),
       csrfToken: req.csrfToken ?? '',
+      ...(typeof req.query['flash'] === 'string' ? { flash: req.query['flash'] } : {}),
+      ...(typeof req.query['error'] === 'string' ? { error: req.query['error'] } : {}),
     }),
   );
 });
+
+// ---- patient documents ----
+
+/**
+ * Upload a reference document against one visit.
+ *
+ * The file arrives as a data: URI in a form field rather than as multipart —
+ * there is no multipart parser in the stack, and the profile photo already
+ * established the pattern. addDocument does the validating; this route only
+ * decides where to send the doctor afterwards.
+ */
+doctorConsoleRouter.post(
+  '/app/appointment/:appointmentId/document',
+  requireDoctorAuth,
+  requireFormCsrf,
+  async (req, res) => {
+    const doctor = req.doctor!;
+    const s = c(doctor.defaultLanguage);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+
+    // Needed for the redirect target, and it doubles as the ownership check:
+    // findFirst is scoped to this doctor, so another clinic's id is simply absent.
+    const appointment = await prisma.appointment.findFirst({
+      where: { id: req.params['appointmentId'] ?? '', doctorId: doctor.id },
+      select: { id: true, patientId: true },
+    });
+    if (!appointment) {
+      notFound(res, 'Appointment not found.');
+      return;
+    }
+
+    const result = await addDocument({
+      doctorId: doctor.id,
+      appointmentId: appointment.id,
+      filename: body['filename'],
+      dataUri: body['file'],
+    });
+
+    const back = `/app/patients/${appointment.patientId}`;
+    if (result.ok) {
+      res.redirect(302, `${back}?flash=${encodeURIComponent(s.documentAdded)}`);
+      return;
+    }
+
+    const message =
+      result.reason === 'TYPE_NOT_ALLOWED'
+        ? s.uploadFailedType
+        : result.reason === 'TOO_LARGE'
+          ? s.uploadFailedSize
+          : result.reason === 'TOO_MANY'
+            ? s.uploadFailedTooMany
+            : s.uploadFailedGeneric;
+    res.redirect(302, `${back}?error=${encodeURIComponent(message)}`);
+  },
+);
+
+/**
+ * Download one document.
+ *
+ * Always as an attachment, never inline. These bytes are user-supplied and are
+ * served from our own origin, so an inline render would let a crafted file run
+ * against the doctor's session cookie — the same reason the profile photo
+ * refuses SVG. nosniff stops the browser second-guessing the declared type.
+ */
+doctorConsoleRouter.get('/app/document/:id', requireDoctorAuth, async (req, res) => {
+  const doctor = req.doctor!;
+  const doc = await getDocumentForDoctor(doctor.id, req.params['id'] ?? '');
+  if (!doc) {
+    notFound(res, 'No document of yours with that id.');
+    return;
+  }
+
+  const signed = await storage().signedUrl(
+    { storageKey: doc.storageKey, inlineData: doc.inlineData },
+    { filename: doc.filename, contentType: doc.contentType },
+  );
+  if (signed) {
+    // Object storage: hand the browser a short-lived URL rather than proxying.
+    res.redirect(302, signed);
+    return;
+  }
+
+  if (!doc.inlineData) {
+    notFound(res, 'That document is no longer available.');
+    return;
+  }
+
+  // Quotes and backslashes would break out of the header's quoted-string; the
+  // filename is whatever the uploader's file was called.
+  const safeName = doc.filename.replace(/["\\]/g, '');
+  res
+    .status(200)
+    .set({
+      'Content-Type': doc.contentType,
+      'Content-Disposition': `attachment; filename="${safeName}"`,
+      'X-Content-Type-Options': 'nosniff',
+      // A medical record has no business in a shared cache.
+      'Cache-Control': 'private, no-store',
+    })
+    .send(Buffer.from(doc.inlineData, 'base64'));
+});
+
+doctorConsoleRouter.post(
+  '/app/document/:id/delete',
+  requireDoctorAuth,
+  requireFormCsrf,
+  async (req, res) => {
+    const doctor = req.doctor!;
+    const s = c(doctor.defaultLanguage);
+
+    // Read the owning patient before the row goes, so the redirect lands back on
+    // the page the doctor was looking at.
+    const doc = await prisma.document.findFirst({
+      where: { id: req.params['id'] ?? '', doctorId: doctor.id },
+      select: { id: true, appointment: { select: { patientId: true } } },
+    });
+    if (!doc) {
+      notFound(res, 'No document of yours with that id.');
+      return;
+    }
+
+    await deleteDocument(doctor.id, doc.id);
+    res.redirect(
+      302,
+      `/app/patients/${doc.appointment.patientId}?flash=${encodeURIComponent(s.documentRemoved)}`,
+    );
+  },
+);
 
 // ---- settings ----
 

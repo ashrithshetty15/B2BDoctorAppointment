@@ -33,6 +33,27 @@ export interface ConsoleStrings {
   saveNote: string;
   noteSaved: string;
   noReportBody: string;
+  // ---- patient history & documents ----
+  visitHistory: string;
+  noVisitsYet: string;
+  moreVisits: string;
+  waited: string;
+  remarkLabel: string;
+  documents: string;
+  addDocument: string;
+  chooseFile: string;
+  uploadDocument: string;
+  documentAdded: string;
+  documentRemoved: string;
+  removeDocument: string;
+  confirmRemoveDocument: string;
+  noDocuments: string;
+  uploadHintImages: string;
+  uploadHintAll: string;
+  uploadFailedType: string;
+  uploadFailedSize: string;
+  uploadFailedTooMany: string;
+  uploadFailedGeneric: string;
   backToPatients: string;
   seenCount: string;
   useQueueToday: string;
@@ -148,6 +169,26 @@ const en: ConsoleStrings = {
   saveNote: 'Save remark',
   noteSaved: 'Remark saved',
   noReportBody: 'Once patients start booking, this is where you will see how the clinic is running.',
+  visitHistory: 'Visit history',
+  noVisitsYet: 'No visits recorded yet.',
+  moreVisits: 'older visits not shown',
+  waited: 'waited',
+  remarkLabel: 'Remark',
+  documents: 'Documents',
+  addDocument: 'Add document',
+  chooseFile: 'Choose a file',
+  uploadDocument: 'Upload',
+  documentAdded: 'Document added',
+  documentRemoved: 'Document removed',
+  removeDocument: 'Remove',
+  confirmRemoveDocument: 'Remove this document? This cannot be undone.',
+  noDocuments: 'No documents for this visit.',
+  uploadHintImages: 'Photos only (JPG, PNG, WebP), up to {size}.',
+  uploadHintAll: 'Photos or PDF, up to {size}.',
+  uploadFailedType: 'That file type is not accepted.',
+  uploadFailedSize: 'That file is too large.',
+  uploadFailedTooMany: 'This visit already has the maximum number of documents.',
+  uploadFailedGeneric: 'That file could not be uploaded.',
   backToPatients: 'Back to patients',
   seenCount: 'Seen',
   useQueueToday: 'This is today — use Queue to work it.',
@@ -264,6 +305,26 @@ const kn: ConsoleStrings = {
   saveNote: 'ಟಿಪ್ಪಣಿ ಉಳಿಸಿ',
   noteSaved: 'ಟಿಪ್ಪಣಿ ಉಳಿಸಲಾಗಿದೆ',
   noReportBody: 'ರೋಗಿಗಳು ಬುಕ್ ಮಾಡಲು ಶುರುವಾದ ಮೇಲೆ, ಕ್ಲಿನಿಕ್ ಹೇಗೆ ನಡೆಯುತ್ತಿದೆ ಎಂಬುದು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ.',
+  visitHistory: 'ಭೇಟಿಯ ಇತಿಹಾಸ',
+  noVisitsYet: 'ಇನ್ನೂ ಯಾವುದೇ ಭೇಟಿ ದಾಖಲಾಗಿಲ್ಲ.',
+  moreVisits: 'ಹಳೆಯ ಭೇಟಿಗಳನ್ನು ತೋರಿಸಿಲ್ಲ',
+  waited: 'ಕಾದಿದ್ದು',
+  remarkLabel: 'ಟಿಪ್ಪಣಿ',
+  documents: 'ದಾಖಲೆಗಳು',
+  addDocument: 'ದಾಖಲೆ ಸೇರಿಸಿ',
+  chooseFile: 'ಫೈಲ್ ಆಯ್ಕೆಮಾಡಿ',
+  uploadDocument: 'ಅಪ್‌ಲೋಡ್ ಮಾಡಿ',
+  documentAdded: 'ದಾಖಲೆ ಸೇರಿಸಲಾಗಿದೆ',
+  documentRemoved: 'ದಾಖಲೆ ತೆಗೆದುಹಾಕಲಾಗಿದೆ',
+  removeDocument: 'ತೆಗೆದುಹಾಕಿ',
+  confirmRemoveDocument: 'ಈ ದಾಖಲೆಯನ್ನು ತೆಗೆದುಹಾಕಬೇಕೇ? ಇದನ್ನು ಮತ್ತೆ ಪಡೆಯಲು ಆಗುವುದಿಲ್ಲ.',
+  noDocuments: 'ಈ ಭೇಟಿಗೆ ಯಾವುದೇ ದಾಖಲೆ ಇಲ್ಲ.',
+  uploadHintImages: 'ಫೋಟೋ ಮಾತ್ರ (JPG, PNG, WebP), {size} ವರೆಗೆ.',
+  uploadHintAll: 'ಫೋಟೋ ಅಥವಾ PDF, {size} ವರೆಗೆ.',
+  uploadFailedType: 'ಈ ಬಗೆಯ ಫೈಲ್ ಸ್ವೀಕರಿಸುವುದಿಲ್ಲ.',
+  uploadFailedSize: 'ಈ ಫೈಲ್ ತುಂಬಾ ದೊಡ್ಡದಾಗಿದೆ.',
+  uploadFailedTooMany: 'ಈ ಭೇಟಿಗೆ ಈಗಾಗಲೇ ಗರಿಷ್ಠ ಸಂಖ್ಯೆಯ ದಾಖಲೆಗಳಿವೆ.',
+  uploadFailedGeneric: 'ಈ ಫೈಲ್ ಅಪ್‌ಲೋಡ್ ಮಾಡಲು ಆಗಲಿಲ್ಲ.',
   backToPatients: 'ರೋಗಿಗಳಿಗೆ ಹಿಂತಿರುಗಿ',
   seenCount: 'ನೋಡಿದ್ದು',
   useQueueToday: 'ಇದು ಇವತ್ತು — ಸರದಿ ಪುಟ ಬಳಸಿ.',

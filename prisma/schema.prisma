@@ -120,6 +120,7 @@ model Doctor {
   appointments Appointment[]
   queueStates  QueueState[]
   sessions     ConversationSession[]
+  documents    Document[]
 
   @@map("doctors")
 }
@@ -189,8 +190,9 @@ model Appointment {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  doctor  Doctor  @relation(fields: [doctorId], references: [id], onDelete: Cascade)
-  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor    Doctor     @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  patient   Patient    @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  documents Document[]
 
   @@unique([doctorId, date, tokenNumber], name: "doctor_date_token")
   @@unique([doctorId, slotStart], name: "doctor_slot_start")
@@ -198,6 +200,51 @@ model Appointment {
   @@index([patientId, date])
   @@index([status, slotStart])
   @@map("appointments")
+}
+
+/// A reference document attached to a visit: a lab report, a prescription, a scan
+/// photographed at the desk. Staff-only — never sent to the patient.
+///
+/// This is the most sensitive data the product stores. Appointment.notes is text a
+/// doctor typed; these are actual medical records, so every read and write must be
+/// scoped by doctorId and the bytes must never be served inline on our own origin.
+model Document {
+  id String @id @default(uuid())
+
+  appointmentId String @map("appointment_id")
+
+  /// Denormalised from the appointment so every query filters on the owning clinic
+  /// without a join. Isolation between clinics rests on this column being in the
+  /// WHERE clause of every lookup — see src/domain/documents.ts.
+  doctorId String @map("doctor_id")
+
+  /// As supplied by the uploader. Display only, and untrusted: shown escaped, and
+  /// never used to build a storage key or a filesystem path.
+  filename String
+
+  /// Validated against an allow-list on upload. SVG is excluded for the same reason
+  /// Doctor.photo excludes it — it can carry script.
+  contentType String @map("content_type")
+  sizeBytes   Int    @map("size_bytes")
+
+  /// Object key when STORAGE_DRIVER=s3; the bytes live in the bucket.
+  storageKey String? @map("storage_key")
+
+  /// Base64 payload when STORAGE_DRIVER=db. The fallback for deployments without
+  /// object storage: the container filesystem is ephemeral, so the row is the only
+  /// durable place to put it. Capped small — see DB_INLINE_MAX_BYTES.
+  inlineData String? @map("inline_data")
+
+  /// Doubles as the upload time; there is no separate uploadedAt.
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  doctor      Doctor      @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([appointmentId])
+  @@index([doctorId, createdAt])
+  @@map("documents")
 }
 
 /// One row per (doctor, date). Holds the token counter and the "now serving" pointer.

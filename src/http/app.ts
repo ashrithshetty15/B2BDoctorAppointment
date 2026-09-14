@@ -60,10 +60,15 @@ export function createApp() {
   // /doctor/:id/leave) stay structurally unable to accept a cross-site form post,
   // independent of their CSRF token check. /app has its own token check in
   // requireFormCsrf, which reads a hidden field instead of a header.
-  // 600kb, not 100kb: the doctor's profile photo posts as a base64 data URI in a
-  // normal form field. The browser downscales to a 256px square first, so a
-  // typical payload is a few KB; the route caps the decoded value at 400KB.
-  app.use('/app', express.urlencoded({ extended: false, limit: '600kb' }));
+  // 1mb, not 100kb: two routes post binary as a base64 data: URI in a normal form
+  // field — the profile photo, and a patient's reference documents.
+  //
+  // The ceiling has to clear the *encoded* size, which is worse than it looks.
+  // A 400KB file is ~533KB of base64, and percent-encoding the +/= characters
+  // pushes an incompressible payload (a JPEG or a PDF) to ~567KB — 92% of the
+  // old 600kb, before the filename field. 1mb restores real headroom.
+  // The decoded cap that actually governs is storage.ts's UPLOAD_MAX_BYTES.
+  app.use('/app', express.urlencoded({ extended: false, limit: '1mb' }));
 
   // NOTE: urlencoded is deliberately absent from the global config — see above.
   app.use(express.json({ limit: '100kb' }));

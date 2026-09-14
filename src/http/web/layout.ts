@@ -379,7 +379,9 @@ details.note>summary{
 details.note>summary::-webkit-details-marker{display:none}
 details.note>summary::before{content:'¸E';font-size:12px}
 details.note>summary:hover{color:var(--accent)}
-details.note .notetext{
+/* Not scoped to details.note: the patient timeline shows the same remark outside
+   a disclosure, and it should look identical there. */
+.notetext{
   margin:var(--s1) 0;padding:var(--s2) var(--s3);background:var(--warn-soft);
   border-radius:var(--r-sm);font-size:var(--t-sm);color:var(--ink-2);
   overflow-wrap:anywhere;white-space:pre-wrap;
@@ -399,6 +401,59 @@ details.note button{margin-top:var(--s2)}
 .slotrow .acts{flex:0 0 auto}
 .slotrow .acts button{margin:0;padding:var(--s2) var(--s4);min-height:38px;font-size:var(--t-sm)}
 @media (max-width:600px){.slotrow{padding:var(--s3) var(--s4);gap:var(--s3)}}
+
+/* Quiet label above a card, for pages with more than one section. */
+.secl{margin:var(--s5) 0 var(--s2);font-size:var(--t-xs);font-weight:700;
+  text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3)}
+
+/* ---- patient visit timeline ---- */
+/* A rail down the card with a node per visit, so a run of visits reads as a
+   history rather than as a list of unrelated rows. */
+.tl{position:relative;padding:var(--s3) 0}
+.tl::before{content:'';position:absolute;left:calc(var(--s5) + 5px);
+  top:var(--s5);bottom:var(--s5);width:2px;background:var(--line)}
+/* One visit is not a sequence — the rail would just be a stray vertical line. */
+.tl.single::before{display:none}
+.visit{position:relative;padding:var(--s3) var(--s5) var(--s3) calc(var(--s5) + 26px)}
+/* Solid enough to read as a marker: a tinted dot on a tinted card disappeared. */
+.visit::after{content:'';position:absolute;left:var(--s5);top:calc(var(--s3) + 5px);
+  width:12px;height:12px;border-radius:50%;background:var(--ink-3);
+  box-shadow:0 0 0 4px var(--surface)}
+/* Named v-* rather than ok/bad: a bare .ok is already the flash-message rule
+   further down this sheet, and it was winning on padding as well as colour. */
+.visit.v-ok::after{background:var(--ok)}
+.visit.v-bad::after{background:var(--danger)}
+.visit.v-bad .vdate{color:var(--ink-3)}
+.vhead{display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap}
+.vdate{font-weight:700;font-size:var(--t-md)}
+.vmeta{display:flex;gap:var(--s3);flex-wrap:wrap;margin-top:3px;
+  font-size:var(--t-xs);color:var(--ink-3);font-variant-numeric:tabular-nums}
+.tlmore{padding:var(--s3) var(--s5);font-size:var(--t-xs);color:var(--ink-3);
+  text-align:center}
+@media (max-width:600px){
+  .tl::before{left:calc(var(--s4) + 5px)}
+  .visit{padding:var(--s3) var(--s4) var(--s3) calc(var(--s4) + 24px)}
+  .visit::after{left:var(--s4)}
+}
+
+/* ---- documents on a visit ---- */
+.docs{margin-top:var(--s3);display:flex;flex-direction:column;gap:3px}
+.doc{display:flex;align-items:center;gap:var(--s3);padding:var(--s2) var(--s3);
+  background:var(--surface-2);border-radius:var(--r-sm);font-size:var(--t-sm)}
+.doc .ic{flex:0 0 auto;font-size:var(--t-md);line-height:1}
+.doc .nm{flex:1 1 auto;min-width:0;overflow-wrap:anywhere;
+  color:var(--ink);text-decoration:none;font-weight:600}
+.doc .nm:hover{color:var(--accent);text-decoration:underline}
+.doc .sz{flex:0 0 auto;font-size:var(--t-xs);color:var(--ink-3);
+  font-variant-numeric:tabular-nums}
+.doc form{flex:0 0 auto;margin:0}
+.doc .del{width:auto;margin:0;padding:4px 8px;min-height:32px;background:none;
+  border:0;color:var(--ink-3);font-size:var(--t-xs);font-weight:650;cursor:pointer}
+.doc .del:hover{color:var(--danger);background:var(--danger-soft)}
+details.note.up>summary::before{content:'+';font-weight:700}
+details.note.up input[type=file]{font-size:var(--t-sm);margin-top:var(--s1);
+  display:block;max-width:100%}
+details.note.up .hint{font-size:var(--t-xs);color:var(--ink-3);margin:var(--s1) 0 0}
 
 /* ---- pills ---- */
 .pill{display:inline-block;padding:3px 10px;border-radius:var(--r-pill);

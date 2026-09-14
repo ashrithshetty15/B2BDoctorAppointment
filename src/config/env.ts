@@ -34,6 +34,19 @@ const schema = z.object({
   /** HMAC key for dashboard session cookies. Required in production. */
   DASHBOARD_SESSION_SECRET: z.string().min(32).optional(),
   DASHBOARD_SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(30).default(7),
+
+  // ---- Patient document storage ----
+  // 'db' keeps small images as base64 in the documents row. It is the default so
+  // a deployment without object storage still works, but it cannot take a PDF:
+  // the /app urlencoded parser caps bodies at 600kb and base64 inflates ~33%.
+  // 's3' presigns uploads straight to the bucket, so the bytes never pass through
+  // this process and neither limit applies.
+  STORAGE_DRIVER: z.enum(['db', 's3']).default('db'),
+  S3_ENDPOINT: z.string().url().optional(),
+  S3_REGION: z.string().default('auto'),
+  S3_BUCKET: z.string().optional(),
+  S3_ACCESS_KEY_ID: z.string().optional(),
+  S3_SECRET_ACCESS_KEY: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -47,6 +60,17 @@ export const env = parsed.data;
 
 if (env.MESSAGING_PROVIDER === 'whatsapp_cloud' && !env.WHATSAPP_ACCESS_TOKEN) {
   throw new Error('MESSAGING_PROVIDER=whatsapp_cloud requires WHATSAPP_ACCESS_TOKEN');
+}
+
+// Fail at boot rather than at the moment a doctor tries to upload a report: a
+// half-configured bucket looks fine until someone needs it.
+if (env.STORAGE_DRIVER === 's3') {
+  const missing = (
+    ['S3_ENDPOINT', 'S3_BUCKET', 'S3_ACCESS_KEY_ID', 'S3_SECRET_ACCESS_KEY'] as const
+  ).filter((k) => !env[k]);
+  if (missing.length > 0) {
+    throw new Error(`STORAGE_DRIVER=s3 requires ${missing.join(', ')}`);
+  }
 }
 
 // Without a stable secret, dashboard cookies would be signed with a key that
