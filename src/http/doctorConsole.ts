@@ -13,6 +13,7 @@ import {
   reopenDay,
   upcomingLeave,
 } from '../domain/leave';
+import { cancelBookings, loadBookingsByIds, partitionByReachability } from '../domain/cancellation';
 import { type DayKey, type WorkingHours, DAY_KEYS } from '../domain/slots';
 import {
   buildWorkingHours,
@@ -46,7 +47,12 @@ import {
   reportsPage,
 } from './web/doctorViews';
 import { calendarPage, slotBookPage } from './web/calendarView';
-import { type CallListEntry, closeDayConfirmPage, closeDayResultPage } from './web/leaveView';
+import {
+  type CallListEntry,
+  cancelSelectedConfirmPage,
+  cancellationResultPage,
+  closeDayConfirmPage,
+} from './web/leaveView';
 import { delayConfirmPage, queueBody, queuePageV2, walkInPage } from './web/queueView';
 import { settingsPage } from './web/settingsView';
 import { errorPage } from './web/views';
@@ -932,6 +938,88 @@ doctorConsoleRouter.post(
   },
 );
 
+// ---- cancelling a few bookings ----
+
+/**
+ * A checkbox group posts one value per ticked box, so a single selection arrives
+ * as a string and several as an array. Express does not normalise that.
+ */
+function idsFrom(raw: unknown): string[] {
+  const list = Array.isArray(raw) ? raw : raw === undefined ? [] : [raw];
+  return list.filter((v): v is string => typeof v === 'string' && v !== '').slice(0, 100);
+}
+
+/**
+ * Step one: the doctor ticked some patients on the queue. Show who, the message
+ * they will get, and how many of them we cannot actually reach.
+ */
+doctorConsoleRouter.post(
+  '/app/queue/cancel/confirm',
+  requireDoctorAuth,
+  requireFormCsrf,
+  async (req, res) => {
+    const doctor = req.doctor!;
+    const s = c(doctor.defaultLanguage);
+    const ids = idsFrom((req.body ?? {})['appointmentId']);
+
+    // loadBookingsByIds is scoped to this doctor, so a crafted id is simply
+    // absent rather than an error — and an empty selection lands here too.
+    const selected = await loadBookingsByIds(doctor.id, ids);
+    if (selected.length === 0) {
+      res.redirect(302, `/app/queue?flash=${encodeURIComponent(s.nothingSelected)}`);
+      return;
+    }
+
+    const { reachable, unreachable } = partitionByReachability(selected);
+
+    res.type('html').send(
+      cancelSelectedConfirmPage({
+        doctor,
+        selected: selected.map((a) => ({ id: a.id, ...callEntry(doctor, a) })),
+        reachable: reachable.length,
+        unreachable: callListFrom(doctor, unreachable),
+        messagePreview: t(doctor.defaultLanguage, 'tokenBookingCancelledByClinic', {
+          tokenNumber: selected[0]?.tokenNumber ?? 1,
+          date: formatDateForPatient(selected[0]?.date ?? clinicToday(doctor.timezone)),
+        }),
+        queueCount: await waitingCount(doctor.id, doctor.timezone),
+        csrfToken: req.csrfToken ?? '',
+      }),
+    );
+  },
+);
+
+/** Step two. Re-loads from scratch; it never trusts that step one ran. */
+doctorConsoleRouter.post(
+  '/app/queue/cancel',
+  requireDoctorAuth,
+  requireFormCsrf,
+  async (req, res) => {
+    const doctor = req.doctor!;
+    const s = c(doctor.defaultLanguage);
+    const selected = await loadBookingsByIds(doctor.id, idsFrom((req.body ?? {})['appointmentId']));
+    if (selected.length === 0) {
+      res.redirect(302, `/app/queue?flash=${encodeURIComponent(s.nothingSelected)}`);
+      return;
+    }
+
+    const { unreachable } = partitionByReachability(selected);
+    const { cancelled } = await cancelBookings(doctor, selected);
+
+    res.type('html').send(
+      cancellationResultPage({
+        doctor,
+        title: s.cancelSelected,
+        banner: s.bookingsCancelled(cancelled),
+        headline: s.bookingsCancelled(cancelled),
+        unreachable: callListFrom(doctor, unreachable),
+        queueCount: await waitingCount(doctor.id, doctor.timezone),
+        csrfToken: req.csrfToken ?? '',
+      }),
+    );
+  },
+);
+
 // ---- closing a day (emergency / leave) ----
 
 const dayBody = z.object({ date: z.string() });
@@ -947,14 +1035,19 @@ function closableDate(doctor: Doctor, raw: unknown): Date | null {
   return date;
 }
 
-function callListFrom(doctor: Doctor, rows: WithPatient[]): CallListEntry[] {
-  return rows.map((a) => ({
+/** How one booking is shown in a call list or a confirmation. */
+function callEntry(doctor: Doctor, a: WithPatient): CallListEntry {
+  return {
     name: a.patient.name ?? 'Unknown',
     phone: a.patient.phone,
     when: a.slotStart
       ? formatTimeForPatient(a.slotStart, doctor.timezone)
       : `#${a.tokenNumber ?? '?'}`,
-  }));
+  };
+}
+
+function callListFrom(doctor: Doctor, rows: WithPatient[]): CallListEntry[] {
+  return rows.map((a) => callEntry(doctor, a));
 }
 
 /**
@@ -1015,10 +1108,11 @@ doctorConsoleRouter.post(
     const { cancelled, unreachable } = await closeDay(doctor, date);
 
     res.type('html').send(
-      closeDayResultPage({
+      cancellationResultPage({
         doctor,
-        dateLabel: formatDateForPatient(date),
-        cancelled,
+        title: s.dayClosed,
+        banner: `${s.dayClosed} — ${formatDateForPatient(date)}`,
+        headline: s.dayClosedSub(cancelled),
         unreachable: callListFrom(doctor, unreachable),
         queueCount: await waitingCount(doctor.id, doctor.timezone),
         csrfToken: req.csrfToken ?? '',

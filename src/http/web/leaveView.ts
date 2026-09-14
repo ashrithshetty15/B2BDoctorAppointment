@@ -115,14 +115,93 @@ export function closeDayConfirmPage(opts: {
 }
 
 /**
+ * Confirmation for cancelling a hand-picked set rather than a whole day.
+ *
+ * Lists them by name: the doctor ticked boxes on a busy queue, and the one thing
+ * worth double-checking is that these are the right people.
+ */
+export function cancelSelectedConfirmPage(opts: {
+  doctor: Doctor;
+  selected: (CallListEntry & { id: string })[];
+  reachable: number;
+  unreachable: CallListEntry[];
+  messagePreview: string;
+  queueCount: number;
+  csrfToken: string;
+}): string {
+  const s = c(opts.doctor.defaultLanguage);
+  const nav = navFor(opts.doctor, opts.queueCount, opts.csrfToken);
+
+  return page(
+    { title: s.cancelSelected, csrfToken: opts.csrfToken, bare: true },
+    html`
+      ${doctorHeader(nav)}
+      <main>
+        <div class="card">
+          <h2>${s.cancelNBookings(opts.selected.length)}</h2>
+
+          <ul class="calllist">
+            ${opts.selected.map(
+              (p) => html`
+                <li>
+                  <span class="nm">${p.name}</span>
+                  <span class="sub">${p.when}</span>
+                </li>
+              `,
+            )}
+          </ul>
+
+          <div class="hint" style="margin-top:var(--s4)">${s.messagePreview}</div>
+          <div class="preview">${opts.messagePreview}</div>
+
+          <div class="reach">
+            ${opts.reachable > 0
+              ? html`<div class="r yes">
+                  <span class="ic" aria-hidden="true">✓</span>
+                  <span>${s.willBeMessaged(opts.reachable)}</span>
+                </div>`
+              : ''}
+            ${opts.unreachable.length > 0
+              ? html`<div class="r no">
+                  <span class="ic" aria-hidden="true">!</span>
+                  <span>
+                    ${s.cannotBeMessaged(opts.unreachable.length)}
+                    <br /><span class="sub">${s.cannotBeMessagedWhy}</span>
+                  </span>
+                </div>`
+              : ''}
+          </div>
+
+          <form method="post" action="/app/queue/cancel">
+            <input type="hidden" name="_csrf" value="${opts.csrfToken}" />
+            ${opts.selected.map(
+              (p) => html`<input type="hidden" name="appointmentId" value="${p.id}" />`,
+            )}
+            <div class="actions">
+              <button type="submit">${s.cancelTheseConfirm}</button>
+              <a href="/app/queue"><button class="secondary" type="button">${s.cancel}</button></a>
+            </div>
+          </form>
+        </div>
+      </main>
+      ${doctorBottomNav(nav)}
+    `,
+  );
+}
+
+/**
  * Rendered directly from the POST rather than redirected to, because the call
  * list cannot survive a flash string — and it is the one thing on this page the
  * doctor has to act on.
+ *
+ * Shared by closing a day and cancelling a few: the aftermath is identical, only
+ * the headline differs.
  */
-export function closeDayResultPage(opts: {
+export function cancellationResultPage(opts: {
   doctor: Doctor;
-  dateLabel: string;
-  cancelled: number;
+  title: string;
+  banner: string;
+  headline: string;
   unreachable: CallListEntry[];
   queueCount: number;
   csrfToken: string;
@@ -131,14 +210,14 @@ export function closeDayResultPage(opts: {
   const nav = navFor(opts.doctor, opts.queueCount, opts.csrfToken);
 
   return page(
-    { title: s.dayClosed, csrfToken: opts.csrfToken, bare: true },
+    { title: opts.title, csrfToken: opts.csrfToken, bare: true },
     html`
       ${doctorHeader(nav)}
       <main>
-        <div class="ok">${s.dayClosed} — ${opts.dateLabel}</div>
+        <div class="ok">${opts.banner}</div>
 
         <div class="card">
-          <h2>${s.dayClosedSub(opts.cancelled)}</h2>
+          <h2>${opts.headline}</h2>
 
           ${opts.unreachable.length === 0
             ? html`<p class="sub">${s.everyoneNotified}</p>`

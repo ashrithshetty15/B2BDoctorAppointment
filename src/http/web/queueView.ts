@@ -540,6 +540,57 @@ function delaySheet(opts: {
   `;
 }
 
+// ---- cancel a few patients ----
+
+/**
+ * Deliberately a sheet rather than a checkbox on each queue row.
+ *
+ * The rows live inside the polled region, so a tick would be wiped the next time
+ * the queue refreshed — mid-selection, without explanation. Out here the list is
+ * rendered once and stays put. It also keeps cancelling off the main flow, which
+ * is calling the next patient.
+ */
+function cancelSelectedSheet(opts: {
+  rows: QueueRow[];
+  s: ConsoleStrings;
+  language: Language;
+  timezone: string;
+  csrfToken: string;
+}): RawHtml {
+  const { rows, s, language, timezone, csrfToken } = opts;
+  if (rows.length === 0) return html``;
+
+  return html`
+    <details class="card">
+      <summary style="cursor:pointer;font-weight:650;list-style:none;min-height:44px;display:flex;align-items:center">
+        ${s.cancelSelected}
+      </summary>
+      <p class="sub" style="margin-top:12px">${s.cancelSelectedSub}</p>
+
+      <form method="post" action="/app/queue/cancel/confirm">
+        <input type="hidden" name="_csrf" value="${csrfToken}" />
+        <div class="picklist">
+          ${rows.map(
+            (row) => html`
+              <label class="pick">
+                <input type="checkbox" name="appointmentId" value="${row.appointmentId}" />
+                <span class="who">
+                  <span class="nm">${personName(row.patient.name, language)}</span>
+                  <span class="sub"
+                    >${row.tokenNumber !== null ? html`#${row.tokenNumber}` : ''}
+                    ${row.slotStart ? timeOnly(row.slotStart, timezone) : ''}</span
+                  >
+                </span>
+              </label>
+            `,
+          )}
+        </div>
+        <button class="secondary" type="submit">${s.cancelSelected}</button>
+      </form>
+    </details>
+  `;
+}
+
 // ---- emergency: close today ----
 
 /**
@@ -709,7 +760,20 @@ export function queuePageV2(opts: {
 
         ${opts.onLeave
           ? ''
-          : closeTodaySheet({ s, today: opts.today, csrfToken: opts.csrfToken })}
+          : html`
+              ${cancelSelectedSheet({
+                // Anything still standing can be cancelled, including whoever is
+                // in the room — a doctor cutting the list short means them too.
+                rows: opts.rows.filter((r) =>
+                  ['BOOKED', 'ARRIVED', 'IN_PROGRESS'].includes(r.status),
+                ),
+                s,
+                language: opts.doctor.defaultLanguage,
+                timezone: opts.doctor.timezone,
+                csrfToken: opts.csrfToken,
+              })}
+              ${closeTodaySheet({ s, today: opts.today, csrfToken: opts.csrfToken })}
+            `}
       </main>
       ${doctorBottomNav(navOpts)}
     `,

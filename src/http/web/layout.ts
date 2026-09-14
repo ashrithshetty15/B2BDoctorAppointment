@@ -402,6 +402,18 @@ details.note button{margin-top:var(--s2)}
 .slotrow .acts button{margin:0;padding:var(--s2) var(--s4);min-height:38px;font-size:var(--t-sm)}
 @media (max-width:600px){.slotrow{padding:var(--s3) var(--s4);gap:var(--s3)}}
 
+/* ---- pick a few patients to cancel ---- */
+.picklist{display:flex;flex-direction:column;gap:2px;margin:var(--s3) 0}
+/* The whole row is the label, so the tap target is the row not the 16px box. */
+label.pick{display:flex;align-items:center;gap:var(--s3);margin:0;
+  padding:var(--s2) var(--s3);border-radius:var(--r-sm);background:var(--surface-2);
+  font-weight:500;cursor:pointer;min-height:var(--tap)}
+label.pick:hover{background:var(--accent-soft)}
+label.pick input[type=checkbox]{width:20px;height:20px;flex:0 0 auto;margin:0;accent-color:var(--accent)}
+label.pick .who{display:flex;align-items:baseline;gap:var(--s3);flex-wrap:wrap;min-width:0}
+label.pick .nm{font-weight:650;overflow-wrap:anywhere}
+label.pick .sub{font-variant-numeric:tabular-nums}
+
 /* ---- time off / day closure ---- */
 /* A form that sits inside a dl row without breaking the grid. */
 form.inline{margin:0;display:inline-block}

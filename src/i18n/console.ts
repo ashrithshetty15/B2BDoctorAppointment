@@ -123,6 +123,14 @@ export interface ConsoleStrings {
   hoursSaved: string;
   hoursClashTitle: string;
   hoursClashBody: string;
+  // ---- cancelling selected patients ----
+  cancelSelected: string;
+  cancelSelectedSub: string;
+  cancelNBookings: (n: number) => string;
+  cancelTheseConfirm: string;
+  nothingSelected: string;
+  bookingsCancelled: (n: number) => string;
+  selectToCancel: string;
   // ---- closing a day ----
   timeOff: string;
   timeOffSub: string;
@@ -295,6 +303,13 @@ const en: ConsoleStrings = {
   hoursSaved: 'Working hours saved',
   hoursClashTitle: 'These hours would leave existing bookings outside your working time',
   hoursClashBody: 'Close those days or move the bookings first, then change your hours.',
+  cancelSelected: 'Cancel selected',
+  cancelSelectedSub: 'Tick the patients you cannot see today. They are told, and their booking is cancelled.',
+  cancelNBookings: (n) => `Cancel ${n} booking${n === 1 ? '' : 's'}`,
+  cancelTheseConfirm: 'Cancel these bookings',
+  nothingSelected: 'Pick at least one patient first.',
+  bookingsCancelled: (n) => `${n} booking${n === 1 ? '' : 's'} cancelled.`,
+  selectToCancel: 'Cancel this booking',
   timeOff: 'Time off',
   timeOffSub: 'Close a day so nothing new can be booked, and cancel what already is.',
   closeDay: 'Close this day',
@@ -470,6 +485,13 @@ const kn: ConsoleStrings = {
   hoursSaved: 'ಕೆಲಸದ ಸಮಯ ಉಳಿಸಲಾಗಿದೆ',
   hoursClashTitle: 'ಈ ಸಮಯದಿಂದ ಈಗಾಗಲೇ ಇರುವ ಕೆಲವು ಬುಕಿಂಗ್‌ಗಳು ಕೆಲಸದ ಸಮಯದ ಹೊರಗೆ ಉಳಿಯುತ್ತವೆ',
   hoursClashBody: 'ಮೊದಲು ಆ ದಿನಗಳನ್ನು ಮುಚ್ಚಿ ಅಥವಾ ಬುಕಿಂಗ್ ಬದಲಾಯಿಸಿ, ನಂತರ ಸಮಯ ಬದಲಾಯಿಸಿ.',
+  cancelSelected: 'ಆಯ್ಕೆ ಮಾಡಿದವನ್ನು ರದ್ದುಮಾಡಿ',
+  cancelSelectedSub: 'ಇವತ್ತು ನೋಡಲು ಆಗದ ರೋಗಿಗಳನ್ನು ಗುರುತಿಸಿ. ಅವರಿಗೆ ತಿಳಿಸಲಾಗುತ್ತದೆ ಮತ್ತು ಬುಕಿಂಗ್ ರದ್ದಾಗುತ್ತದೆ.',
+  cancelNBookings: (n) => `${n} ಬುಕಿಂಗ್ ರದ್ದುಮಾಡಿ`,
+  cancelTheseConfirm: 'ಈ ಬುಕಿಂಗ್‌ಗಳನ್ನು ರದ್ದುಮಾಡಿ',
+  nothingSelected: 'ಮೊದಲು ಒಬ್ಬ ರೋಗಿಯನ್ನಾದರೂ ಆಯ್ಕೆ ಮಾಡಿ.',
+  bookingsCancelled: (n) => `${n} ಬುಕಿಂಗ್ ರದ್ದುಮಾಡಲಾಗಿದೆ.`,
+  selectToCancel: 'ಈ ಬುಕಿಂಗ್ ರದ್ದುಮಾಡಿ',
   timeOff: 'ರಜೆ',
   timeOffSub: 'ಹೊಸ ಬುಕಿಂಗ್ ನಿಲ್ಲಿಸಲು ದಿನವನ್ನು ಮುಚ್ಚಿ, ಮತ್ತು ಇರುವ ಬುಕಿಂಗ್ ರದ್ದುಮಾಡಿ.',
   closeDay: 'ಈ ದಿನ ಮುಚ್ಚಿ',
