@@ -8,3 +8,9 @@ coverage/
 
 # Machine-local Claude Code settings (shared settings.json may be committed)
 .claude/settings.local.json
+
+# Postman CLI local state: scratch requests, plus a resources.yaml carrying a
+# personal workspace id. The collection and environment that teammates actually
+# need are committed under postman/ directly.
+postman/.postman/
+postman/postman/
