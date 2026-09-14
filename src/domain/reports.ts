@@ -315,6 +315,8 @@ export async function patientHistory(doctorId: string, patientId: string) {
         startedAt: true,
         completedAt: true,
         consultMins: true,
+        followUpOn: true,
+        followUpSentAt: true,
         // The remark the desk or the doctor wrote on the queue. Without this the
         // patient page — the one place anyone goes looking for it later — showed
         // nothing at all.

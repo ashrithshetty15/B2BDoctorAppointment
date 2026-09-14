@@ -352,22 +352,25 @@ dl.kv dt:first-of-type,dl.kv dt:first-of-type+dd{border-top:0}
 }
 
 /* ---- patient rows ---- */
-a.prow{display:flex;align-items:center;gap:var(--s4);padding:var(--s3) var(--s5);
+/* Not scoped to <a>: the follow-up list needs a row with two destinations in it,
+   which cannot itself be an anchor. Hover stays anchor-only so a non-clickable
+   row does not pretend otherwise. */
+.prow{display:flex;align-items:center;gap:var(--s4);padding:var(--s3) var(--s5);
   border-top:1px solid var(--line);text-decoration:none;color:inherit}
-a.prow:first-child{border-top:0}
+.prow:first-child{border-top:0}
 a.prow:hover{background:var(--surface-2)}
-a.prow .body{flex:1 1 auto;min-width:0}
-a.prow .nm{display:block;font-weight:600;font-size:var(--t-md);overflow-wrap:anywhere}
-a.prow .sub{display:flex;gap:var(--s2);align-items:center;flex-wrap:wrap;
+.prow .body{flex:1 1 auto;min-width:0}
+.prow .nm{display:block;font-weight:600;font-size:var(--t-md);overflow-wrap:anywhere}
+.prow .sub{display:flex;gap:var(--s2);align-items:center;flex-wrap:wrap;
   font-size:var(--t-sm);color:var(--ink-3);margin-top:1px}
-a.prow .meta{flex:0 0 auto;text-align:right;line-height:1.25}
-a.prow .visits{display:block;font-size:var(--t-lg);font-weight:650;
+.prow .meta{flex:0 0 auto;text-align:right;line-height:1.25}
+.prow .visits{display:block;font-size:var(--t-lg);font-weight:650;
   font-variant-numeric:tabular-nums}
-a.prow .meta .l{display:block;font-size:var(--t-xs);color:var(--ink-3);
+.prow .meta .l{display:block;font-size:var(--t-xs);color:var(--ink-3);
   text-transform:uppercase;letter-spacing:.04em}
-a.prow .last{display:block;font-size:var(--t-xs);color:var(--ink-3);margin-top:2px;
+.prow .last{display:block;font-size:var(--t-xs);color:var(--ink-3);margin-top:2px;
   font-variant-numeric:tabular-nums}
-@media (max-width:600px){a.prow{padding:var(--s3) var(--s4);gap:var(--s3)}}
+@media (max-width:600px){.prow{padding:var(--s3) var(--s4);gap:var(--s3)}}
 
 /* Remark on a row: quiet until it has content, never competing with the name. */
 details.note{margin-top:var(--s2)}

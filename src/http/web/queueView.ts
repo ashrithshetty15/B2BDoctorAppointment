@@ -272,6 +272,10 @@ function servingRow(opts: {
         ${noteBlock({ row, s, csrfToken, back: '/app/queue' })}
       </div>
       <div class="acts">
+        ${/* A link, not a sheet: this region is replaced every 30s. */ ''}
+        <a href="/app/appointment/${row.appointmentId}/followup?back=/app/queue"
+          ><button class="ghost" type="button">${s.followUp}</button></a
+        >
         <form method="post" action="/app/queue/${row.appointmentId}/recall">
           <input type="hidden" name="_csrf" value="${csrfToken}" />
           <button class="ghost" type="submit">${s.recall}</button>

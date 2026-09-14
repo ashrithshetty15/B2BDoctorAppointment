@@ -1,5 +1,7 @@
 import type { Job } from 'bullmq';
+import { env } from '../../config/env';
 import { prisma } from '../../db/prisma';
+import { getMessagingAdapter } from '../../messaging';
 import { outboundChannelFor } from '../../domain/doctors';
 import { dayBeforeReminderAt, hourBeforeReminderAt } from '../../domain/slots';
 import { t } from '../../i18n/templates';
@@ -131,6 +133,63 @@ async function sweepDueReminders(): Promise<number> {
     const dueAt = dayBeforeReminderAt(row.date, row.doctor.timezone);
     if (dueAt && dueAt <= now) {
       if (await sendReminder(row.id, 'DAY_BEFORE')) sent += 1;
+    }
+  }
+
+  sent += await sweepDueFollowUps();
+  return sent;
+}
+
+/**
+ * Send follow-up reminders that have come due.
+ *
+ * Rides the existing 10-minute sweep rather than scheduling delayed jobs: a
+ * follow-up is weeks out, and a delayed job that far ahead is exactly the thing
+ * a Redis flush loses. The followUpSentAt column makes it idempotent.
+ *
+ * A follow-up is always outside WhatsApp's 24-hour free-form window, so it can
+ * only go as an approved template. With none configured this does nothing at all
+ * — deliberately. The alternative is attempting a send that Meta rejects with an
+ * error our adapter cannot distinguish from a transient failure, which would
+ * retry five times, drop it, and mark nothing: the clinic would believe patients
+ * had been reminded when none had.
+ */
+async function sweepDueFollowUps(): Promise<number> {
+  const templateName = env.WHATSAPP_FOLLOWUP_TEMPLATE;
+  if (!templateName) return 0;
+
+  const adapter = getMessagingAdapter();
+  if (!adapter.sendTemplate) return 0;
+
+  const today = new Date();
+  const due = await prisma.appointment.findMany({
+    where: { followUpOn: { lte: today }, followUpSentAt: null },
+    include: { patient: true, doctor: true },
+    take: 200,
+  });
+
+  let sent = 0;
+  for (const appointment of due) {
+    try {
+      const channel = outboundChannelFor(appointment.doctor);
+      await adapter.sendTemplate({
+        to: appointment.patient.phone,
+        templateName,
+        // The patient's own language, not the clinic's default. The template
+        // must be approved in this language or Meta refuses it.
+        languageCode: appointment.patient.language === 'KN' ? 'kn' : 'en_US',
+        params: [appointment.patient.name ?? '', appointment.doctor.name],
+        ...(channel ? { channelAddress: channel } : {}),
+      });
+      await prisma.appointment.update({
+        where: { id: appointment.id },
+        data: { followUpSentAt: new Date() },
+      });
+      sent += 1;
+    } catch (err) {
+      // Left unstamped so the next sweep retries, and so the console keeps
+      // showing it as pending rather than claiming the patient was told.
+      logger.warn({ err, appointmentId: appointment.id }, 'Follow-up send failed');
     }
   }
 

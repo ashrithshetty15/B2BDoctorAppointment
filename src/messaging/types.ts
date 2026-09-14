@@ -48,6 +48,14 @@ export interface TemplateMessage {
   templateName: string;
   params?: string[];
   channelAddress?: string;
+  /**
+   * Meta language code for the approved template, e.g. 'en_US' or 'kn'.
+   *
+   * A template is approved per language, so this has to match one that exists or
+   * Meta rejects the send. Defaults to en_US, which is what the missed-call
+   * auto-reply relied on before this was configurable.
+   */
+  languageCode?: string;
 }
 
 /** Result of a provider webhook GET verification handshake. */

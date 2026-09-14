@@ -1,6 +1,7 @@
 import type { Doctor } from '@prisma/client';
 import { type Response, Router } from 'express';
 import { z } from 'zod';
+import { env } from '../config/env';
 import { prisma } from '../db/prisma';
 import { applyStatusChange, toAppointmentStatus } from '../domain/appointments';
 import { buildReport, listPatientsForDoctor, patientHistory } from '../domain/reports';
@@ -14,6 +15,15 @@ import {
   upcomingLeave,
 } from '../domain/leave';
 import { cancelBookings, loadBookingsByIds, partitionByReachability } from '../domain/cancellation';
+import {
+  addDays,
+  clearFollowUp,
+  dueFollowUps,
+  followUpCounts,
+  presetDays,
+  setFollowUp,
+  upcomingFollowUps,
+} from '../domain/followUp';
 import { type DayKey, type WorkingHours, DAY_KEYS } from '../domain/slots';
 import {
   buildWorkingHours,
@@ -47,6 +57,7 @@ import {
   reportsPage,
 } from './web/doctorViews';
 import { calendarPage, slotBookPage } from './web/calendarView';
+import { followUpsPage, setFollowUpPage } from './web/followUpView';
 import {
   type CallListEntry,
   cancelSelectedConfirmPage,
@@ -771,13 +782,20 @@ doctorConsoleRouter.get('/app/bookings', requireDoctorAuth, async (req, res) => 
 
 doctorConsoleRouter.get('/app/patients', requireDoctorAuth, async (req, res) => {
   const doctor = req.doctor!;
-  const [patients, queueCount] = await Promise.all([
+  const [patients, queueCount, counts] = await Promise.all([
     listPatientsForDoctor(doctor.id),
     waitingCount(doctor.id, doctor.timezone),
+    followUpCounts(doctor, clinicToday(doctor.timezone)),
   ]);
-  res
-    .type('html')
-    .send(patientsPage({ doctor, patients, queueCount, csrfToken: req.csrfToken ?? '' }));
+  res.type('html').send(
+    patientsPage({
+      doctor,
+      patients,
+      followUpsDue: counts.due,
+      queueCount,
+      csrfToken: req.csrfToken ?? '',
+    }),
+  );
 });
 
 doctorConsoleRouter.get('/app/patients/:id', requireDoctorAuth, async (req, res) => {
@@ -937,6 +955,133 @@ doctorConsoleRouter.post(
     );
   },
 );
+
+// ---- follow-ups ----
+
+/**
+ * Set a follow-up for one visit. A page rather than an inline sheet because the
+ * queue replaces its live region every 30 seconds, which would collapse an open
+ * sheet while the doctor was deciding.
+ */
+doctorConsoleRouter.get(
+  '/app/appointment/:appointmentId/followup',
+  requireDoctorAuth,
+  async (req, res) => {
+    const doctor = req.doctor!;
+    const appointment = await prisma.appointment.findFirst({
+      where: { id: req.params['appointmentId'] ?? '', doctorId: doctor.id },
+      select: { id: true, followUpOn: true, patient: { select: { name: true } } },
+    });
+    if (!appointment) {
+      notFound(res, 'Appointment not found.');
+      return;
+    }
+
+    const back = safeNextPath(
+      typeof req.query['back'] === 'string' ? req.query['back'] : null,
+    );
+
+    res.type('html').send(
+      setFollowUpPage({
+        doctor,
+        appointmentId: appointment.id,
+        patientName: appointment.patient.name,
+        currentDue: appointment.followUpOn ? formatDateForPatient(appointment.followUpOn) : null,
+        minDate: formatDateOnly(clinicToday(doctor.timezone)),
+        back: back ?? '/app/queue',
+        queueCount: await waitingCount(doctor.id, doctor.timezone),
+        csrfToken: req.csrfToken ?? '',
+      }),
+    );
+  },
+);
+
+doctorConsoleRouter.post(
+  '/app/appointment/:appointmentId/followup',
+  requireDoctorAuth,
+  requireFormCsrf,
+  async (req, res) => {
+    const doctor = req.doctor!;
+    const s = c(doctor.defaultLanguage);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const today = clinicToday(doctor.timezone);
+
+    // A chip carries a preset offset from today; the date field carries a date.
+    const days = typeof body['preset'] === 'string' ? presetDays(body['preset']) : null;
+    const picked =
+      typeof body['date'] === 'string' && body['date'] !== '' ? parseDateOnly(body['date']) : null;
+    const dueOn = days !== null ? addDays(today, days) : picked;
+
+    const back = typeof body['back'] === 'string' ? safeNextPath(body['back']) : null;
+    const target = back ?? '/app/queue';
+
+    if (!dueOn || formatDateOnly(dueOn) < formatDateOnly(today)) {
+      res.redirect(302, `${target}?flash=${encodeURIComponent(s.pastDate)}`);
+      return;
+    }
+
+    const ok = await setFollowUp(doctor.id, req.params['appointmentId'] ?? '', dueOn);
+    if (!ok) {
+      notFound(res, 'Appointment not found.');
+      return;
+    }
+
+    res.redirect(
+      302,
+      `${target}?flash=${encodeURIComponent(s.followUpSet(formatDateForPatient(dueOn)))}`,
+    );
+  },
+);
+
+doctorConsoleRouter.post(
+  '/app/appointment/:appointmentId/followup/clear',
+  requireDoctorAuth,
+  requireFormCsrf,
+  async (req, res) => {
+    const doctor = req.doctor!;
+    const s = c(doctor.defaultLanguage);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const ok = await clearFollowUp(doctor.id, req.params['appointmentId'] ?? '');
+    if (!ok) {
+      notFound(res, 'Appointment not found.');
+      return;
+    }
+    const back = typeof body['back'] === 'string' ? safeNextPath(body['back']) : null;
+    res.redirect(302, `${back ?? '/app/queue'}?flash=${encodeURIComponent(s.followUpCleared)}`);
+  },
+);
+
+/** The desk's worklist: who is due back, and who is coming up. */
+doctorConsoleRouter.get('/app/followups', requireDoctorAuth, async (req, res) => {
+  const doctor = req.doctor!;
+  const today = clinicToday(doctor.timezone);
+  const [due, upcoming, queueCount] = await Promise.all([
+    dueFollowUps(doctor.id, today),
+    upcomingFollowUps(doctor.id, today),
+    waitingCount(doctor.id, doctor.timezone),
+  ]);
+
+  const s = c(doctor.defaultLanguage);
+  const decorate = (r: (typeof due)[number]) => ({
+    ...r,
+    dueLabel: s.followUpDueOn(formatDateForPatient(r.dueOn)),
+    seenLabel: s.followUpVisited(formatDateForPatient(r.visitedOn)),
+  });
+
+  res.type('html').send(
+    followUpsPage({
+      doctor,
+      due: due.map(decorate),
+      upcoming: upcoming.map(decorate),
+      // Follow-ups fall due long after the 24-hour free-form window, so they can
+      // only ever go as an approved template.
+      canSend: Boolean(env.WHATSAPP_FOLLOWUP_TEMPLATE),
+      queueCount,
+      csrfToken: req.csrfToken ?? '',
+      ...(typeof req.query['flash'] === 'string' ? { flash: req.query['flash'] } : {}),
+    }),
+  );
+});
 
 // ---- cancelling a few bookings ----
 

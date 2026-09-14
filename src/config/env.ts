@@ -23,6 +23,16 @@ const schema = z.object({
   WHATSAPP_VERIFY_TOKEN: z.string().default('change-me'),
   WHATSAPP_APP_SECRET: z.string().optional(),
 
+  /**
+   * Approved Meta template used for follow-up reminders.
+   *
+   * Required for follow-ups to send at all: they fall due days or weeks after
+   * the visit, always outside the 24-hour free-form window. Unset means due
+   * follow-ups stay pending and visible in the console rather than being
+   * attempted and silently dropped.
+   */
+  WHATSAPP_FOLLOWUP_TEMPLATE: z.string().optional(),
+
   DEFAULT_DOCTOR_ID: z.string().optional(),
   /** Idle expiry for a patient's WhatsApp conversation state. */
   SESSION_TTL_MINUTES: z.coerce.number().int().positive().default(120),

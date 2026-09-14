@@ -172,7 +172,7 @@ export class WhatsAppCloudAdapter implements MessagingAdapter {
         type: 'template',
         template: {
           name: message.templateName,
-          language: { code: 'en_US' },
+          language: { code: message.languageCode ?? 'en_US' },
           ...(message.params && message.params.length > 0
             ? {
                 body: {

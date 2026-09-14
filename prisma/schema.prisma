@@ -195,6 +195,21 @@ model Appointment {
   dayBeforeReminderSentAt  DateTime? @map("day_before_reminder_sent_at")
   hourBeforeReminderSentAt DateTime? @map("hour_before_reminder_sent_at")
 
+  // ---- Follow-up ----
+  /// Calendar date the doctor wants this patient to come back, decided during
+  /// the consult. Attached to the visit that produced it rather than to the
+  /// patient, so the clinical reason stays with its appointment and its notes.
+  followUpOn DateTime? @map("follow_up_on") @db.Date
+
+  /// When the follow-up message actually went out. Null while pending.
+  ///
+  /// A follow-up is always sent days or weeks after the visit, which is always
+  /// outside WhatsApp's 24-hour free-form window — so unlike every other message
+  /// here it can only ever be delivered as an approved template. Until one is
+  /// configured, these stay pending and visible in the console so the desk can
+  /// phone instead; nothing is silently dropped.
+  followUpSentAt DateTime? @map("follow_up_sent_at")
+
   /// Last queue position pushed to this patient — used to suppress no-op updates.
   lastNotifiedPosition Int? @map("last_notified_position")
 
@@ -210,6 +225,8 @@ model Appointment {
   @@index([doctorId, date, status])
   @@index([patientId, date])
   @@index([status, slotStart])
+  /// The due-follow-ups sweep: everything due on or before today, not yet sent.
+  @@index([doctorId, followUpOn, followUpSentAt])
   @@map("appointments")
 }
 

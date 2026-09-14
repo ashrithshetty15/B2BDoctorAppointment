@@ -167,6 +167,8 @@ export function bookingsPage(opts: {
 export function patientsPage(opts: {
   doctor: Doctor;
   patients: PatientRow[];
+  /** Drives the badge on the follow-ups link. */
+  followUpsDue: number;
   queueCount: number;
   csrfToken: string;
 }): string {
@@ -182,6 +184,23 @@ export function patientsPage(opts: {
     html`
       ${doctorHeader(navFor(opts.doctor, 'patients', opts.queueCount, opts.csrfToken))}
       <main>
+      ${/* Follow-ups hang off Patients rather than taking a fifth nav tab. The
+           badge is what makes a due list findable at all. */ ''}
+      <div class="card flush">
+        <a class="prow" href="/app/followups">
+          <span class="body">
+            <span class="nm">${s.followUp}</span>
+            <span class="sub">${s.followUpListSub}</span>
+          </span>
+          <span class="meta">
+            ${opts.followUpsDue > 0
+              ? html`<span class="visits">${opts.followUpsDue}</span>
+                  <span class="l">${s.followUpDue}</span>`
+              : html`<span class="l">${s.followUpUpcoming}</span>`}
+          </span>
+        </a>
+      </div>
+
       ${opts.patients.length === 0
         ? html`<div class="card">
             <div class="empty">
@@ -260,6 +279,8 @@ export interface VisitRow {
   arrivedAt: Date | null;
   startedAt: Date | null;
   notes: string | null;
+  followUpOn: Date | null;
+  followUpSentAt: Date | null;
   documents: VisitDocument[];
 }
 
@@ -495,6 +516,14 @@ export function patientDetailPage(opts: {
                               keep the content flush. */ ''}
                         ${a.notes
                           ? html`<p class="notetext"><strong>${s.remarkLabel}:</strong> ${a.notes}</p>`
+                          : ''}
+                        ${a.followUpOn
+                          ? html`<div class="vmeta">
+                              <span class="pill ${a.followUpSentAt ? 'done' : 'arrived'}"
+                                >${s.followUpDueOn(formatDateForPatient(a.followUpOn))}</span
+                              >
+                              ${a.followUpSentAt ? '' : html`<span>${s.followUpPending}</span>`}
+                            </div>`
                           : ''}
                         ${documentsBlock({
                           visit: a,

@@ -123,6 +123,23 @@ export interface ConsoleStrings {
   hoursSaved: string;
   hoursClashTitle: string;
   hoursClashBody: string;
+  // ---- follow-ups ----
+  followUp: string;
+  followUpSub: string;
+  followUpListSub: string;
+  setFollowUp: string;
+  followUpSet: (date: string) => string;
+  followUpCleared: string;
+  clearFollowUp: string;
+  followUpDue: string;
+  followUpUpcoming: string;
+  noFollowUps: string;
+  followUpPending: string;
+  followUpSentOn: (date: string) => string;
+  followUpNotSending: string;
+  followUpDueOn: (date: string) => string;
+  followUpVisited: (date: string) => string;
+  orPickDate: string;
   // ---- cancelling selected patients ----
   cancelSelected: string;
   cancelSelectedSub: string;
@@ -303,6 +320,22 @@ const en: ConsoleStrings = {
   hoursSaved: 'Working hours saved',
   hoursClashTitle: 'These hours would leave existing bookings outside your working time',
   hoursClashBody: 'Close those days or move the bookings first, then change your hours.',
+  followUp: 'Follow-up',
+  followUpSub: 'When should this patient come back?',
+  followUpListSub: 'Patients you have asked to come back.',
+  setFollowUp: 'Set follow-up',
+  followUpSet: (date) => `Follow-up set for ${date}`,
+  followUpCleared: 'Follow-up removed',
+  clearFollowUp: 'Remove',
+  followUpDue: 'Due now',
+  followUpUpcoming: 'Coming up',
+  noFollowUps: 'No follow-ups yet. Set one while you are with a patient.',
+  followUpPending: 'Not sent yet',
+  followUpSentOn: (date) => `Reminded ${date}`,
+  followUpNotSending: 'Follow-up reminders cannot send yet: WhatsApp needs an approved template for messages sent more than 24 hours after a patient last wrote to you. Until then, please call these patients.',
+  followUpDueOn: (date) => `Due ${date}`,
+  followUpVisited: (date) => `Seen ${date}`,
+  orPickDate: 'or pick a date',
   cancelSelected: 'Cancel selected',
   cancelSelectedSub: 'Tick the patients you cannot see today. They are told, and their booking is cancelled.',
   cancelNBookings: (n) => `Cancel ${n} booking${n === 1 ? '' : 's'}`,
@@ -485,6 +518,22 @@ const kn: ConsoleStrings = {
   hoursSaved: 'ಕೆಲಸದ ಸಮಯ ಉಳಿಸಲಾಗಿದೆ',
   hoursClashTitle: 'ಈ ಸಮಯದಿಂದ ಈಗಾಗಲೇ ಇರುವ ಕೆಲವು ಬುಕಿಂಗ್‌ಗಳು ಕೆಲಸದ ಸಮಯದ ಹೊರಗೆ ಉಳಿಯುತ್ತವೆ',
   hoursClashBody: 'ಮೊದಲು ಆ ದಿನಗಳನ್ನು ಮುಚ್ಚಿ ಅಥವಾ ಬುಕಿಂಗ್ ಬದಲಾಯಿಸಿ, ನಂತರ ಸಮಯ ಬದಲಾಯಿಸಿ.',
+  followUp: 'ಮರು ಭೇಟಿ',
+  followUpSub: 'ಈ ರೋಗಿ ಯಾವಾಗ ಮತ್ತೆ ಬರಬೇಕು?',
+  followUpListSub: 'ಮತ್ತೆ ಬರಲು ಹೇಳಿದ ರೋಗಿಗಳು.',
+  setFollowUp: 'ಮರು ಭೇಟಿ ಗೊತ್ತುಮಾಡಿ',
+  followUpSet: (date) => `${date} ಕ್ಕೆ ಮರು ಭೇಟಿ ಗೊತ್ತುಮಾಡಲಾಗಿದೆ`,
+  followUpCleared: 'ಮರು ಭೇಟಿ ತೆಗೆದುಹಾಕಲಾಗಿದೆ',
+  clearFollowUp: 'ತೆಗೆದುಹಾಕಿ',
+  followUpDue: 'ಈಗ ಬರಬೇಕಾದವರು',
+  followUpUpcoming: 'ಮುಂದೆ ಬರಬೇಕಾದವರು',
+  noFollowUps: 'ಇನ್ನೂ ಯಾವುದೇ ಮರು ಭೇಟಿ ಇಲ್ಲ. ರೋಗಿಯ ಜೊತೆ ಇರುವಾಗಲೇ ಗೊತ್ತುಮಾಡಿ.',
+  followUpPending: 'ಇನ್ನೂ ಕಳುಹಿಸಿಲ್ಲ',
+  followUpSentOn: (date) => `${date} ರಂದು ನೆನಪಿಸಲಾಗಿದೆ`,
+  followUpNotSending: 'ಮರು ಭೇಟಿಯ ನೆನಪು ಇನ್ನೂ ಕಳುಹಿಸಲು ಆಗುವುದಿಲ್ಲ: ರೋಗಿ ಕೊನೆಯ ಬಾರಿ ಬರೆದು 24 ಗಂಟೆ ಕಳೆದ ಮೇಲೆ ಸಂದೇಶ ಕಳುಹಿಸಲು ವಾಟ್ಸಾಪ್‌ಗೆ ಅನುಮೋದಿತ ಟೆಂಪ್ಲೇಟ್ ಬೇಕು. ಅಲ್ಲಿಯವರೆಗೆ ಈ ರೋಗಿಗಳಿಗೆ ಫೋನ್ ಮಾಡಿ.',
+  followUpDueOn: (date) => `${date} ಕ್ಕೆ ಬರಬೇಕು`,
+  followUpVisited: (date) => `${date} ರಂದು ನೋಡಿದ್ದು`,
+  orPickDate: 'ಅಥವಾ ದಿನಾಂಕ ಆಯ್ಕೆಮಾಡಿ',
   cancelSelected: 'ಆಯ್ಕೆ ಮಾಡಿದವನ್ನು ರದ್ದುಮಾಡಿ',
   cancelSelectedSub: 'ಇವತ್ತು ನೋಡಲು ಆಗದ ರೋಗಿಗಳನ್ನು ಗುರುತಿಸಿ. ಅವರಿಗೆ ತಿಳಿಸಲಾಗುತ್ತದೆ ಮತ್ತು ಬುಕಿಂಗ್ ರದ್ದಾಗುತ್ತದೆ.',
   cancelNBookings: (n) => `${n} ಬುಕಿಂಗ್ ರದ್ದುಮಾಡಿ`,
