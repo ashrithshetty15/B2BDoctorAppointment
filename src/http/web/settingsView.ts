@@ -111,7 +111,7 @@ export function settingsPage(opts: {
   const link = doctor.whatsappNumber ? bookingLink(doctor.whatsappNumber) : null;
 
   return page(
-    { title: s.settings, csrfToken: opts.csrfToken },
+    { title: s.settings, csrfToken: opts.csrfToken, bare: true },
     html`
       ${doctorHeader(navOpts)}
       <main>

@@ -390,7 +390,7 @@ export function walkInPage(opts: {
   };
 
   return page(
-    { title: s.addWalkIn, csrfToken: opts.csrfToken },
+    { title: s.addWalkIn, csrfToken: opts.csrfToken, bare: true },
     html`
       ${doctorHeader(navOpts)}
       <main>
@@ -522,7 +522,7 @@ export function delayConfirmPage(opts: {
     bookingMode: opts.doctor.bookingMode,
   };
   return page(
-    { title: s.runningLate, csrfToken: opts.csrfToken },
+    { title: s.runningLate, csrfToken: opts.csrfToken, bare: true },
     html`
       ${doctorHeader(navOpts)}
       <main>
@@ -608,7 +608,7 @@ export function queuePageV2(opts: {
   };
 
   return page(
-    { title: s.queue, csrfToken: opts.csrfToken },
+    { title: s.queue, csrfToken: opts.csrfToken, bare: true },
     html`
       ${doctorHeader(navOpts)}
       <main>

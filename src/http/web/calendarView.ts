@@ -58,7 +58,7 @@ export function calendarPage(opts: {
   const free = slots.filter((x) => !x.appointment && !x.isPast).length;
 
   return page(
-    { title: s.calendar, csrfToken: opts.csrfToken },
+    { title: s.calendar, csrfToken: opts.csrfToken, bare: true },
     html`
       ${doctorHeader(navOpts)}
       <main>
@@ -164,7 +164,7 @@ export function slotBookPage(opts: {
   };
 
   return page(
-    { title: s.bookThisSlot, csrfToken: opts.csrfToken },
+    { title: s.bookThisSlot, csrfToken: opts.csrfToken, bare: true },
     html`
       ${doctorHeader(navOpts)}
       <main>

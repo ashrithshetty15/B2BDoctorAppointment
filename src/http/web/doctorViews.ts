@@ -203,6 +203,7 @@ export function bookingsPage(opts: {
     {
       title: 'Bookings',
       csrfToken: opts.csrfToken,
+      bare: true,
     },
     html`
       ${doctorHeader(navFor(opts.doctor, 'bookings', opts.queueCount, opts.csrfToken))}
@@ -246,6 +247,7 @@ export function patientsPage(opts: {
     {
       title: 'Patients',
       csrfToken: opts.csrfToken,
+      bare: true,
     },
     html`
       ${doctorHeader(navFor(opts.doctor, 'patients', opts.queueCount, opts.csrfToken))}
@@ -315,6 +317,7 @@ export function patientDetailPage(opts: {
     {
       title: personName(opts.patient.name),
       csrfToken: opts.csrfToken,
+      bare: true,
     },
     html`
       ${doctorHeader(navFor(opts.doctor, 'patients', opts.queueCount, opts.csrfToken))}
@@ -391,6 +394,7 @@ export function reportsPage(opts: {
     {
       title: 'Reports',
       csrfToken: opts.csrfToken,
+      bare: true,
     },
     html`
       ${doctorHeader(navFor(opts.doctor, 'reports', opts.queueCount, opts.csrfToken))}

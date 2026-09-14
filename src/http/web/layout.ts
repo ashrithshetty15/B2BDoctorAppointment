@@ -454,6 +454,12 @@ export interface LayoutOptions {
    * its own logout route.
    */
   nav?: boolean | { brand: string; links: NavLink[]; logoutAction: string };
+  /**
+   * Skip the <main> wrapper. The doctor console supplies its own header, main
+   * and fixed bottom bar, and wrapping those in another <main> both nests the
+   * landmark and pulls the full-width header into the 760px content column.
+   */
+  bare?: boolean;
 }
 
 const ADMIN_NAV: { brand: string; links: NavLink[]; logoutAction: string } = {
@@ -462,7 +468,14 @@ const ADMIN_NAV: { brand: string; links: NavLink[]; logoutAction: string } = {
   logoutAction: '/app/logout',
 };
 
-export function page(opts: LayoutOptions, body: RawHtml, extraHead?: RawHtml): string {
+/**
+ * `script` is emitted at the end of <body>, not in <head>.
+ *
+ * In <head> it runs while the body is still being parsed, so every
+ * getElementById returns null and the handler silently binds to nothing — which
+ * is exactly how the photo picker and the queue poll were both dead on arrival.
+ */
+export function page(opts: LayoutOptions, body: RawHtml, script?: RawHtml): string {
   const nav = opts.nav === true ? ADMIN_NAV : opts.nav === false ? undefined : opts.nav;
 
   const head = html`
@@ -476,7 +489,6 @@ export function page(opts: LayoutOptions, body: RawHtml, extraHead?: RawHtml): s
         <style>
           ${raw(STYLES)}
         </style>
-        ${extraHead ?? ''}
       </head>
       <body>
         ${nav
@@ -495,7 +507,8 @@ export function page(opts: LayoutOptions, body: RawHtml, extraHead?: RawHtml): s
               </nav>
             </header>`
           : ''}
-        <main>${body}</main>
+        ${opts.bare ? body : html`<main>${body}</main>`}
+        ${script ?? ''}
       </body>
     </html>
   `;
