@@ -1,7 +1,9 @@
 import type { Doctor } from '@prisma/client';
 import type { PatientRow, ReportSummary } from '../../domain/reports';
 import { formatWait } from '../../utils/time';
-import { type RawHtml, type NavLink, html, page, raw } from './layout';
+import { c } from '../../i18n/console';
+import { type RawHtml, html, page } from './layout';
+import { type DoctorNavOptions, type DoctorTab, doctorBottomNav, doctorHeader } from './nav';
 
 /** One row of the queue, already joined and position-computed by the caller. */
 export interface QueueRow {
@@ -29,14 +31,21 @@ export interface QueueState {
   waiting: number;
 }
 
-function nav(current: string, brand: string): { brand: string; links: NavLink[]; logoutAction: string } {
-  const links: NavLink[] = [
-    { href: '/app/queue', label: 'Queue' },
-    { href: '/app/bookings', label: 'Bookings' },
-    { href: '/app/patients', label: 'Patients' },
-    { href: '/app/reports', label: 'Reports' },
-  ].map((l) => ({ ...l, current: l.label === current }));
-  return { brand, links, logoutAction: '/app/doctor-logout' };
+/** Nav options for a doctor page; queueCount drives the live badge. */
+function navFor(
+  doctor: Doctor,
+  current: DoctorTab,
+  queueCount: number,
+  csrfToken: string,
+): DoctorNavOptions {
+  return {
+    clinicName: doctor.clinicName,
+    doctorName: doctor.name,
+    current,
+    queueCount,
+    csrfToken,
+    s: c(doctor.defaultLanguage),
+  };
 }
 
 function statusPill(status: string): RawHtml {
@@ -184,15 +193,17 @@ export function bookingsPage(opts: {
   isToday: boolean;
   isPast: boolean;
   dateLabel: string;
+  queueCount: number;
   csrfToken: string;
 }): string {
   return page(
     {
       title: 'Bookings',
       csrfToken: opts.csrfToken,
-      nav: nav('Bookings', opts.doctor.clinicName),
     },
     html`
+      ${doctorHeader(navFor(opts.doctor, 'bookings', opts.queueCount, opts.csrfToken))}
+      <main>
       <div class="card">
         <h2>Bookings</h2>
         <div class="datenav">
@@ -216,6 +227,8 @@ export function bookingsPage(opts: {
           readOnly: opts.isPast || !opts.isToday,
         })}
       </div>
+      </main>
+      ${doctorBottomNav(navFor(opts.doctor, 'bookings', opts.queueCount, opts.csrfToken))}
     `,
   );
 }
@@ -223,15 +236,17 @@ export function bookingsPage(opts: {
 export function patientsPage(opts: {
   doctor: Doctor;
   patients: PatientRow[];
+  queueCount: number;
   csrfToken: string;
 }): string {
   return page(
     {
       title: 'Patients',
       csrfToken: opts.csrfToken,
-      nav: nav('Patients', opts.doctor.clinicName),
     },
     html`
+      ${doctorHeader(navFor(opts.doctor, 'patients', opts.queueCount, opts.csrfToken))}
+      <main>
       <div class="card">
         <h2>Patients</h2>
         <p class="sub">
@@ -269,6 +284,8 @@ export function patientsPage(opts: {
               </table>
             `}
       </div>
+      </main>
+      ${doctorBottomNav(navFor(opts.doctor, 'patients', opts.queueCount, opts.csrfToken))}
     `,
   );
 }
@@ -285,6 +302,7 @@ export function patientDetailPage(opts: {
     arrivedAt: Date | null;
     startedAt: Date | null;
   }[];
+  queueCount: number;
   csrfToken: string;
 }): string {
   const done = opts.appointments.filter((a) => a.status === 'DONE').length;
@@ -294,9 +312,10 @@ export function patientDetailPage(opts: {
     {
       title: personName(opts.patient.name),
       csrfToken: opts.csrfToken,
-      nav: nav('Patients', opts.doctor.clinicName),
     },
     html`
+      ${doctorHeader(navFor(opts.doctor, 'patients', opts.queueCount, opts.csrfToken))}
+      <main>
       <div class="card">
         <h2>${personName(opts.patient.name)}</h2>
         <p class="sub">
@@ -347,6 +366,8 @@ export function patientDetailPage(opts: {
 
         <a href="/app/patients"><button class="secondary" type="button">Back to patients</button></a>
       </div>
+      </main>
+      ${doctorBottomNav(navFor(opts.doctor, 'patients', opts.queueCount, opts.csrfToken))}
     `,
   );
 }
@@ -355,6 +376,7 @@ export function reportsPage(opts: {
   doctor: Doctor;
   report: ReportSummary;
   days: number;
+  queueCount: number;
   csrfToken: string;
 }): string {
   const r = opts.report;
@@ -366,9 +388,10 @@ export function reportsPage(opts: {
     {
       title: 'Reports',
       csrfToken: opts.csrfToken,
-      nav: nav('Reports', opts.doctor.clinicName),
     },
     html`
+      ${doctorHeader(navFor(opts.doctor, 'reports', opts.queueCount, opts.csrfToken))}
+      <main>
       <div class="card">
         <h2>Reports</h2>
         <p class="sub">${r.from} to ${r.to}</p>
@@ -502,6 +525,8 @@ export function reportsPage(opts: {
           clinic-wide cancellation caused by leave.
         </p>
       </div>
+      </main>
+      ${doctorBottomNav(navFor(opts.doctor, 'reports', opts.queueCount, opts.csrfToken))}
     `,
   );
 }

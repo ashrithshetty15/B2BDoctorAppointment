@@ -24,6 +24,19 @@ export interface ConsoleStrings {
   patients: string;
   reports: string;
   signOut: string;
+  settings: string;
+  clinicDetails: string;
+  bookingConfig: string;
+  workingHours: string;
+  dailyCap: string;
+  consultLength: string;
+  learnedAverage: string;
+  timezoneLabel: string;
+  languageLabel: string;
+  closedDay: string;
+  changesViaAdmin: string;
+  account: string;
+  sections: string;
   waitingList: string;
   bookedAt: (time: string) => string;
   waitedFor: (mins: string) => string;
@@ -68,6 +81,19 @@ const en: ConsoleStrings = {
   patients: 'Patients',
   reports: 'Reports',
   signOut: 'Sign out',
+  settings: 'Settings',
+  clinicDetails: 'Clinic',
+  bookingConfig: 'Booking',
+  workingHours: 'Working hours',
+  dailyCap: 'Daily token cap',
+  consultLength: 'Consult length',
+  learnedAverage: 'Learned average',
+  timezoneLabel: 'Timezone',
+  languageLabel: 'Language',
+  closedDay: 'Closed',
+  changesViaAdmin: 'To change these, contact your clinic administrator.',
+  account: 'Account',
+  sections: 'Sections',
   waitingList: 'Waiting',
   bookedAt: (t) => `Booked ${t}`,
   waitedFor: (m) => `Waiting ${m}`,
@@ -113,6 +139,19 @@ const kn: ConsoleStrings = {
   patients: 'ರೋಗಿಗಳು',
   reports: 'ವರದಿಗಳು',
   signOut: 'ಸೈನ್ ಔಟ್',
+  settings: 'ಸೆಟ್ಟಿಂಗ್‌ಗಳು',
+  clinicDetails: 'ಕ್ಲಿನಿಕ್',
+  bookingConfig: 'ಬುಕಿಂಗ್',
+  workingHours: 'ಕೆಲಸದ ಸಮಯ',
+  dailyCap: 'ದಿನದ ಟೋಕನ್ ಮಿತಿ',
+  consultLength: 'ಸಮಾಲೋಚನೆ ಅವಧಿ',
+  learnedAverage: 'ಕಲಿತ ಸರಾಸರಿ',
+  timezoneLabel: 'ಸಮಯ ವಲಯ',
+  languageLabel: 'ಭಾಷೆ',
+  closedDay: 'ಮುಚ್ಚಲಾಗಿದೆ',
+  changesViaAdmin: 'ಇವುಗಳನ್ನು ಬದಲಾಯಿಸಲು ನಿಮ್ಮ ಕ್ಲಿನಿಕ್ ನಿರ್ವಾಹಕರನ್ನು ಸಂಪರ್ಕಿಸಿ.',
+  account: 'ಖಾತೆ',
+  sections: 'ವಿಭಾಗಗಳು',
   waitingList: 'ಕಾಯುತ್ತಿರುವವರು',
   bookedAt: (t) => `ಬುಕ್ ${t}`,
   waitedFor: (m) => `ಕಾಯುತ್ತಿದ್ದಾರೆ ${m}`,

@@ -2,6 +2,7 @@ import type { Doctor, Language } from '@prisma/client';
 import { type ConsoleStrings, c, elapsed } from '../../i18n/console';
 import type { QueueRow, QueueState } from './doctorViews';
 import { type RawHtml, html, page, raw } from './layout';
+import { doctorBottomNav, doctorHeader } from './nav';
 import { bookingLink, qrSvg } from './qr';
 
 /** Waiting longer than this turns the row amber. */
@@ -10,14 +11,6 @@ const OVERDUE_MINS = 30;
 const WA_ICON = raw(
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.7 15l-1.3 5 5.1-1.3A10 10 0 1 0 12 2zm0 18a8 8 0 0 1-4.1-1.1l-.3-.2-3 .8.8-2.9-.2-.3A8 8 0 1 1 12 20zm4.4-5.8c-.2-.1-1.4-.7-1.6-.8s-.4-.1-.5.1l-.7.9c-.1.2-.3.2-.5.1a6.5 6.5 0 0 1-3.2-2.8c-.1-.2 0-.4.1-.5l.4-.5.2-.4v-.4l-.7-1.7c-.2-.4-.4-.4-.5-.4h-.5a1 1 0 0 0-.7.3A3 3 0 0 0 8 10c0 1.3 1 2.6 1.1 2.8a10 10 0 0 0 3.9 3.4c1.3.5 1.9.6 2.5.5.4 0 1.3-.5 1.5-1.1.2-.5.2-1 .1-1.1z"/></svg>',
 );
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '–';
-  const first = parts[0]?.[0] ?? '';
-  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? '') : '';
-  return (first + last).toUpperCase();
-}
 
 function personName(name: string | null, language: Language): string {
   if (name && name.trim()) return name;
@@ -41,35 +34,6 @@ function waitingSince(row: QueueRow): Date | null {
 function waitedMins(row: QueueRow, now: Date): number {
   const since = waitingSince(row);
   return since ? Math.floor((now.getTime() - since.getTime()) / 60_000) : 0;
-}
-
-// ---- header ----
-
-function identityHeader(doctor: Doctor, s: ConsoleStrings, csrfToken: string): RawHtml {
-  return html`
-    <header class="top">
-      <div class="ident">
-        <div class="avatar" aria-hidden="true">${initials(doctor.name)}</div>
-        <div class="who">
-          <div class="clinic">${doctor.clinicName}</div>
-          <div class="doc">Dr. ${doctor.name}</div>
-        </div>
-      </div>
-      <details class="menu">
-        <summary aria-label="Menu" role="button">⋯</summary>
-        <div class="sheet">
-          <a href="/app/queue">${s.queue}</a>
-          <a href="/app/bookings">${s.bookings}</a>
-          <a href="/app/patients">${s.patients}</a>
-          <a href="/app/reports">${s.reports}</a>
-          <form method="post" action="/app/doctor-logout">
-            <input type="hidden" name="_csrf" value="${csrfToken}" />
-            <button type="submit">${s.signOut}</button>
-          </form>
-        </div>
-      </details>
-    </header>
-  `;
 }
 
 // ---- hero ----
@@ -459,10 +423,18 @@ export function delayConfirmPage(opts: {
   csrfToken: string;
 }): string {
   const s = c(opts.doctor.defaultLanguage);
+  const navOpts = {
+    clinicName: opts.doctor.clinicName,
+    doctorName: opts.doctor.name,
+    current: 'queue' as const,
+    queueCount: opts.recipients,
+    csrfToken: opts.csrfToken,
+    s,
+  };
   return page(
     { title: s.runningLate, csrfToken: opts.csrfToken },
     html`
-      ${identityHeader(opts.doctor, s, opts.csrfToken)}
+      ${doctorHeader(navOpts)}
       <main>
         <div class="card">
           <h2>${s.runningLate}</h2>
@@ -485,6 +457,7 @@ export function delayConfirmPage(opts: {
           </form>
         </div>
       </main>
+      ${doctorBottomNav(navOpts)}
     `,
   );
 }
@@ -532,11 +505,19 @@ export function queuePageV2(opts: {
 }): string {
   const s = c(opts.doctor.defaultLanguage);
   const labels = JSON.stringify({ just: s.justNow, ago: s.updatedAgo('{t}') });
+  const navOpts = {
+    clinicName: opts.doctor.clinicName,
+    doctorName: opts.doctor.name,
+    current: 'queue' as const,
+    queueCount: opts.queue.waiting,
+    csrfToken: opts.csrfToken,
+    s,
+  };
 
   return page(
     { title: s.queue, csrfToken: opts.csrfToken },
     html`
-      ${identityHeader(opts.doctor, s, opts.csrfToken)}
+      ${doctorHeader(navOpts)}
       <main>
         ${opts.flash ? html`<div class="ok">${opts.flash}</div>` : ''}
         ${opts.onLeave ? html`<div class="caveat">${s.onLeave}</div>` : ''}
@@ -563,6 +544,7 @@ export function queuePageV2(opts: {
           doctorName: opts.doctor.name,
         })}
       </main>
+      ${doctorBottomNav(navOpts)}
     `,
     html`<script>
       ${raw(POLL)}

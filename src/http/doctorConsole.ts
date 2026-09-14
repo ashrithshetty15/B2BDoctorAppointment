@@ -24,6 +24,7 @@ import {
   reportsPage,
 } from './web/doctorViews';
 import { delayConfirmPage, queueBody, queuePageV2 } from './web/queueView';
+import { settingsPage } from './web/settingsView';
 import { errorPage } from './web/views';
 
 /**
@@ -108,6 +109,22 @@ async function loadDay(doctorId: string, date: Date) {
 }
 
 // ---- queue (today) ----
+
+/**
+ * Waiting patients right now — the badge on the Queue tab. Every doctor page
+ * shows it, so the nav stays informative wherever the doctor happens to be.
+ * IN_PROGRESS is excluded: that patient is with the doctor, not waiting.
+ */
+async function waitingCount(doctorId: string, timezone: string): Promise<number> {
+  return prisma.appointment.count({
+    where: {
+      doctorId,
+      date: clinicToday(timezone),
+      type: 'TOKEN',
+      status: { in: ['BOOKED', 'ARRIVED'] },
+    },
+  });
+}
 
 /**
  * Mean of the waits actually measured today (arrival to being called in).
@@ -356,6 +373,7 @@ doctorConsoleRouter.get('/app/bookings', requireDoctorAuth, async (req, res) => 
   res.type('html').send(
     bookingsPage({
       doctor: day.doctor,
+      queueCount: await waitingCount(doctor.id, doctor.timezone),
       rows: day.rows,
       queue: day.queue,
       date: formatDateOnly(date),
@@ -373,8 +391,13 @@ doctorConsoleRouter.get('/app/bookings', requireDoctorAuth, async (req, res) => 
 
 doctorConsoleRouter.get('/app/patients', requireDoctorAuth, async (req, res) => {
   const doctor = req.doctor!;
-  const patients = await listPatientsForDoctor(doctor.id);
-  res.type('html').send(patientsPage({ doctor, patients, csrfToken: req.csrfToken ?? '' }));
+  const [patients, queueCount] = await Promise.all([
+    listPatientsForDoctor(doctor.id),
+    waitingCount(doctor.id, doctor.timezone),
+  ]);
+  res
+    .type('html')
+    .send(patientsPage({ doctor, patients, queueCount, csrfToken: req.csrfToken ?? '' }));
 });
 
 doctorConsoleRouter.get('/app/patients/:id', requireDoctorAuth, async (req, res) => {
@@ -388,9 +411,28 @@ doctorConsoleRouter.get('/app/patients/:id', requireDoctorAuth, async (req, res)
     return;
   }
 
-  res
-    .type('html')
-    .send(patientDetailPage({ doctor, patient, appointments, csrfToken: req.csrfToken ?? '' }));
+  res.type('html').send(
+    patientDetailPage({
+      doctor,
+      patient,
+      appointments,
+      queueCount: await waitingCount(doctor.id, doctor.timezone),
+      csrfToken: req.csrfToken ?? '',
+    }),
+  );
+});
+
+// ---- settings ----
+
+doctorConsoleRouter.get('/app/settings', requireDoctorAuth, async (req, res) => {
+  const doctor = req.doctor!;
+  res.type('html').send(
+    settingsPage({
+      doctor,
+      queueCount: await waitingCount(doctor.id, doctor.timezone),
+      csrfToken: req.csrfToken ?? '',
+    }),
+  );
 });
 
 // ---- reports ----
@@ -400,6 +442,11 @@ doctorConsoleRouter.get('/app/reports', requireDoctorAuth, async (req, res) => {
   const requested = Number.parseInt(String(req.query['days'] ?? ''), 10);
   const days = [7, 30, 90].includes(requested) ? requested : 30;
 
-  const report = await buildReport(doctor, days);
-  res.type('html').send(reportsPage({ doctor, report, days, csrfToken: req.csrfToken ?? '' }));
+  const [report, queueCount] = await Promise.all([
+    buildReport(doctor, days),
+    waitingCount(doctor.id, doctor.timezone),
+  ]);
+  res
+    .type('html')
+    .send(reportsPage({ doctor, report, days, queueCount, csrfToken: req.csrfToken ?? '' }));
 });

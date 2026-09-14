@@ -127,13 +127,65 @@ header.top nav{margin-left:auto;display:flex;gap:var(--s4);align-items:center}
 .ident .doc{font-size:var(--t-sm);color:var(--ink-3);line-height:1.25;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-/* Sign-out demoted into a menu; <details> keeps it dependency-free. */
+/* ---- tab bar (tablet / desktop) ---- */
+nav.tabs{
+  background:var(--surface);border-bottom:1px solid var(--line);
+  display:flex;gap:var(--s1);padding:0 var(--s4);
+  overflow-x:auto;scrollbar-width:none;
+}
+nav.tabs::-webkit-scrollbar{display:none}
+nav.tabs .tab{
+  position:relative;display:inline-flex;align-items:center;gap:var(--s2);
+  padding:var(--s3) var(--s4);min-height:var(--tap);white-space:nowrap;
+  color:var(--ink-2);text-decoration:none;font-weight:600;font-size:var(--t-sm);
+  border-bottom:2px solid transparent;margin-bottom:-1px;
+}
+nav.tabs .tab:hover{color:var(--ink)}
+nav.tabs .tab.on{color:var(--accent);border-bottom-color:var(--accent)}
+nav.tabs .badge{
+  background:var(--accent-soft);color:var(--accent);border-radius:var(--r-pill);
+  padding:1px 8px;font-size:var(--t-xs);font-weight:700;font-variant-numeric:tabular-nums;
+}
+nav.tabs .tab.on .badge{background:var(--accent);color:var(--accent-ink)}
+
+/* ---- bottom tab bar (phones) ---- */
+nav.btabs{display:none}
+@media (max-width:700px){
+  nav.tabs{display:none}
+  nav.btabs{
+    display:flex;position:fixed;left:0;right:0;bottom:0;z-index:30;
+    background:var(--surface);border-top:1px solid var(--line);
+    padding-bottom:env(safe-area-inset-bottom,0);
+    box-shadow:0 -2px 12px rgba(31,36,33,.06);
+  }
+  nav.btabs .btab{
+    flex:1 1 0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:2px;padding:var(--s2) var(--s1);min-height:56px;
+    color:var(--ink-3);text-decoration:none;font-weight:600;
+  }
+  nav.btabs .btab.on{color:var(--accent)}
+  nav.btabs .ico{position:relative;display:block;width:22px;height:22px}
+  nav.btabs .ico svg{width:22px;height:22px;fill:currentColor;display:block}
+  nav.btabs .lbl{font-size:11px;letter-spacing:.01em;line-height:1.1;text-align:center;
+    overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  nav.btabs .dotbadge{
+    position:absolute;top:-5px;right:-9px;background:var(--accent);color:var(--accent-ink);
+    border-radius:var(--r-pill);font-size:10px;font-weight:700;line-height:1;
+    padding:2px 5px;min-width:16px;text-align:center;font-variant-numeric:tabular-nums;
+  }
+  /* Clear the fixed bar so the last row is never trapped underneath it. */
+  main{padding-bottom:calc(72px + env(safe-area-inset-bottom,0))}
+}
+
+/* Avatar menu; <details> keeps it dependency-free. */
 .menu{position:relative;margin-left:auto;flex:0 0 auto}
 .menu>summary{
   list-style:none;cursor:pointer;width:var(--tap);height:var(--tap);
   border-radius:var(--r-pill);display:grid;place-items:center;
   color:var(--ink-3);font-size:20px;line-height:1;
 }
+.menu>summary.avatar-btn{padding:0}
+.menu>summary.avatar-btn:hover .avatar{filter:brightness(.96)}
 .menu>summary::-webkit-details-marker{display:none}
 .menu>summary:hover{background:var(--surface-2)}
 .menu .sheet{
