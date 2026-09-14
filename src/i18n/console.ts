@@ -25,6 +25,17 @@ export interface ConsoleStrings {
   reports: string;
   signOut: string;
   settings: string;
+  noReportBody: string;
+  backToPatients: string;
+  seenCount: string;
+  useQueueToday: string;
+  returning: string;
+  visitOne: string;
+  visitMany: string;
+  noPatientsTitle: string;
+  noPatientsBody: string;
+  noBookingsThisDay: string;
+  noReportData: string;
   calendar: string;
   bookedCount: string;
   freeCount: string;
@@ -122,6 +133,17 @@ const en: ConsoleStrings = {
   reports: 'Reports',
   signOut: 'Sign out',
   settings: 'Settings',
+  noReportBody: 'Once patients start booking, this is where you will see how the clinic is running.',
+  backToPatients: 'Back to patients',
+  seenCount: 'Seen',
+  useQueueToday: 'This is today — use Queue to work it.',
+  returning: 'Returning',
+  visitOne: 'visit',
+  visitMany: 'visits',
+  noPatientsTitle: 'No patients yet',
+  noPatientsBody: 'Everyone who books with you appears here. Share this code or link so patients can book on WhatsApp.',
+  noBookingsThisDay: 'Nothing booked this day',
+  noReportData: 'No activity in this period yet',
   calendar: 'Calendar',
   bookedCount: 'Booked',
   freeCount: 'Free',
@@ -220,6 +242,17 @@ const kn: ConsoleStrings = {
   reports: 'ವರದಿಗಳು',
   signOut: 'ಸೈನ್ ಔಟ್',
   settings: 'ಸೆಟ್ಟಿಂಗ್‌ಗಳು',
+  noReportBody: 'ರೋಗಿಗಳು ಬುಕ್ ಮಾಡಲು ಶುರುವಾದ ಮೇಲೆ, ಕ್ಲಿನಿಕ್ ಹೇಗೆ ನಡೆಯುತ್ತಿದೆ ಎಂಬುದು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ.',
+  backToPatients: 'ರೋಗಿಗಳಿಗೆ ಹಿಂತಿರುಗಿ',
+  seenCount: 'ನೋಡಿದ್ದು',
+  useQueueToday: 'ಇದು ಇವತ್ತು — ಸರದಿ ಪುಟ ಬಳಸಿ.',
+  returning: 'ಮತ್ತೆ ಬಂದವರು',
+  visitOne: 'ಭೇಟಿ',
+  visitMany: 'ಭೇಟಿಗಳು',
+  noPatientsTitle: 'ಇನ್ನೂ ರೋಗಿಗಳಿಲ್ಲ',
+  noPatientsBody: 'ನಿಮ್ಮ ಬಳಿ ಬುಕ್ ಮಾಡುವ ಎಲ್ಲರೂ ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತಾರೆ. ರೋಗಿಗಳು ವಾಟ್ಸಾಪ್‌ನಲ್ಲಿ ಬುಕ್ ಮಾಡಲು ಈ ಕೋಡ್ ಅಥವಾ ಲಿಂಕ್ ಹಂಚಿಕೊಳ್ಳಿ.',
+  noBookingsThisDay: 'ಈ ದಿನ ಏನೂ ಬುಕ್ ಆಗಿಲ್ಲ',
+  noReportData: 'ಈ ಅವಧಿಯಲ್ಲಿ ಇನ್ನೂ ಚಟುವಟಿಕೆ ಇಲ್ಲ',
   calendar: 'ಕ್ಯಾಲೆಂಡರ್',
   bookedCount: 'ಬುಕ್ ಆಗಿದೆ',
   freeCount: 'ಖಾಲಿ',

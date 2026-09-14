@@ -2,8 +2,9 @@ import type { Doctor } from '@prisma/client';
 import type { PatientRow, ReportSummary } from '../../domain/reports';
 import { formatWait } from '../../utils/time';
 import { c } from '../../i18n/console';
-import { type RawHtml, html, page } from './layout';
+import { type RawHtml, html, initials, page, raw } from './layout';
 import { type DoctorNavOptions, type DoctorTab, doctorBottomNav, doctorHeader } from './nav';
+import { bookingLink, qrSvg } from './qr';
 
 /** One row of the queue, already joined and position-computed by the caller. */
 export interface QueueRow {
@@ -69,123 +70,6 @@ function timeOnly(at: Date | null, timezone: string): string {
   }).format(at);
 }
 
-/**
- * The queue table, rendered on its own so the 30s poll can swap just this
- * element rather than re-rendering the page.
- */
-export function queueTable(opts: {
-  rows: QueueRow[];
-  queue: QueueState;
-  csrfToken: string;
-  timezone: string;
-  /** Past dates render without action buttons. */
-  readOnly?: boolean;
-}): RawHtml {
-  const { rows, queue, csrfToken, timezone, readOnly } = opts;
-
-  const action = (appointmentId: string, status: string, label: string, cls = 'secondary') => html`
-    <form method="post" action="/app/queue/${appointmentId}/status">
-      <input type="hidden" name="_csrf" value="${csrfToken}" />
-      <input type="hidden" name="status" value="${status}" />
-      <button class="${cls}" style="margin:0;padding:5px 11px;font-size:13px">${label}</button>
-    </form>
-  `;
-
-  return html`
-    <div class="stat">
-      <div>
-        <div class="n">${queue.nowServingToken ?? '—'}</div>
-        <div class="l">Now serving</div>
-      </div>
-      <div>
-        <div class="n">${queue.waiting}</div>
-        <div class="l">Waiting</div>
-      </div>
-      <div>
-        <div class="n">${queue.lastIssuedToken}</div>
-        <div class="l">Issued today</div>
-      </div>
-      ${queue.delayMins > 0
-        ? html`<div>
-            <div class="n" style="color:var(--danger)">+${queue.delayMins}m</div>
-            <div class="l">Announced delay</div>
-          </div>`
-        : ''}
-    </div>
-
-    ${queue.isClosed
-      ? html`<div class="caveat">The list is closed for this day — no new tokens can be issued.</div>`
-      : ''}
-    ${rows.length === 0
-      ? html`<p class="muted">No bookings for this day.</p>`
-      : html`
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Patient</th>
-                <th>Status</th>
-                <th>Wait</th>
-                <th>Arrived</th>
-                ${readOnly ? html`<th>Consult</th>` : html`<th>Actions</th>`}
-              </tr>
-            </thead>
-            <tbody>
-              ${rows.map(
-                (r) => html`
-                  <tr>
-                    <td class="num">
-                      <strong
-                        >${r.tokenNumber !== null
-                          ? `#${r.tokenNumber}`
-                          : timeOnly(r.slotStart, timezone)}</strong
-                      >
-                    </td>
-                    <td>
-                      <a href="/app/patients/${r.patient.id}">${personName(r.patient.name)}</a>
-                      <div class="hint">${r.patient.phone}</div>
-                    </td>
-                    <td>${statusPill(r.status)}</td>
-                    <td class="num">
-                      ${r.etaMins !== undefined
-                        ? html`${formatWait(r.etaMins)}${r.ahead
-                            ? html`<div class="hint">${r.ahead} ahead</div>`
-                            : ''}`
-                        : html`<span class="muted">—</span>`}
-                    </td>
-                    <td class="num">${timeOnly(r.arrivedAt, timezone)}</td>
-                    ${readOnly
-                      ? html`<td class="num">
-                          ${r.consultMins !== null
-                            ? `${r.consultMins} min`
-                            : html`<span class="muted">—</span>`}
-                        </td>`
-                      : html`<td>
-                          <div class="actions">
-                            ${r.status === 'BOOKED' ? action(r.appointmentId, 'arrived', 'Arrived') : ''}
-                            ${r.status === 'BOOKED' || r.status === 'ARRIVED'
-                              ? action(r.appointmentId, 'in-progress', 'Call in', '')
-                              : ''}
-                            ${r.status === 'IN_PROGRESS'
-                              ? action(r.appointmentId, 'done', 'Done', '')
-                              : ''}
-                            ${r.status === 'BOOKED' || r.status === 'ARRIVED'
-                              ? action(r.appointmentId, 'no-show', 'No show', 'danger')
-                              : ''}
-                            ${r.status === 'DONE' || r.status === 'NO_SHOW' || r.status === 'CANCELLED'
-                              ? html`<span class="muted">—</span>`
-                              : ''}
-                          </div>
-                        </td>`}
-                  </tr>
-                `,
-              )}
-            </tbody>
-          </table>
-        `}
-  `;
-}
-
 export function bookingsPage(opts: {
   doctor: Doctor;
   rows: QueueRow[];
@@ -199,38 +83,78 @@ export function bookingsPage(opts: {
   queueCount: number;
   csrfToken: string;
 }): string {
+  const s = c(opts.doctor.defaultLanguage);
   return page(
     {
-      title: 'Bookings',
+      title: s.bookings,
       csrfToken: opts.csrfToken,
       bare: true,
     },
     html`
       ${doctorHeader(navFor(opts.doctor, 'bookings', opts.queueCount, opts.csrfToken))}
       <main>
-      <div class="card">
-        <h2>Bookings</h2>
         <div class="datenav">
           <a href="/app/bookings?date=${opts.prevDate}"
-            ><button class="secondary" type="button" style="margin:0">← Previous</button></a
+            ><button class="secondary" type="button" style="margin:0">←</button></a
           >
           <span class="today">${opts.dateLabel}</span>
           <a href="/app/bookings?date=${opts.nextDate}"
-            ><button class="secondary" type="button" style="margin:0">Next →</button></a
+            ><button class="secondary" type="button" style="margin:0">→</button></a
           >
-          ${opts.isToday ? '' : html`<a href="/app/bookings">Back to today</a>`}
+          ${opts.isToday ? '' : html`<a href="/app/bookings">${s.backToToday}</a>`}
         </div>
-        ${opts.isToday
-          ? html`<p class="sub">This is today — use <a href="/app/queue">Queue</a> to work it.</p>`
+
+        ${opts.rows.length > 0
+          ? html`<div class="stats">
+              <div class="s">
+                <div class="n">${opts.rows.length}</div>
+                <div class="l">${s.bookedCount}</div>
+              </div>
+              <div class="s">
+                <div class="n">${opts.rows.filter((r) => r.status === 'DONE').length}</div>
+                <div class="l">${s.seenCount}</div>
+              </div>
+              <div class="s">
+                <div class="n">${opts.rows.filter((r) => r.status === 'NO_SHOW').length}</div>
+                <div class="l">${s.noShow}</div>
+              </div>
+            </div>`
           : ''}
-        ${queueTable({
-          rows: opts.rows,
-          queue: opts.queue,
-          csrfToken: opts.csrfToken,
-          timezone: opts.doctor.timezone,
-          readOnly: opts.isPast || !opts.isToday,
-        })}
-      </div>
+        ${opts.isToday
+          ? html`<div class="caveat">${s.useQueueToday}</div>`
+          : ''}
+        ${opts.rows.length === 0
+          ? html`<div class="card">
+              <div class="empty">
+                <h3>${s.noBookingsThisDay}</h3>
+                <p>${s.noBookingsBody}</p>
+              </div>
+            </div>`
+          : html`<div class="card flush">
+              ${opts.rows.map(
+                (r) => html`
+                  <div class="slotrow ${r.status === 'CANCELLED' || r.status === 'NO_SHOW' ? 'past' : ''}">
+                    <div class="slottime">
+                      ${r.tokenNumber !== null
+                        ? `#${r.tokenNumber}`
+                        : timeOnly(r.slotStart, opts.doctor.timezone)}
+                    </div>
+                    <div class="body">
+                      <div class="nm">
+                        <a href="/app/patients/${r.patient.id}">${personName(r.patient.name)}</a>
+                      </div>
+                      <div class="sub">
+                        ${statusPill(r.status)}
+                        <span>${r.patient.phone}</span>
+                        ${r.consultMins !== null
+                          ? html`<span>${r.consultMins} min</span>`
+                          : ''}
+                      </div>
+                    </div>
+                  </div>
+                `,
+              )}
+            </div>`}
       </main>
       ${doctorBottomNav(navFor(opts.doctor, 'bookings', opts.queueCount, opts.csrfToken))}
     `,
@@ -243,52 +167,71 @@ export function patientsPage(opts: {
   queueCount: number;
   csrfToken: string;
 }): string {
+  const s = c(opts.doctor.defaultLanguage);
+  const link = opts.doctor.whatsappNumber ? bookingLink(opts.doctor.whatsappNumber) : null;
+
   return page(
     {
-      title: 'Patients',
+      title: s.patients,
       csrfToken: opts.csrfToken,
       bare: true,
     },
     html`
       ${doctorHeader(navFor(opts.doctor, 'patients', opts.queueCount, opts.csrfToken))}
       <main>
-      <div class="card">
-        <h2>Patients</h2>
-        <p class="sub">
-          ${opts.patients.length} ${opts.patients.length === 1 ? 'person has' : 'people have'} booked
-          with you
-        </p>
-        ${opts.patients.length === 0
-          ? html`<p class="muted">No patients yet.</p>`
-          : html`
-              <table>
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Phone</th>
-                    <th>Visits</th>
-                    <th>Last seen</th>
-                    <th>Language</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${opts.patients.map(
-                    (p) => html`
-                      <tr>
-                        <td><a href="/app/patients/${p.patientId}">${personName(p.name)}</a></td>
-                        <td class="num">${p.phone}</td>
-                        <td class="num">${p.visits}</td>
-                        <td class="num">
-                          ${p.lastVisit ? p.lastVisit.toISOString().slice(0, 10) : '—'}
-                        </td>
-                        <td>${p.language === 'KN' ? 'ಕನ್ನಡ' : 'English'}</td>
-                      </tr>
-                    `,
-                  )}
-                </tbody>
-              </table>
-            `}
-      </div>
+      ${opts.patients.length === 0
+        ? html`<div class="card">
+            <div class="empty">
+              <h3>${s.noPatientsTitle}</h3>
+              <p>${s.noPatientsBody}</p>
+              ${link
+                ? html`<div class="qr">${qrSvg(link, { title: s.scanToBook })}</div>
+                    <div>
+                      <a class="walink" href="${link}" target="_blank" rel="noopener"
+                        >+${opts.doctor.whatsappNumber}</a
+                      >
+                    </div>`
+                : ''}
+            </div>
+          </div>`
+        : html`
+            <div class="stats">
+              <div class="s">
+                <div class="n">${opts.patients.length}</div>
+                <div class="l">${s.patients}</div>
+              </div>
+              <div class="s">
+                <div class="n">${opts.patients.filter((p) => p.visits > 1).length}</div>
+                <div class="l">${s.returning}</div>
+              </div>
+            </div>
+
+            <div class="card flush">
+              ${opts.patients.map(
+                (p) => html`
+                  <a class="prow" href="/app/patients/${p.patientId}">
+                    <span class="avatar" aria-hidden="true">${initials(p.name ?? '')}</span>
+                    <span class="body">
+                      <span class="nm">${personName(p.name)}</span>
+                      <span class="sub">
+                        <span>${p.phone}</span>
+                        ${p.language === 'KN' ? html`<span class="pill">ಕನ್ನಡ</span>` : ''}
+                      </span>
+                    </span>
+                    <span class="meta">
+                      <span class="visits">${p.visits}</span>
+                      <span class="l">${p.visits === 1 ? s.visitOne : s.visitMany}</span>
+                      ${p.lastVisit
+                        ? html`<span class="last"
+                            >${p.lastVisit.toISOString().slice(0, 10)}</span
+                          >`
+                        : ''}
+                    </span>
+                  </a>
+                `,
+              )}
+            </div>
+          `}
       </main>
       ${doctorBottomNav(navFor(opts.doctor, 'patients', opts.queueCount, opts.csrfToken))}
     `,
@@ -310,6 +253,7 @@ export function patientDetailPage(opts: {
   queueCount: number;
   csrfToken: string;
 }): string {
+  const s = c(opts.doctor.defaultLanguage);
   const done = opts.appointments.filter((a) => a.status === 'DONE').length;
   const noShow = opts.appointments.filter((a) => a.status === 'NO_SHOW').length;
 
@@ -322,56 +266,55 @@ export function patientDetailPage(opts: {
     html`
       ${doctorHeader(navFor(opts.doctor, 'patients', opts.queueCount, opts.csrfToken))}
       <main>
-      <div class="card">
-        <h2>${personName(opts.patient.name)}</h2>
-        <p class="sub">
-          ${opts.patient.phone} · ${opts.patient.language === 'KN' ? 'ಕನ್ನಡ' : 'English'}
-        </p>
-
-        <div class="stat">
-          <div>
-            <div class="n">${opts.appointments.length}</div>
-            <div class="l">Bookings</div>
-          </div>
-          <div>
-            <div class="n">${done}</div>
-            <div class="l">Completed</div>
-          </div>
-          <div>
-            <div class="n">${noShow}</div>
-            <div class="l">No-shows</div>
+        <div class="card">
+          <div class="phead">
+            <span class="avatar lg" aria-hidden="true">${initials(opts.patient.name ?? '')}</span>
+            <div style="min-width:0">
+              <h2>${personName(opts.patient.name)}</h2>
+              <p class="sub" style="margin:0">
+                ${opts.patient.phone} ·
+                ${opts.patient.language === 'KN' ? 'ಕನ್ನಡ' : 'English'}
+              </p>
+            </div>
           </div>
         </div>
 
-        <table>
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Token</th>
-              <th>Status</th>
-              <th>Consult</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${opts.appointments.map(
-              (a) => html`
-                <tr>
-                  <td class="num">${a.date.toISOString().slice(0, 10)}</td>
-                  <td class="num">${a.tokenNumber !== null ? `#${a.tokenNumber}` : '—'}</td>
-                  <td>${statusPill(a.status)}</td>
-                  <td class="num">
-                    ${a.consultMins !== null
-                      ? `${a.consultMins} min`
-                      : html`<span class="muted">—</span>`}
-                  </td>
-                </tr>
-              `,
-            )}
-          </tbody>
-        </table>
+        <div class="stats">
+          <div class="s">
+            <div class="n">${opts.appointments.length}</div>
+            <div class="l">${s.bookings}</div>
+          </div>
+          <div class="s">
+            <div class="n">${done}</div>
+            <div class="l">${s.seenCount}</div>
+          </div>
+          <div class="s ${noShow > 0 ? 'busy' : ''}">
+            <div class="n">${noShow}</div>
+            <div class="l">${s.noShow}</div>
+          </div>
+        </div>
 
-        <a href="/app/patients"><button class="secondary" type="button">Back to patients</button></a>
-      </div>
+        <div class="card flush">
+
+          ${opts.appointments.map(
+            (a) => html`
+              <div class="slotrow ${a.status === 'NO_SHOW' || a.status === 'CANCELLED' ? 'past' : ''}">
+                <div class="slottime">${a.date.toISOString().slice(5, 10)}</div>
+                <div class="body">
+                  <div class="sub" style="margin:0">
+                    ${statusPill(a.status)}
+                    ${a.tokenNumber !== null ? html`<span>#${a.tokenNumber}</span>` : ''}
+                    ${a.consultMins !== null ? html`<span>${a.consultMins} min</span>` : ''}
+                  </div>
+                </div>
+              </div>
+              `,
+          )}
+        </div>
+
+        <a href="/app/patients"
+          ><button class="secondary" type="button">${s.backToPatients}</button></a
+        >
       </main>
       ${doctorBottomNav(navFor(opts.doctor, 'patients', opts.queueCount, opts.csrfToken))}
     `,
@@ -386,6 +329,7 @@ export function reportsPage(opts: {
   csrfToken: string;
 }): string {
   const r = opts.report;
+  const s = c(opts.doctor.defaultLanguage);
   const pct = (x: number | null) => (x === null ? '—' : `${Math.round(x * 100)}%`);
   const maxDay = Math.max(1, ...r.perDay.map((d) => d.total));
   const maxHour = Math.max(1, ...r.busiestHours.map((h) => h.count));
@@ -399,7 +343,15 @@ export function reportsPage(opts: {
     html`
       ${doctorHeader(navFor(opts.doctor, 'reports', opts.queueCount, opts.csrfToken))}
       <main>
-      <div class="card">
+      ${r.totals.total === 0
+        ? html`<div class="card">
+            <div class="empty">
+              <h3>${s.noReportData}</h3>
+              <p>${s.noReportBody}</p>
+            </div>
+          </div>`
+        : ''}
+      <div class="card" ${r.totals.total === 0 ? raw('hidden') : ''}>
         <h2>Reports</h2>
         <p class="sub">${r.from} to ${r.to}</p>
         <div class="datenav">
@@ -410,31 +362,32 @@ export function reportsPage(opts: {
           )}
         </div>
 
-        <div class="stat">
-          <div><div class="n">${r.totals.total}</div><div class="l">Bookings</div></div>
-          <div><div class="n">${r.totals.completed}</div><div class="l">Completed</div></div>
-          <div><div class="n">${r.totals.noShow}</div><div class="l">No-shows</div></div>
-          <div><div class="n">${r.totals.cancelled}</div><div class="l">Cancelled</div></div>
-          <div><div class="n">${pct(r.noShowRate)}</div><div class="l">No-show rate</div></div>
+        <div class="stats">
+          <div class="s"><div class="n">${r.totals.total}</div><div class="l">Bookings</div></div>
+          <div class="s"><div class="n">${r.totals.completed}</div><div class="l">Completed</div></div>
+          <div class="s ${r.totals.noShow > 0 ? 'busy' : ''}">
+            <div class="n">${r.totals.noShow}</div><div class="l">No-shows</div>
+          </div>
+          <div class="s"><div class="n">${r.totals.cancelled}</div><div class="l">Cancelled</div></div>
         </div>
       </div>
 
       <div class="card">
         <h2>Time</h2>
-        <div class="stat">
-          <div>
+        <div class="stats">
+          <div class="s">
             <div class="n">${r.consult.avgMins ?? '—'}${r.consult.avgMins !== null ? ' min' : ''}</div>
             <div class="l">Avg consult</div>
           </div>
-          <div>
+          <div class="s">
             <div class="n">${r.consult.medianMins ?? '—'}${r.consult.medianMins !== null ? ' min' : ''}</div>
             <div class="l">Median consult</div>
           </div>
-          <div>
+          <div class="s">
             <div class="n">${r.wait.avgMins ?? '—'}${r.wait.avgMins !== null ? ' min' : ''}</div>
             <div class="l">Avg wait</div>
           </div>
-          <div>
+          <div class="s ${(r.wait.maxMins ?? 0) >= 30 ? 'busy' : ''}">
             <div class="n">${r.wait.maxMins ?? '—'}${r.wait.maxMins !== null ? ' min' : ''}</div>
             <div class="l">Longest wait</div>
           </div>
@@ -523,9 +476,9 @@ export function reportsPage(opts: {
 
       <div class="card">
         <h2>Patients</h2>
-        <div class="stat">
-          <div><div class="n">${r.patients.unique}</div><div class="l">Unique</div></div>
-          <div><div class="n">${r.patients.returning}</div><div class="l">Returning</div></div>
+        <div class="stats">
+          <div class="s"><div class="n">${r.patients.unique}</div><div class="l">Unique</div></div>
+          <div class="s"><div class="n">${r.patients.returning}</div><div class="l">Returning</div></div>
         </div>
         <p class="hint">
           Cancellations are not attributed — the system cannot tell a patient cancelling from a

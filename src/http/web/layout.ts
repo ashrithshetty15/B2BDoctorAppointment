@@ -19,6 +19,15 @@ function isRaw(value: unknown): value is RawHtml {
   return typeof value === 'object' && value !== null && '__html' in value;
 }
 
+/** First and last initial, for avatar fallbacks. Handles a blank name. */
+export function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '–';
+  const first = parts[0]?.[0] ?? '';
+  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? '') : '';
+  return (first + last).toUpperCase();
+}
+
 export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -316,6 +325,39 @@ button.ghost:hover{background:var(--surface-2);filter:none}
 .wa{display:inline-flex;align-items:center;gap:4px;color:var(--ok);font-weight:600}
 .wa svg{width:13px;height:13px;fill:currentColor}
 .waited.over{color:var(--warn);font-weight:650}
+
+/* Patient detail header: avatar beside the name. */
+.phead{display:flex;align-items:center;gap:var(--s4);flex-wrap:wrap}
+.phead h2{margin:0}
+
+/* Read-only key/value pairs, replacing tables used purely for layout. */
+dl.kv{display:grid;grid-template-columns:minmax(120px,auto) 1fr;gap:var(--s2) var(--s4);margin:0}
+dl.kv dt{color:var(--ink-3);font-size:var(--t-sm);font-weight:600;
+  padding:var(--s2) 0;border-top:1px solid var(--line)}
+dl.kv dd{margin:0;padding:var(--s2) 0;border-top:1px solid var(--line);overflow-wrap:anywhere}
+dl.kv dt:first-of-type,dl.kv dt:first-of-type+dd{border-top:0}
+@media (max-width:480px){
+  dl.kv{grid-template-columns:1fr;gap:0}
+  dl.kv dd{border-top:0;padding-top:0;padding-bottom:var(--s3)}
+}
+
+/* ---- patient rows ---- */
+a.prow{display:flex;align-items:center;gap:var(--s4);padding:var(--s3) var(--s5);
+  border-top:1px solid var(--line);text-decoration:none;color:inherit}
+a.prow:first-child{border-top:0}
+a.prow:hover{background:var(--surface-2)}
+a.prow .body{flex:1 1 auto;min-width:0}
+a.prow .nm{display:block;font-weight:600;font-size:var(--t-md);overflow-wrap:anywhere}
+a.prow .sub{display:flex;gap:var(--s2);align-items:center;flex-wrap:wrap;
+  font-size:var(--t-sm);color:var(--ink-3);margin-top:1px}
+a.prow .meta{flex:0 0 auto;text-align:right;line-height:1.25}
+a.prow .visits{display:block;font-size:var(--t-lg);font-weight:650;
+  font-variant-numeric:tabular-nums}
+a.prow .meta .l{display:block;font-size:var(--t-xs);color:var(--ink-3);
+  text-transform:uppercase;letter-spacing:.04em}
+a.prow .last{display:block;font-size:var(--t-xs);color:var(--ink-3);margin-top:2px;
+  font-variant-numeric:tabular-nums}
+@media (max-width:600px){a.prow{padding:var(--s3) var(--s4);gap:var(--s3)}}
 
 /* ---- calendar slot rows ---- */
 .slotrow{display:flex;align-items:center;gap:var(--s4);padding:var(--s3) var(--s5);

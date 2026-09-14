@@ -1,5 +1,5 @@
 import type { ConsoleStrings } from '../../i18n/console';
-import { type RawHtml, html, raw } from './layout';
+import { type RawHtml, html, initials, raw } from './layout';
 
 /**
  * Navigation shared by all four doctor screens.
@@ -53,14 +53,6 @@ const HREF: Record<DoctorTab, string> = {
   patients: '/app/patients',
   reports: '/app/reports',
 };
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '–';
-  const first = parts[0]?.[0] ?? '';
-  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? '') : '';
-  return (first + last).toUpperCase();
-}
 
 function labelFor(tab: DoctorTab, s: ConsoleStrings): string {
   return {

@@ -1,16 +1,8 @@
 import type { Doctor } from '@prisma/client';
 import { c } from '../../i18n/console';
-import { html, page, raw } from './layout';
+import { html, initials, page, raw } from './layout';
 import { doctorBottomNav, doctorHeader } from './nav';
 import { bookingLink, qrSvg } from './qr';
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '–';
-  const first = parts[0]?.[0] ?? '';
-  const last = parts.length > 1 ? (parts[parts.length - 1]?.[0] ?? '') : '';
-  return (first + last).toUpperCase();
-}
 
 const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
 const DAY_LABELS: Record<(typeof DAYS)[number], string> = {
@@ -198,57 +190,49 @@ export function settingsPage(opts: {
 
         <div class="card">
           <h2>${s.clinicDetails}</h2>
-          <table>
-            <tbody>
-              <tr><th>Phone</th><td class="num">${doctor.phone}</td></tr>
-              <tr><th>${s.timezoneLabel}</th><td>${doctor.timezone}</td></tr>
-              <tr>
-                <th>${s.languageLabel}</th>
-                <td>${doctor.defaultLanguage === 'KN' ? 'ಕನ್ನಡ' : 'English'}</td>
-              </tr>
-            </tbody>
-          </table>
+          <dl class="kv">
+            <dt>Phone</dt><dd class="num">${doctor.phone}</dd>
+            <dt>${s.timezoneLabel}</dt><dd>${doctor.timezone}</dd>
+            <dt>${s.languageLabel}</dt>
+            <dd>${doctor.defaultLanguage === 'KN' ? 'ಕನ್ನಡ' : 'English'}</dd>
+          </dl>
           <p class="hint">${s.changesViaAdmin}</p>
         </div>
 
         <div class="card">
           <h2>${s.bookingConfig}</h2>
-          <table>
-            <tbody>
-              <tr><th>Mode</th><td>${doctor.bookingMode}</td></tr>
-              <tr><th>${s.dailyCap}</th><td class="num">${doctor.dailyTokenCap}</td></tr>
-              <tr><th>${s.consultLength}</th><td class="num">${doctor.consultDurationMins} min</td></tr>
-              <tr>
-                <th>${s.learnedAverage}</th>
-                <td class="num">
-                  ${doctor.avgConsultTimeMins.toFixed(1)} min
-                  <div class="hint">
-                    from ${doctor.consultSampleCount}
-                    consult${doctor.consultSampleCount === 1 ? '' : 's'} — this drives the wait
-                    times patients are told
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-          <p class="hint">${s.changesViaAdmin}</p>
+          <div class="stats">
+            <div class="s">
+              <div class="n">${doctor.dailyTokenCap}</div>
+              <div class="l">${s.dailyCap}</div>
+            </div>
+            <div class="s">
+              <div class="n">${doctor.consultDurationMins} min</div>
+              <div class="l">${s.consultLength}</div>
+            </div>
+            <div class="s">
+              <div class="n">${doctor.avgConsultTimeMins.toFixed(1)} min</div>
+              <div class="l">${s.learnedAverage}</div>
+            </div>
+          </div>
+          <p class="hint">
+            The learned average comes from ${doctor.consultSampleCount}
+            consult${doctor.consultSampleCount === 1 ? '' : 's'} and is what decides the wait
+            times patients are quoted. ${s.changesViaAdmin}
+          </p>
         </div>
 
         <div class="card">
           <h2>${s.workingHours}</h2>
-          <table>
-            <tbody>
-              ${DAYS.map((day) => {
-                const windows = windowsFor(doctor.workingHours, day);
-                return html`<tr>
-                  <th>${DAY_LABELS[day]}</th>
-                  <td class="num">
-                    ${windows ? windows : html`<span class="muted">${s.closedDay}</span>`}
-                  </td>
-                </tr>`;
-              })}
-            </tbody>
-          </table>
+          <dl class="kv">
+            ${DAYS.map((day) => {
+              const windows = windowsFor(doctor.workingHours, day);
+              return html`<dt>${DAY_LABELS[day]}</dt>
+                <dd class="num">
+                  ${windows ? windows : html`<span class="muted">${s.closedDay}</span>`}
+                </dd>`;
+            })}
+          </dl>
         </div>
 
         ${link
