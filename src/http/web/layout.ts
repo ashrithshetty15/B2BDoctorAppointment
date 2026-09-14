@@ -377,7 +377,7 @@ details.note>summary{
   padding:2px 0;min-height:24px;
 }
 details.note>summary::-webkit-details-marker{display:none}
-details.note>summary::before{content:'¸E';font-size:12px}
+details.note>summary::before{content:'\\270F\\FE0F';font-size:12px}
 details.note>summary:hover{color:var(--accent)}
 /* Not scoped to details.note: the patient timeline shows the same remark outside
    a disclosure, and it should look identical there. */
