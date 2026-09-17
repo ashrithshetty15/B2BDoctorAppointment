@@ -7,6 +7,7 @@ import { clinicToday } from '../utils/time';
 import { getDoctorByApiKey } from '../domain/doctors';
 import type { WorkingHours } from '../domain/slots';
 import { buildWorkingHours as buildHours, workingHoursToText } from '../domain/workingHours';
+import { normalisePhone, phoneError } from '../domain/phone';
 import { requireAdminSession, requireDoctorAuth, requireFormCsrf } from './middleware/auth';
 import { createRateLimiter } from './middleware/rateLimit';
 import {
@@ -91,6 +92,7 @@ function valuesFromBody(body: Record<string, unknown>): DoctorFormValues {
     defaultLanguage: str(body, 'defaultLanguage') || 'EN',
     timezone: str(body, 'timezone'),
     whatsappPhoneNumberId: str(body, 'whatsappPhoneNumberId'),
+    whatsappNumber: str(body, 'whatsappNumber'),
     missedCallNumber: str(body, 'missedCallNumber'),
     hours: hoursFromBody(body),
   };
@@ -230,6 +232,7 @@ appConsoleRouter.get('/app/doctors/new', requireAdminSession, (req, res) => {
         defaultLanguage: 'EN',
         timezone: 'Asia/Kolkata',
         whatsappPhoneNumberId: '',
+        whatsappNumber: '',
         missedCallNumber: '',
         hours: emptyHours(),
       },
@@ -267,6 +270,21 @@ appConsoleRouter.post(
     }
 
     const data = parsed.data;
+
+    // Stored digits-only: the console renders it as `+${whatsappNumber}` and
+    // bookingLink builds the wa.me URL from it. Blank is allowed — a clinic may
+    // not have its number yet — but a malformed one is refused rather than
+    // stored as something that renders a broken link.
+    let whatsappNumber: string | null = null;
+    if (values.whatsappNumber) {
+      const phone = normalisePhone(values.whatsappNumber);
+      if (!phone.ok) {
+        reject(phoneError(phone.reason));
+        return;
+      }
+      whatsappNumber = phone.digits;
+    }
+
     try {
       const doctor = await prisma.doctor.create({
         data: {
@@ -287,6 +305,7 @@ appConsoleRouter.post(
           ...(values.whatsappPhoneNumberId
             ? { whatsappPhoneNumberId: values.whatsappPhoneNumberId }
             : {}),
+          ...(whatsappNumber ? { whatsappNumber } : {}),
           ...(values.missedCallNumber ? { missedCallNumber: values.missedCallNumber } : {}),
           apiKey: `dk_${crypto.randomBytes(24).toString('hex')}`,
         },
@@ -362,6 +381,7 @@ appConsoleRouter.get('/app/doctors/:id/edit', requireAdminSession, async (req, r
         defaultLanguage: doctor.defaultLanguage,
         timezone: doctor.timezone,
         whatsappPhoneNumberId: doctor.whatsappPhoneNumberId ?? '',
+        whatsappNumber: doctor.whatsappNumber ?? '',
         missedCallNumber: doctor.missedCallNumber ?? '',
         hours: hoursFromDoctor(doctor.workingHours),
       },
@@ -411,6 +431,21 @@ appConsoleRouter.post(
     }
 
     const data = parsed.data;
+
+    // Stored digits-only: the console renders it as `+${whatsappNumber}` and
+    // bookingLink builds the wa.me URL from it. Blank is allowed — a clinic may
+    // not have its number yet — but a malformed one is refused rather than
+    // stored as something that renders a broken link.
+    let whatsappNumber: string | null = null;
+    if (values.whatsappNumber) {
+      const phone = normalisePhone(values.whatsappNumber);
+      if (!phone.ok) {
+        reject(phoneError(phone.reason));
+        return;
+      }
+      whatsappNumber = phone.digits;
+    }
+
     try {
       await prisma.doctor.update({
         where: { id },
@@ -424,6 +459,7 @@ appConsoleRouter.post(
           timezone: data.timezone,
           workingHours: workingHours as object,
           whatsappPhoneNumberId: values.whatsappPhoneNumberId || null,
+          whatsappNumber,
           missedCallNumber: values.missedCallNumber || null,
         },
       });

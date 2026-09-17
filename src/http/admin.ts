@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db/prisma';
+import { normalisePhone, phoneError } from '../domain/phone';
 import { parseWorkingHours } from '../domain/slots';
 import { formatDateOnly, parseDateOnly } from '../utils/time';
 import { requireAdminKey } from './middleware/auth';
@@ -36,6 +37,8 @@ const createDoctorBody = z.object({
   phone: z.string().min(6),
   bookingMode: z.enum(['TOKEN', 'SLOT', 'HYBRID']),
   whatsappPhoneNumberId: z.string().optional(),
+  /** Dialable form, for the wa.me link and QR. Normalised to digits on write. */
+  whatsappNumber: z.string().optional(),
   dailyTokenCap: z.coerce.number().int().min(1).max(500).optional(),
   consultDurationMins: z.coerce.number().int().min(1).max(180).optional(),
   defaultLanguage: z.enum(['EN', 'KN']).optional(),
@@ -51,6 +54,19 @@ adminRouter.post('/admin/doctor', requireAdminKey, async (req, res) => {
   }
 
   const body = parsed.data;
+
+  // Stored digits-only: the console renders it as `+${whatsappNumber}` and
+  // bookingLink builds the wa.me URL from it.
+  let whatsappNumber: string | undefined;
+  if (body.whatsappNumber !== undefined) {
+    const phone = normalisePhone(body.whatsappNumber);
+    if (!phone.ok) {
+      res.status(400).json({ error: phoneError(phone.reason) });
+      return;
+    }
+    whatsappNumber = phone.digits;
+  }
+
   const apiKey = `dk_${crypto.randomBytes(24).toString('hex')}`;
   const consultDurationMins = body.consultDurationMins ?? 10;
 
@@ -64,6 +80,7 @@ adminRouter.post('/admin/doctor', requireAdminKey, async (req, res) => {
       ...(body.whatsappPhoneNumberId
         ? { whatsappPhoneNumberId: body.whatsappPhoneNumberId }
         : {}),
+      ...(whatsappNumber ? { whatsappNumber } : {}),
       dailyTokenCap: body.dailyTokenCap ?? 40,
       consultDurationMins,
       // Seed the rolling average with the doctor's own estimate; it self-corrects
@@ -103,6 +120,7 @@ adminRouter.get('/admin/doctor/:id', requireAdminKey, async (req, res) => {
     bookingMode: doctor.bookingMode,
     bookingModeLockedAt: doctor.bookingModeLockedAt,
     whatsappPhoneNumberId: doctor.whatsappPhoneNumberId,
+    whatsappNumber: doctor.whatsappNumber,
     missedCallNumber: doctor.missedCallNumber,
     dailyTokenCap: doctor.dailyTokenCap,
     consultDurationMins: doctor.consultDurationMins,
@@ -164,6 +182,7 @@ const configBody = z.object({
   consultDurationMins: z.coerce.number().int().min(1).max(180).optional(),
   defaultLanguage: z.enum(['EN', 'KN']).optional(),
   whatsappPhoneNumberId: z.string().optional(),
+  whatsappNumber: z.string().optional(),
   missedCallNumber: z.string().optional(),
   workingHours: workingHoursSchema.optional(),
   leaveDates: z.array(z.string()).optional(),
@@ -177,6 +196,17 @@ adminRouter.patch('/admin/doctor/:id', requireAdminKey, async (req, res) => {
   }
 
   const body = parsed.data;
+
+  let whatsappNumber: string | undefined;
+  if (body.whatsappNumber !== undefined) {
+    const phone = normalisePhone(body.whatsappNumber);
+    if (!phone.ok) {
+      res.status(400).json({ error: phoneError(phone.reason) });
+      return;
+    }
+    whatsappNumber = phone.digits;
+  }
+
   const leaveDates = body.leaveDates?.map(parseDateOnly);
   if (leaveDates?.some((d) => d === null)) {
     res.status(400).json({ error: 'leaveDates entries must be YYYY-MM-DD' });
@@ -195,6 +225,7 @@ adminRouter.patch('/admin/doctor/:id', requireAdminKey, async (req, res) => {
         ...(body.whatsappPhoneNumberId
           ? { whatsappPhoneNumberId: body.whatsappPhoneNumberId }
           : {}),
+        ...(whatsappNumber ? { whatsappNumber } : {}),
         ...(body.missedCallNumber
           ? { missedCallNumber: body.missedCallNumber }
           : {}),

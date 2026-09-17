@@ -24,6 +24,7 @@ export interface DoctorFormValues {
   defaultLanguage: string;
   timezone: string;
   whatsappPhoneNumberId: string;
+  whatsappNumber: string;
   missedCallNumber: string;
   hours: Record<Day, string>;
 }
@@ -150,6 +151,7 @@ export function doctorDetailPage(opts: {
             <tr><th>Timezone</th><td>${d.timezone}</td></tr>
             <tr><th>Doctor phone</th><td>${d.phone}</td></tr>
             <tr><th>WhatsApp number id</th><td>${d.whatsappPhoneNumberId ?? html`<span class="muted">not set</span>`}</td></tr>
+            <tr><th>WhatsApp number</th><td>${d.whatsappNumber ? html`+${d.whatsappNumber}` : html`<span class="muted">not set — no QR or booking link</span>`}</td></tr>
             <tr><th>Missed-call number</th><td>${d.missedCallNumber ?? html`<span class="muted">not set</span>`}</td></tr>
             <tr>
               <th>Working hours</th>
@@ -292,6 +294,19 @@ export function doctorFormPage(opts: {
                 name="whatsappPhoneNumberId"
                 type="text"
                 value="${opts.values.whatsappPhoneNumberId}"
+              />
+            </div>
+            <div>
+              <label for="whatsappNumber"
+                >WhatsApp number
+                <span class="hint">dialable, for the QR — e.g. 919876543210</span></label
+              >
+              <input
+                id="whatsappNumber"
+                name="whatsappNumber"
+                type="text"
+                inputmode="tel"
+                value="${opts.values.whatsappNumber}"
               />
             </div>
             <div>
