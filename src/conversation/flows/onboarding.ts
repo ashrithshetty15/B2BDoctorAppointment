@@ -4,6 +4,7 @@ import { isPlausibleName, setPatientLanguage, setPatientName } from '../../domai
 import { clean, numericChoice } from '../intent';
 import { Steps } from '../steps';
 import { reply, type ConversationContext, type Reply, type StepResult } from '../types';
+import type { ReplyButton } from '../../messaging/types';
 
 /**
  * Mode-independent onboarding: language choice, then name capture. Runs before
@@ -33,6 +34,18 @@ export function isLanguageSwitchRequest(input: string): boolean {
   return LANGUAGE_WORDS.includes(clean(input));
 }
 
+/**
+ * The same tokens the typed flow accepts, so tapping and typing are the same
+ * input as far as every step is concerned — an inbound button tap arrives as
+ * its id (see extractText in the WhatsApp adapter).
+ */
+function languageButtons(language: Language): ReplyButton[] {
+  return [
+    { id: '1', title: t(language, 'btnEnglish') },
+    { id: '2', title: t(language, 'btnKannada') },
+  ];
+}
+
 export async function runOnboarding(ctx: ConversationContext): Promise<OnboardingOutcome> {
   // A patient can ask for the language menu from anywhere.
   if (isLanguageSwitchRequest(ctx.input) && ctx.step !== Steps.AWAITING_LANGUAGE) {
@@ -40,7 +53,7 @@ export async function runOnboarding(ctx: ConversationContext): Promise<Onboardin
       complete: false,
       result: {
         nextStep: Steps.AWAITING_LANGUAGE,
-        replies: [reply('languagePrompt', t(ctx.language, 'languagePrompt'))],
+        replies: [reply('languagePrompt', t(ctx.language, 'languagePrompt'), languageButtons(ctx.language))],
       },
     };
   }
@@ -112,7 +125,7 @@ export async function runOnboarding(ctx: ConversationContext): Promise<Onboardin
           complete: false,
           result: {
             nextStep: Steps.AWAITING_LANGUAGE,
-            replies: [reply('languagePrompt', t(ctx.language, 'languagePrompt'))],
+            replies: [reply('languagePrompt', t(ctx.language, 'languagePrompt'), languageButtons(ctx.language))],
           },
         };
       }

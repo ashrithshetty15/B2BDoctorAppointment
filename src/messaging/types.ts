@@ -30,12 +30,37 @@ export interface InboundMessage {
 }
 
 /** A message the state machine wants delivered to a patient. */
+/**
+ * One tappable reply button.
+ *
+ * `id` is what comes back on tap — extractText normalises an inbound
+ * button_reply to exactly this value. Setting it to the same token the text
+ * flow expects ("1", "2") means the state machine needs no knowledge of
+ * buttons at all, and typing still works for anyone whose client does not
+ * render them.
+ */
+export interface ReplyButton {
+  /** Meta caps this at 256 chars; we use short flow tokens. */
+  id: string;
+  /** Shown on the button. Meta truncates past ~20 characters. */
+  title: string;
+}
+
+/** Meta allows at most three reply buttons on one message. */
+export const MAX_REPLY_BUTTONS = 3;
+
 export interface OutboundMessage {
   /** Patient's phone, digits only. */
   to: string;
   text: string;
   /** Sender address to use (Meta `phone_number_id`). Falls back to env default. */
   channelAddress?: string;
+  /**
+   * Render as tappable buttons instead of plain text. The text is still sent as
+   * the message body, so the numbered list remains readable and a patient can
+   * always type the number instead.
+   */
+  buttons?: ReplyButton[];
 }
 
 export interface SendResult {

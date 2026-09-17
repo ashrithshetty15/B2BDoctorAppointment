@@ -2,6 +2,7 @@ import { Queue, type JobsOptions } from 'bullmq';
 import { env } from '../config/env';
 import { getRedis } from './connection';
 import { formatDateOnly } from '../utils/time';
+import type { ReplyButton } from '../messaging/types';
 
 export const QUEUE_OUTBOUND = 'outbound-messages';
 export const QUEUE_TOKEN_EVENTS = 'token-queue-events';
@@ -12,6 +13,8 @@ export const QUEUE_REMINDERS = 'appointment-reminders';
 export interface OutboundJob {
   to: string;
   text: string;
+  /** Rendered as tappable reply buttons; the text body is sent regardless. */
+  buttons?: ReplyButton[];
   /** Provider sender address (Meta phone_number_id). */
   channelAddress?: string;
   /** Diagnostics only. */

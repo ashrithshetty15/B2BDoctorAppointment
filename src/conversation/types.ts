@@ -1,3 +1,4 @@
+import type { ReplyButton } from '../messaging/types';
 import type { Doctor, Language, Patient } from '@prisma/client';
 import type { TemplateName } from '../i18n/templates';
 
@@ -26,6 +27,12 @@ export interface Reply {
   text: string;
   /** Carried for logging/analytics only. */
   templateName: TemplateName;
+  /**
+   * Offer these as tappable buttons. Each id must be the same token the step
+   * would accept as typed text, so the flow logic stays identical whether the
+   * patient taps or types.
+   */
+  buttons?: ReplyButton[];
 }
 
 export interface StepResult {
@@ -57,6 +64,10 @@ export interface ConversationFlow {
   handle(ctx: ConversationContext): Promise<StepResult>;
 }
 
-export function reply(templateName: TemplateName, text: string): Reply {
-  return { templateName, text };
+export function reply(
+  templateName: TemplateName,
+  text: string,
+  buttons?: ReplyButton[],
+): Reply {
+  return { templateName, text, ...(buttons?.length ? { buttons } : {}) };
 }

@@ -1,13 +1,14 @@
 import crypto from 'node:crypto';
 import { env } from '../../config/env';
 import { logger } from '../../utils/logger';
-import type {
-  InboundMessage,
-  MessagingAdapter,
-  OutboundMessage,
-  SendResult,
-  TemplateMessage,
-  WebhookVerification,
+import {
+  MAX_REPLY_BUTTONS,
+  type InboundMessage,
+  type MessagingAdapter,
+  type OutboundMessage,
+  type SendResult,
+  type TemplateMessage,
+  type WebhookVerification,
 } from '../types';
 
 /** Shapes we care about from Meta's webhook payload. Everything else is ignored. */
@@ -131,8 +132,7 @@ export class WhatsAppCloudAdapter implements MessagingAdapter {
         messaging_product: 'whatsapp',
         recipient_type: 'individual',
         to: message.to,
-        type: 'text',
-        text: { preview_url: false, body: message.text },
+        ...interactiveOrText(message),
       }),
     });
 
@@ -205,6 +205,42 @@ export class WhatsAppCloudAdapter implements MessagingAdapter {
  * Collapse every supported message type to plain text. Returns null for types
  * the bot cannot act on (images, location, audio, ...).
  */
+/**
+ * Meta caps a button title; anything longer is rejected outright rather than
+ * truncated, which would fail the whole send. Trimming here means a long
+ * translation degrades to a clipped label instead of no message at all.
+ */
+const BUTTON_TITLE_MAX = 20;
+
+/**
+ * Render as interactive reply buttons when the caller supplied them, otherwise
+ * as plain text.
+ *
+ * The body keeps the full numbered text either way, so the message still reads
+ * correctly if a client does not render buttons, and typing "1" keeps working —
+ * inbound button taps arrive as the button's id, which is that same token.
+ */
+function interactiveOrText(message: OutboundMessage): Record<string, unknown> {
+  const buttons = message.buttons?.slice(0, MAX_REPLY_BUTTONS) ?? [];
+  if (buttons.length === 0) {
+    return { type: 'text', text: { preview_url: false, body: message.text } };
+  }
+
+  return {
+    type: 'interactive',
+    interactive: {
+      type: 'button',
+      body: { text: message.text },
+      action: {
+        buttons: buttons.map((b) => ({
+          type: 'reply',
+          reply: { id: b.id, title: b.title.slice(0, BUTTON_TITLE_MAX) },
+        })),
+      },
+    },
+  };
+}
+
 function extractText(msg: CloudApiMessage): string | null {
   switch (msg.type) {
     case 'text':

@@ -88,6 +88,20 @@ export type TemplateSet = {
   slotInvalidChoice: () => string;
 
   // ---- HYBRID mode ----
+  /**
+   * Short labels for tappable reply buttons. Kept separate from the menu bodies
+   * because Meta clips a button title around 20 characters, while the numbered
+   * lines are written to be read ("Book a token for today" is 22). The numbered
+   * body is still sent alongside, so typing the number always works.
+   */
+  btnEnglish: () => string;
+  btnKannada: () => string;
+  btnBookToken: () => string;
+  btnMyStatus: () => string;
+  btnCancelToken: () => string;
+  btnYes: () => string;
+  btnNo: () => string;
+
   hybridModeChoice: (p: { doctorName: string }) => string;
 };
 
@@ -175,6 +189,14 @@ const en: TemplateSet = {
   slotInvalidChoice: () => 'Please reply with one of the numbers from the list above.',
 
   // ---- HYBRID mode ----
+  btnEnglish: () => 'English',
+  btnKannada: () => 'ಕನ್ನಡ',
+  btnBookToken: () => 'Book a token',
+  btnMyStatus: () => 'My token status',
+  btnCancelToken: () => 'Cancel my token',
+  btnYes: () => 'Yes, confirm',
+  btnNo: () => 'No, go back',
+
   hybridModeChoice: ({ doctorName }) =>
     `How would you like to see Dr. ${doctorName}?\n\n1. Book a fixed appointment time\n2. Take a token and come today\n\nReply with 1 or 2.`,
 };
@@ -262,6 +284,14 @@ const kn: TemplateSet = {
   slotInvalidChoice: () => 'ದಯವಿಟ್ಟು ಮೇಲೆ ಇರುವ ಪಟ್ಟಿಯಿಂದ ಒಂದು ಸಂಖ್ಯೆ ಒತ್ತಿ.',
 
   // ---- HYBRID mode ----
+  btnEnglish: () => 'English',
+  btnKannada: () => 'ಕನ್ನಡ',
+  btnBookToken: () => 'ಟೋಕನ್ ಬುಕ್ ಮಾಡಿ',
+  btnMyStatus: () => 'ಟೋಕನ್ ಸ್ಥಿತಿ',
+  btnCancelToken: () => 'ಟೋಕನ್ ರದ್ದು ಮಾಡಿ',
+  btnYes: () => 'ಹೌದು, ಖಚಿತ',
+  btnNo: () => 'ಇಲ್ಲ, ಹಿಂದೆ',
+
   hybridModeChoice: ({ doctorName }) =>
     `ಡಾ. ${doctorName} ಅವರನ್ನು ಹೇಗೆ ನೋಡಲು ಇಷ್ಟ?\n\n1. ನಿರ್ದಿಷ್ಟ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಸಮಯ ಬುಕ್ ಮಾಡಿ\n2. ಟೋಕನ್ ತೆಗೆದುಕೊಂಡು ಇವತ್ತು ಬನ್ನಿ\n\n1 ಅಥವಾ 2 ಒತ್ತಿ.`,
 };

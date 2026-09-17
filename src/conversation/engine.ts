@@ -167,6 +167,7 @@ async function dispatchReplies(doctor: Doctor, patient: Patient, replies: Reply[
       to: patient.phone,
       text: r.text,
       templateName: r.templateName,
+      ...(r.buttons?.length ? { buttons: r.buttons } : {}),
       ...(outboundChannelFor(doctor) ? { channelAddress: outboundChannelFor(doctor) } : {}),
     })),
   );

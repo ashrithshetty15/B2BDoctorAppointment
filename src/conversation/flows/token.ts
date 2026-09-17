@@ -11,6 +11,8 @@ import { formatDateForPatient, formatWait } from '../../utils/time';
 import { isNo, isYes, menuIntent } from '../intent';
 import { Steps } from '../steps';
 import { reply, type ConversationFlow, type ConversationContext, type StepResult } from '../types';
+import type { Language } from '@prisma/client';
+import type { ReplyButton } from '../../messaging/types';
 
 /**
  * TOKEN MODE conversation flow.
@@ -53,6 +55,27 @@ export const tokenFlow: ConversationFlow = {
 };
 
 /** The main menu, used both as a prompt and as a fallback. */
+/**
+ * Button ids are the same tokens the typed flow accepts ("1", "2", "3"), so a
+ * tap and a typed number are indistinguishable to every step below — an inbound
+ * tap arrives as its id (extractText in the WhatsApp adapter). The numbered body
+ * is still sent, so typing keeps working on clients that do not render buttons.
+ */
+function menuButtons(language: Language): ReplyButton[] {
+  return [
+    { id: '1', title: t(language, 'btnBookToken') },
+    { id: '2', title: t(language, 'btnMyStatus') },
+    { id: '3', title: t(language, 'btnCancelToken') },
+  ];
+}
+
+function confirmButtons(language: Language): ReplyButton[] {
+  return [
+    { id: '1', title: t(language, 'btnYes') },
+    { id: '2', title: t(language, 'btnNo') },
+  ];
+}
+
 function menuResult(ctx: ConversationContext, extraFirst?: StepResult['replies']): StepResult {
   return {
     nextStep: Steps.TOKEN_MENU,
@@ -64,6 +87,7 @@ function menuResult(ctx: ConversationContext, extraFirst?: StepResult['replies']
           doctorName: ctx.doctor.name,
           date: formatDateForPatient(ctx.today),
         }),
+        menuButtons(ctx.language),
       ),
     ],
     data: {},
@@ -132,6 +156,7 @@ async function startBooking(ctx: ConversationContext): Promise<StepResult> {
           doctorName: ctx.doctor.name,
           date: formatDateForPatient(ctx.today),
         }),
+        confirmButtons(ctx.language),
       ),
     ],
     data: {},
@@ -153,6 +178,7 @@ async function handleBookingConfirmation(ctx: ConversationContext): Promise<Step
             doctorName: ctx.doctor.name,
             date: formatDateForPatient(ctx.today),
           }),
+          confirmButtons(ctx.language),
         ),
       ],
     };
