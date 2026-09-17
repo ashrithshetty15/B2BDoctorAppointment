@@ -14,7 +14,7 @@ import {
   reopenDay,
   upcomingLeave,
 } from '../domain/leave';
-import { cancelBookings, loadBookingsByIds, partitionByReachability } from '../domain/cancellation';
+import { cancelBookings, loadBookingsByIds, splitByReachability } from '../domain/cancellation';
 import {
   addDays,
   clearFollowUp,
@@ -1115,7 +1115,7 @@ doctorConsoleRouter.post(
       return;
     }
 
-    const { reachable, unreachable } = partitionByReachability(selected);
+    const { reachable, unreachable } = await splitByReachability(doctor.id, selected);
 
     res.type('html').send(
       cancelSelectedConfirmPage({
@@ -1148,7 +1148,7 @@ doctorConsoleRouter.post(
       return;
     }
 
-    const { unreachable } = partitionByReachability(selected);
+    const { unreachable } = await splitByReachability(doctor.id, selected);
     const { cancelled } = await cancelBookings(doctor, selected);
 
     res.type('html').send(

@@ -7,7 +7,7 @@ import {
   type WithPatient,
   cancelBookings,
   loadDayBookings,
-  partitionByReachability,
+  splitByReachability,
 } from './cancellation';
 
 /**
@@ -46,7 +46,7 @@ export async function previewDayClosure(
   const affected = await loadDayBookings(doctor.id, date);
   return {
     affected,
-    ...partitionByReachability(affected, now),
+    ...(await splitByReachability(doctor.id, affected, now)),
     alreadyClosed: isOnLeave(doctor, date),
   };
 }

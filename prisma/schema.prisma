@@ -121,6 +121,7 @@ model Doctor {
   queueStates  QueueState[]
   sessions     ConversationSession[]
   documents    Document[]
+  messagingWindows MessagingWindow[]
 
   @@map("doctors")
 }
@@ -134,22 +135,12 @@ model Patient {
   language    Language  @default(EN)
   lastVisitAt DateTime? @map("last_visit_at")
 
-  /// When this patient last sent us a message.
-  ///
-  /// WhatsApp only permits free-form messages within 24 hours of the patient's
-  /// last inbound message; outside that window a send is rejected, and our
-  /// adapter cannot tell that rejection from a transient failure. This column is
-  /// what lets the console say, before a doctor cancels a day, which patients
-  /// will actually be told and which need a phone call instead.
-  ///
-  /// Null for a patient who has only ever been booked at the desk.
-  lastInboundAt DateTime? @map("last_inbound_at")
-
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   appointments Appointment[]
   sessions     ConversationSession[]
+  messagingWindows MessagingWindow[]
 
   @@map("patients")
 }
@@ -330,6 +321,41 @@ model ConversationSession {
   @@unique([phone, doctorId], name: "phone_doctor")
   @@index([expiresAt])
   @@map("conversation_sessions")
+}
+
+
+/// When a patient last messaged one particular clinic.
+///
+/// WhatsApp only permits a free-form message within 24 hours of the patient's last
+/// inbound one, and that window is per *business number ↔ patient* pair — not per
+/// patient. This previously lived on Patient, which meant a patient writing to
+/// Clinic A opened a window that Clinic B's reminder job believed it had, and the
+/// console would promise a patient had been told when the send was about to be
+/// rejected.
+///
+/// Deliberately not on ConversationSession, whose rows are deleted on reset and by
+/// the expiry sweep after SESSION_TTL_MINUTES: the conversation is over long before
+/// the messaging window closes.
+///
+/// A row only exists once the patient has messaged that clinic, so its absence is
+/// the correct answer for every desk walk-in.
+model MessagingWindow {
+  id String @id @default(uuid())
+
+  patientId String @map("patient_id")
+  doctorId  String @map("doctor_id")
+
+  lastInboundAt DateTime @map("last_inbound_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor  Doctor  @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([patientId, doctorId], name: "patient_doctor")
+  @@index([doctorId, lastInboundAt])
+  @@map("messaging_windows")
 }
 
 /// Dedupe table for Meta webhook retries — Meta re-delivers on non-2xx and

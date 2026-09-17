@@ -23,31 +23,65 @@ export type WithPatient = Appointment & { patient: Patient };
  */
 export const MESSAGING_WINDOW_HOURS = 24;
 
-export function isReachable(patient: Pick<Patient, 'lastInboundAt'>, now: Date): boolean {
-  if (!patient.lastInboundAt) return false;
-  return now.getTime() - patient.lastInboundAt.getTime() < MESSAGING_WINDOW_HOURS * 3_600_000;
+export function isReachable(lastInboundAt: Date | null | undefined, now: Date): boolean {
+  if (!lastInboundAt) return false;
+  return now.getTime() - lastInboundAt.getTime() < MESSAGING_WINDOW_HOURS * 3_600_000;
 }
 
 export interface Reachability {
   /** Patients we can message right now. */
   reachable: WithPatient[];
   /**
-   * Outside the messaging window, or never messaged us at all (every desk
-   * walk-in). Somebody has to phone these.
+   * Outside the messaging window, or never messaged this clinic at all (every
+   * desk walk-in). Somebody has to phone these.
    */
   unreachable: WithPatient[];
 }
 
+/**
+ * When each of these patients last messaged **this** clinic.
+ *
+ * Scoped to the doctor on purpose: the window belongs to the business number the
+ * patient wrote to, so a patient who messages Clinic A is not reachable by Clinic
+ * B. Returning a Map keeps the partition below a pure function.
+ */
+export async function loadMessagingWindows(
+  doctorId: string,
+  patientIds: string[],
+): Promise<Map<string, Date>> {
+  if (patientIds.length === 0) return new Map();
+  const rows = await prisma.messagingWindow.findMany({
+    where: { doctorId, patientId: { in: patientIds } },
+    select: { patientId: true, lastInboundAt: true },
+  });
+  return new Map(rows.map((r) => [r.patientId, r.lastInboundAt]));
+}
+
 export function partitionByReachability(
   appointments: WithPatient[],
+  windows: Map<string, Date>,
   now: Date = new Date(),
 ): Reachability {
   const reachable: WithPatient[] = [];
   const unreachable: WithPatient[] = [];
   for (const appointment of appointments) {
-    (isReachable(appointment.patient, now) ? reachable : unreachable).push(appointment);
+    const lastInboundAt = windows.get(appointment.patientId);
+    (isReachable(lastInboundAt, now) ? reachable : unreachable).push(appointment);
   }
   return { reachable, unreachable };
+}
+
+/** Load the windows and split in one step — what every caller actually wants. */
+export async function splitByReachability(
+  doctorId: string,
+  appointments: WithPatient[],
+  now: Date = new Date(),
+): Promise<Reachability> {
+  const windows = await loadMessagingWindows(
+    doctorId,
+    appointments.map((a) => a.patientId),
+  );
+  return partitionByReachability(appointments, windows, now);
 }
 
 /** Only a booking that is still standing can be cancelled. */
