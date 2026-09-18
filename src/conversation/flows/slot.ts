@@ -4,6 +4,7 @@ import {
   bookSlot,
   getAvailableSlots,
   getNextAvailableDates,
+  moveSlot,
   slotLabel,
   type Slot,
 } from '../../domain/slots';
@@ -394,15 +395,10 @@ async function handleBookingConfirmation(ctx: ConversationContext): Promise<Step
           reply('slotTaken', t(ctx.language, 'slotTaken')),
         ]);
       case 'PATIENT_HAS_SLOT':
-        return menuResult(ctx, [
-          reply(
-            'slotAlreadyBooked',
-            t(ctx.language, 'slotAlreadyBooked', {
-              date: formatDateForPatient(date),
-              time: timeLabel(new Date(data.slotStart), ctx.doctor),
-            }),
-          ),
-        ]);
+        // They hold a different time that day. Offer to move it rather than
+        // sending them away to cancel and start again — two steps with a gap
+        // the slot they just picked can disappear into.
+        return askToMove(ctx, result.existing, date, data.slotStart);
       case 'ON_LEAVE':
         return menuResult(ctx, [
           reply(
@@ -455,6 +451,97 @@ async function handleBookingConfirmation(ctx: ConversationContext): Promise<Step
     ],
     data: {},
     effects: [{ type: 'SCHEDULE_REMINDERS', appointmentId: appointment.id }],
+  };
+}
+
+// ---- moving an existing appointment ----
+
+async function askToMove(
+  ctx: ConversationContext,
+  existing: { id: string; slotStart: Date | null },
+  date: Date,
+  slotStart: string,
+): Promise<StepResult> {
+  return {
+    nextStep: Steps.SLOT_CONFIRM_MOVE,
+    replies: [
+      reply(
+        'slotMoveConfirm',
+        t(ctx.language, 'slotMoveConfirm', {
+          doctorName: ctx.doctor.name,
+          date: formatDateForPatient(date),
+          fromTime: existing.slotStart ? timeLabel(existing.slotStart, ctx.doctor) : '-',
+          toTime: timeLabel(new Date(slotStart), ctx.doctor),
+        }),
+        confirmButtons(ctx.language),
+      ),
+    ],
+    // The appointment by id and the new time as an instant — never positions in
+    // a list that gets regenerated on the next turn.
+    data: { date: formatDateOnly(date), slotStart, existingId: existing.id },
+  };
+}
+
+async function handleMoveConfirmation(ctx: ConversationContext): Promise<StepResult> {
+  const data = readData(ctx);
+  const existingId = ctx.data?.['existingId'] as string | undefined;
+  const date = data.date ? parseDateOnly(data.date) : null;
+
+  if (!existingId || !data.slotStart || !date) return menuResult(ctx);
+
+  if (!isYes(ctx.input)) {
+    // Anything but yes keeps what they have. Declining a move must never be
+    // read as declining the appointment.
+    return menuResult(ctx, [
+      reply(
+        'slotMoveKept',
+        t(ctx.language, 'slotMoveKept', {
+          date: formatDateForPatient(date),
+          time: timeLabel(new Date(data.slotStart), ctx.doctor),
+        }),
+      ),
+    ]);
+  }
+
+  const result = await moveSlot(
+    ctx.doctor,
+    ctx.patient.id,
+    existingId,
+    date,
+    new Date(data.slotStart),
+    ctx.receivedAt,
+  );
+
+  if (!result.ok) {
+    // Nothing was moved and the original is untouched, so re-offer the day.
+    // moveSlot takes the new slot before releasing the old one precisely so
+    // that this path leaves them still holding their appointment.
+    return askForTime(ctx, data.date!, data.period, 0, [
+      reply('slotTaken', t(ctx.language, 'slotTaken')),
+    ]);
+  }
+
+  const moved = result.appointment;
+  return {
+    nextStep: Steps.SLOT_MENU,
+    replies: [
+      reply(
+        'slotMoved',
+        t(ctx.language, 'slotMoved', {
+          doctorName: ctx.doctor.name,
+          clinicName: ctx.clinic.name,
+          date: formatDateForPatient(moved.date),
+          time: moved.slotStart ? timeLabel(moved.slotStart, ctx.doctor) : '-',
+        }),
+      ),
+    ],
+    data: {},
+    // Reminders follow the appointment, or the patient is reminded about a time
+    // they are no longer coming at.
+    effects: [
+      { type: 'CANCEL_REMINDERS', appointmentId: existingId },
+      { type: 'SCHEDULE_REMINDERS', appointmentId: moved.id },
+    ],
   };
 }
 
@@ -572,6 +659,8 @@ export const slotFlow: ConversationFlow = {
         return handleTimeChoice(ctx);
       case Steps.SLOT_CONFIRM_BOOKING:
         return handleBookingConfirmation(ctx);
+      case Steps.SLOT_CONFIRM_MOVE:
+        return handleMoveConfirmation(ctx);
       case Steps.SLOT_CONFIRM_CANCEL:
         return handleCancelConfirmation(ctx);
 

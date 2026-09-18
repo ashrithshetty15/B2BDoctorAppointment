@@ -22,6 +22,8 @@ export const Steps = {
   SLOT_AWAITING_PERIOD: 'SLOT_AWAITING_PERIOD',
   SLOT_AWAITING_TIME: 'SLOT_AWAITING_TIME',
   SLOT_CONFIRM_BOOKING: 'SLOT_CONFIRM_BOOKING',
+  /// Confirming a move of the appointment they already hold that day.
+  SLOT_CONFIRM_MOVE: 'SLOT_CONFIRM_MOVE',
   SLOT_CONFIRM_CANCEL: 'SLOT_CONFIRM_CANCEL',
 
   // HYBRID mode

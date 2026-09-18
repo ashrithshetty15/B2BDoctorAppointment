@@ -29,6 +29,8 @@ describe('templates', () => {
       eta: '32 mins',
       delayMins: 20,
       options: '1. 10:00 AM\n2. 10:30 AM',
+      fromTime: '12:15 PM',
+      toTime: '02:30 PM',
     };
 
     for (const lang of languages) {
@@ -38,6 +40,40 @@ describe('templates', () => {
         expect(text.length, `${lang}.${name}`).toBeGreaterThan(0);
         // A missing param shows up as "undefined" in the rendered copy.
         expect(text, `${lang}.${name}`).not.toContain('undefined');
+      }
+    }
+  });
+
+  /**
+   * SLOT mode stopped printing a numbered menu when the reply buttons took
+   * over, but three templates went on telling patients to "Reply 3" — naming a
+   * number nothing on screen shows. This catches the next one.
+   *
+   * TOKEN mode still prints its numbered list, so it is deliberately exempt.
+   */
+  it('never tells a SLOT-mode patient to reply with a number', () => {
+    const params = {
+      clinicName: 'Sunrise Clinic',
+      doctorName: 'Ramesh',
+      patientName: 'Asha',
+      date: 'Fri, 11 Sep',
+      time: '10:30 AM',
+      fromTime: '12:15 PM',
+      toTime: '02:30 PM',
+      tokenNumber: 12,
+      nowServing: '#7',
+      ahead: 4,
+      eta: '32 mins',
+      delayMins: 20,
+      options: '',
+    };
+
+    for (const lang of languages) {
+      for (const [name, render] of Object.entries(templates[lang])) {
+        if (!name.startsWith('slot')) continue;
+        const text = (render as (p: typeof params) => string)(params);
+        expect(text, `${lang}.${name}`).not.toMatch(/reply\s+\d/i);
+        expect(text, `${lang}.${name}`).not.toMatch(/\d\s*ಒತ್ತಿ/);
       }
     }
   });

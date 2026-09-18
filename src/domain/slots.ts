@@ -111,7 +111,14 @@ export async function getAvailableSlots(
 
 export type BookSlotResult =
   | { ok: true; appointment: Appointment; alreadyExisted?: boolean }
-  | { ok: false; reason: 'ON_LEAVE' | 'NOT_A_SLOT' | 'IN_PAST' | 'TAKEN' | 'PATIENT_HAS_SLOT' };
+  | { ok: false; reason: 'ON_LEAVE' | 'NOT_A_SLOT' | 'IN_PAST' | 'TAKEN' }
+  /**
+   * They hold an appointment that day already, and asked for a *different*
+   * time. Carries the existing one so the caller can offer to move it rather
+   * than making them cancel and start again — which is two steps with a gap the
+   * wanted slot can disappear into.
+   */
+  | { ok: false; reason: 'PATIENT_HAS_SLOT'; existing: Appointment };
 
 /**
  * Book a specific time. The counterpart to issueToken, with the same
@@ -140,8 +147,11 @@ export async function bookSlot(
   if (!slot) return { ok: false, reason: 'NOT_A_SLOT' };
   if (slot.start.getTime() <= now.getTime()) return { ok: false, reason: 'IN_PAST' };
 
-  // One appointment per patient per day, matching the token rule — a second is
-  // far more likely a double submit than a genuine intention.
+  // One appointment per patient per day, matching the token rule. Which of the
+  // two things it is depends on the time they asked for, and they want opposite
+  // answers: re-tapping the slot they already hold is a double submit and must
+  // be idempotent; asking for a different time is a deliberate change and
+  // deserves to be offered as a move.
   const existing = await prisma.appointment.findFirst({
     where: {
       doctorId: doctor.id,
@@ -151,7 +161,12 @@ export async function bookSlot(
       status: { in: ['BOOKED', 'ARRIVED', 'IN_PROGRESS'] },
     },
   });
-  if (existing) return { ok: true, appointment: existing, alreadyExisted: true };
+  if (existing) {
+    const sameSlot = existing.slotStart?.getTime() === slot.start.getTime();
+    return sameSlot
+      ? { ok: true, appointment: existing, alreadyExisted: true }
+      : { ok: false, reason: 'PATIENT_HAS_SLOT', existing };
+  }
 
   try {
     const appointment = await prisma.appointment.create({
@@ -171,6 +186,73 @@ export async function bookSlot(
       err instanceof Prisma.PrismaClientKnownRequestError &&
       err.code === 'P2002'
     ) {
+      return { ok: false, reason: 'TAKEN' };
+    }
+    throw err;
+  }
+}
+
+/**
+ * Move an existing appointment to a different time.
+ *
+ * Both writes in one transaction, and in this order: take the new slot first,
+ * release the old one second. If the new slot went while the patient was
+ * deciding, the insert raises P2002, the transaction rolls back, and **the
+ * original appointment is still theirs**.
+ *
+ * That ordering is the whole point. Cancelling first — which is what the bot
+ * used to tell patients to do by hand — opens a window where they hold nothing,
+ * and the slot they were reaching for can be taken inside it. Ending up with
+ * neither is worse than either outcome on its own.
+ */
+export async function moveSlot(
+  doctor: Doctor,
+  patientId: string,
+  existingId: string,
+  date: Date,
+  slotStart: Date,
+  now: Date = new Date(),
+): Promise<BookSlotResult> {
+  if (isOnLeave(doctor, date)) return { ok: false, reason: 'ON_LEAVE' };
+
+  const slot = generateSlots(doctor, date).find(
+    (s) => s.start.getTime() === slotStart.getTime(),
+  );
+  if (!slot) return { ok: false, reason: 'NOT_A_SLOT' };
+  if (slot.start.getTime() <= now.getTime()) return { ok: false, reason: 'IN_PAST' };
+
+  try {
+    const appointment = await prisma.$transaction(async (tx) => {
+      const created = await tx.appointment.create({
+        data: {
+          doctorId: doctor.id,
+          patientId,
+          date,
+          type: 'SLOT',
+          status: 'BOOKED',
+          slotStart: slot.start,
+          slotEnd: slot.end,
+        },
+      });
+
+      // Scoped to this patient and to a still-active status, so a stale id from
+      // an old session cannot cancel somebody else's appointment.
+      await tx.appointment.updateMany({
+        where: {
+          id: existingId,
+          patientId,
+          doctorId: doctor.id,
+          status: { in: ['BOOKED', 'ARRIVED', 'IN_PROGRESS'] },
+        },
+        data: { status: 'CANCELLED', cancelledAt: now },
+      });
+
+      return created;
+    });
+
+    return { ok: true, appointment };
+  } catch (err) {
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
       return { ok: false, reason: 'TAKEN' };
     }
     throw err;

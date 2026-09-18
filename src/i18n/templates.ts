@@ -78,6 +78,9 @@ export type TemplateSet = {
   slotConfirmPrompt: (p: { doctorName: string; date: string; time: string }) => string;
   slotBooked: (p: { doctorName: string; clinicName: string; date: string; time: string }) => string;
   slotAlreadyBooked: (p: { date: string; time: string }) => string;
+  slotMoveConfirm: (p: { doctorName: string; date: string; fromTime: string; toTime: string }) => string;
+  slotMoved: (p: { doctorName: string; clinicName: string; date: string; time: string }) => string;
+  slotMoveKept: (p: { date: string; time: string }) => string;
   slotTaken: () => string;
   slotStatus: (p: { doctorName: string; date: string; time: string }) => string;
   slotCancelConfirm: (p: { date: string; time: string }) => string;
@@ -193,7 +196,20 @@ const en: TemplateSet = {
   slotBooked: ({ doctorName, clinicName, date, time }) =>
     `Your appointment is confirmed.\n\nDr. ${doctorName} — ${clinicName}\n*${date} at ${time}*\n\nWe will remind you the evening before and again 1 hour ahead. Reply *cancel* if you cannot make it.`,
   slotAlreadyBooked: ({ date, time }) =>
-    `You already have an appointment on *${date} at ${time}*. Reply 3 to cancel it first.`,
+    `You are already booked for *${date} at ${time}*.`,
+  slotMoveConfirm: ({ doctorName, date, fromTime, toTime }) =>
+    `You already have an appointment with Dr. ${doctorName} on *${date} at ${fromTime}*.
+
+Move it to *${toTime}*?`,
+  slotMoved: ({ doctorName, clinicName, date, time }) =>
+    `Your appointment has been moved.
+
+Dr. ${doctorName} — ${clinicName}
+*${date} at ${time}*
+
+Reply *cancel* if you cannot make it.`,
+  slotMoveKept: ({ date, time }) =>
+    `No change — your appointment is still *${date} at ${time}*.`,
   slotTaken: () => 'Sorry, that time was just taken. Please pick another one.',
   slotStatus: ({ doctorName, date, time }) =>
     `Your appointment:\nDr. ${doctorName}\n*${date} at ${time}*`,
@@ -202,7 +218,7 @@ const en: TemplateSet = {
   slotCancelled: ({ date, time }) =>
     `Your appointment on ${date} at ${time} has been cancelled. Message us anytime to book again.`,
   slotReminderDayBefore: ({ doctorName, clinicName, date, time }) =>
-    `Reminder: you have an appointment with Dr. ${doctorName} at ${clinicName} tomorrow, *${date} at ${time}*. Reply 3 if you need to cancel.`,
+    `Reminder: you have an appointment with Dr. ${doctorName} at ${clinicName} tomorrow, *${date} at ${time}*. Reply *cancel* if you cannot make it.`,
   slotReminderHourBefore: ({ doctorName, time }) =>
     `Reminder: your appointment with Dr. ${doctorName} is at *${time}* — about 1 hour from now. Please start for the clinic.`,
   slotDelayBroadcast: ({ doctorName, delayMins }) =>
@@ -300,7 +316,20 @@ const kn: TemplateSet = {
   slotBooked: ({ doctorName, clinicName, date, time }) =>
     `ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಖಚಿತವಾಗಿದೆ.\n\nಡಾ. ${doctorName} — ${clinicName}\n*${date}, ${time} ಗೆ*\n\nಹಿಂದಿನ ದಿನ ಸಂಜೆ ಮತ್ತು 1 ಗಂಟೆ ಮೊದಲು ನಿಮಗೆ ನೆನಪಿಸುತ್ತೇವೆ. ಬರಲು ಆಗದಿದ್ದರೆ *ರದ್ದು* ಎಂದು ಕಳುಹಿಸಿ.`,
   slotAlreadyBooked: ({ date, time }) =>
-    `ನಿಮಗೆ ಈಗಾಗಲೇ *${date}, ${time} ಗೆ* ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಇದೆ. ಮೊದಲು ಅದನ್ನು ರದ್ದು ಮಾಡಲು 3 ಒತ್ತಿ.`,
+    `ನಿಮಗೆ ಈಗಾಗಲೇ *${date}, ${time} ಗೆ* ಬುಕ್ ಆಗಿದೆ.`,
+  slotMoveConfirm: ({ doctorName, date, fromTime, toTime }) =>
+    `ನಿಮಗೆ ಈಗಾಗಲೇ ಡಾ. ${doctorName} ಅವರ ಜೊತೆ *${date}, ${fromTime} ಗೆ* ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಇದೆ.
+
+ಅದನ್ನು *${toTime}* ಕ್ಕೆ ಬದಲಿಸಬೇಕೆ?`,
+  slotMoved: ({ doctorName, clinicName, date, time }) =>
+    `ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಬದಲಾಯಿತು.
+
+ಡಾ. ${doctorName} — ${clinicName}
+*${date}, ${time} ಗೆ*
+
+ಬರಲು ಆಗದಿದ್ದರೆ *ರದ್ದು* ಎಂದು ಕಳುಹಿಸಿ.`,
+  slotMoveKept: ({ date, time }) =>
+    `ಬದಲಾವಣೆ ಇಲ್ಲ — ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಇನ್ನೂ *${date}, ${time} ಗೆ* ಇದೆ.`,
   slotTaken: () => 'ಕ್ಷಮಿಸಿ, ಆ ಸಮಯ ಈಗ ತಾನೇ ಬುಕ್ ಆಯಿತು. ದಯವಿಟ್ಟು ಬೇರೆ ಒಂದು ಆಯ್ಕೆ ಮಾಡಿ.',
   slotStatus: ({ doctorName, date, time }) =>
     `ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್:\nಡಾ. ${doctorName}\n*${date}, ${time} ಗೆ*`,
@@ -309,7 +338,7 @@ const kn: TemplateSet = {
   slotCancelled: ({ date, time }) =>
     `${date}, ${time} ಗೆ ಇರುವ ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ರದ್ದಾಗಿದೆ. ಮತ್ತೆ ಬುಕ್ ಮಾಡಲು ಯಾವಾಗಲಾದರೂ ಸಂದೇಶ ಕಳುಹಿಸಿ.`,
   slotReminderDayBefore: ({ doctorName, clinicName, date, time }) =>
-    `ನೆನಪು: ನಾಳೆ, *${date}, ${time} ಗೆ* ${clinicName} ನಲ್ಲಿ ಡಾ. ${doctorName} ಅವರ ಜೊತೆ ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಇದೆ. ರದ್ದು ಮಾಡಬೇಕಾದರೆ 3 ಒತ್ತಿ.`,
+    `ನೆನಪು: ನಾಳೆ, *${date}, ${time} ಗೆ* ${clinicName} ನಲ್ಲಿ ಡಾ. ${doctorName} ಅವರ ಜೊತೆ ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಇದೆ. ಬರಲು ಆಗದಿದ್ದರೆ *ರದ್ದು* ಎಂದು ಕಳುಹಿಸಿ.`,
   slotReminderHourBefore: ({ doctorName, time }) =>
     `ನೆನಪು: ಡಾ. ${doctorName} ಅವರ ಜೊತೆ ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ *${time} ಗೆ* — ಸುಮಾರು 1 ಗಂಟೆ ನಂತರ. ದಯವಿಟ್ಟು ಕ್ಲಿನಿಕ್ ಕಡೆ ಹೊರಡಿ.`,
   slotDelayBroadcast: ({ doctorName, delayMins }) =>

@@ -1,6 +1,6 @@
 import type { Appointment, Clinic, Doctor, Patient } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { bookSlot, getAvailableSlots, getNextAvailableDates } from '../../domain/slots';
+import { bookSlot, getAvailableSlots, getNextAvailableDates, moveSlot } from '../../domain/slots';
 import { Steps } from '../steps';
 import type { ConversationContext } from '../types';
 import { slotFlow } from './slot';
@@ -19,6 +19,7 @@ vi.mock('../../domain/slots', async (importOriginal) => {
     getAvailableSlots: vi.fn(),
     getNextAvailableDates: vi.fn(),
     bookSlot: vi.fn(),
+    moveSlot: vi.fn(),
   };
 });
 
@@ -86,6 +87,7 @@ beforeEach(() => {
   vi.mocked(getNextAvailableDates).mockReset().mockResolvedValue([today]);
   vi.mocked(getAvailableSlots).mockReset().mockResolvedValue(slotsFrom(3));
   vi.mocked(bookSlot).mockReset();
+  vi.mocked(moveSlot).mockReset();
 });
 
 describe('menu', () => {
@@ -399,5 +401,92 @@ describe('switching doctor', () => {
       const r = await slotFlow.handle(ctx(Steps.SLOT_MENU, '', {}, count));
       expect(r.replies[0]?.text).toContain('Dr. Meera');
     }
+  });
+});
+
+/**
+ * Picking a different time on a day you already have an appointment is a
+ * reschedule, not a mistake. It used to be answered with "you already have an
+ * appointment, reply 3 to cancel it first" — which named a number the menu no
+ * longer shows, and sent the patient away to do in two steps what the bot can
+ * do in one.
+ */
+describe('moving an existing appointment', () => {
+  const existing = {
+    id: 'appt-old',
+    date: today,
+    slotStart: new Date('2026-09-18T06:45:00.000Z'), // 12:15 PM IST
+  } as unknown as Appointment;
+
+  const confirmData = { date: '2026-09-18', slotStart: '2026-09-18T09:00:00.000Z' };
+
+  it('offers to move instead of telling them to cancel', async () => {
+    vi.mocked(bookSlot).mockResolvedValue({ ok: false, reason: 'PATIENT_HAS_SLOT', existing });
+
+    const r = await slotFlow.handle(ctx(Steps.SLOT_CONFIRM_BOOKING, '1', confirmData));
+
+    expect(r.nextStep).toBe(Steps.SLOT_CONFIRM_MOVE);
+    expect(r.replies[0]?.templateName).toBe('slotMoveConfirm');
+    expect(r.replies[0]?.text).toMatch(/12:15 PM/);
+    expect(r.replies[0]?.text).toMatch(/02:30 PM/);
+    expect(r.data?.['existingId']).toBe('appt-old');
+  });
+
+  it('moves it on yes, and sends the reminders after it', async () => {
+    const moved = { id: 'appt-new', date: today, slotStart: new Date('2026-09-18T09:00:00.000Z') } as unknown as Appointment;
+    vi.mocked(moveSlot).mockResolvedValue({ ok: true, appointment: moved });
+
+    const r = await slotFlow.handle(
+      ctx(Steps.SLOT_CONFIRM_MOVE, '1', { ...confirmData, existingId: 'appt-old' }),
+    );
+
+    expect(r.replies[0]?.templateName).toBe('slotMoved');
+    expect(r.effects).toEqual([
+      { type: 'CANCEL_REMINDERS', appointmentId: 'appt-old' },
+      { type: 'SCHEDULE_REMINDERS', appointmentId: 'appt-new' },
+    ]);
+  });
+
+  /** Declining the move must never be read as declining the appointment. */
+  it('keeps the original on no, and moves nothing', async () => {
+    const r = await slotFlow.handle(
+      ctx(Steps.SLOT_CONFIRM_MOVE, '2', { ...confirmData, existingId: 'appt-old' }),
+    );
+
+    expect(moveSlot).not.toHaveBeenCalled();
+    expect(r.nextStep).toBe(Steps.SLOT_MENU);
+    expect(r.replies[0]?.templateName).toBe('slotMoveKept');
+    expect(r.effects ?? []).toEqual([]);
+  });
+
+  /**
+   * The new slot went while they were deciding. moveSlot leaves the original
+   * intact, so re-offer the day rather than implying anything was lost.
+   */
+  it('re-offers times when the new slot was taken mid-move', async () => {
+    vi.mocked(moveSlot).mockResolvedValue({ ok: false, reason: 'TAKEN' });
+
+    const r = await slotFlow.handle(
+      ctx(Steps.SLOT_CONFIRM_MOVE, '1', { ...confirmData, existingId: 'appt-old' }),
+    );
+
+    expect(r.nextStep).toBe(Steps.SLOT_AWAITING_TIME);
+    expect(r.replies[0]?.templateName).toBe('slotTaken');
+    expect(r.effects ?? []).toEqual([]);
+  });
+
+  /** Re-tapping the very same slot is still a double submit, not a move. */
+  it('treats the same slot again as already booked, not a move', async () => {
+    vi.mocked(bookSlot).mockResolvedValue({
+      ok: true,
+      appointment: existing,
+      alreadyExisted: true,
+    });
+
+    const r = await slotFlow.handle(ctx(Steps.SLOT_CONFIRM_BOOKING, '1', confirmData));
+
+    expect(r.nextStep).toBe(Steps.SLOT_MENU);
+    expect(r.replies[0]?.templateName).toBe('slotAlreadyBooked');
+    expect(moveSlot).not.toHaveBeenCalled();
   });
 });
