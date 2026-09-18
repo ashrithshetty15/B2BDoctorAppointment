@@ -91,8 +91,9 @@ beforeEach(() => {
 });
 
 describe('menu', () => {
+  /** A solo clinic keeps the original three, ids matching the typed numbers. */
   it('offers three tappable options whose ids match the typed numbers', async () => {
-    const r = await slotFlow.handle(ctx(Steps.SLOT_MENU, ''));
+    const r = await slotFlow.handle(ctx(Steps.SLOT_MENU, '', {}, 1));
     expect(r.nextStep).toBe(Steps.SLOT_MENU);
     expect(r.replies[0]?.buttons?.map((b) => b.id)).toEqual(['1', '2', '3']);
   });
@@ -384,16 +385,43 @@ describe('tapping and typing are the same input', () => {
  * one screen a patient always sees. This is the whole of its discoverability.
  */
 describe('switching doctor', () => {
-  it('offers the way back to the doctor list at a multi-doctor clinic', async () => {
+  it('offers a tappable Change doctor at a multi-doctor clinic', async () => {
     const r = await slotFlow.handle(ctx(Steps.SLOT_MENU, '', {}, 3));
-    expect(r.replies[0]?.text).toContain('doctor');
-    expect(r.replies[0]?.text).toMatch(/Reply \*doctor\*/);
+    const buttons = r.replies[0]?.buttons ?? [];
+
+    expect(buttons.map((b) => b.title)).toEqual([
+      'Book appointment',
+      'My appointment',
+      'Change doctor',
+    ]);
+    // The id is the word, not a digit: a tap arrives as the id and must land in
+    // the same place as typing "doctor".
+    expect(buttons.at(-1)?.id).toBe('doctor');
   });
 
-  /** At a solo practice it would promise something that does not exist. */
-  it('says nothing about switching when the clinic has one doctor', async () => {
+  /**
+   * The one the user asked for by name: a clinic with a single doctor has
+   * nothing to change to, so the button must not appear at all.
+   */
+  it('never shows Change doctor at a single-doctor clinic', async () => {
     const r = await slotFlow.handle(ctx(Steps.SLOT_MENU, '', {}, 1));
-    expect(r.replies[0]?.text).not.toMatch(/Reply \*doctor\*/);
+    const buttons = r.replies[0]?.buttons ?? [];
+
+    expect(buttons.map((b) => b.title)).toEqual([
+      'Book appointment',
+      'My appointment',
+      'Cancel it',
+    ]);
+    expect(buttons.some((b) => b.id === 'doctor')).toBe(false);
+  });
+
+  /** Cancel lost its button at multi-doctor clinics, so it has to be said. */
+  it('advertises cancelling only where the Cancel button is gone', async () => {
+    const many = await slotFlow.handle(ctx(Steps.SLOT_MENU, '', {}, 3));
+    expect(many.replies[0]?.text).toMatch(/Reply \*cancel\*/);
+
+    const solo = await slotFlow.handle(ctx(Steps.SLOT_MENU, '', {}, 1));
+    expect(solo.replies[0]?.text).not.toMatch(/Reply \*cancel\*/);
   });
 
   it('still names the doctor, hint or not', async () => {

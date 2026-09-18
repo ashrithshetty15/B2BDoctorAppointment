@@ -101,22 +101,41 @@ const PERIOD_BUTTON = {
  * Two complete strings joined, not a sentence assembled from fragments: each
  * half is independently translated.
  */
+/**
+ * WhatsApp allows three reply buttons and no more, so at a clinic with several
+ * doctors the third is "Change doctor" and cancelling moves to the typed word.
+ *
+ * Which is why the hint line exists: the button that left has to be advertised
+ * somewhere, or it simply disappears. Cancelling is also named in the booking
+ * confirmation and in both reminders, so it is reachable from every message a
+ * patient is likely to still have in front of them.
+ *
+ * A solo clinic has no doctor to change and keeps the Cancel button, so it sees
+ * no hint at all.
+ */
+function menuButtons(ctx: ConversationContext): ReplyButton[] {
+  const common: ReplyButton[] = [
+    { id: '1', title: t(ctx.language, 'btnBookSlot') },
+    { id: '2', title: t(ctx.language, 'btnMyAppointment') },
+  ];
+
+  // `doctor` rather than a digit: a tap arrives as the button's id, and that is
+  // the same token isDoctorSwitchRequest already recognises when it is typed —
+  // so tapping and typing land in one place instead of two.
+  return ctx.doctorCount > 1
+    ? [...common, { id: 'doctor', title: t(ctx.language, 'btnChangeDoctor') }]
+    : [...common, { id: '3', title: t(ctx.language, 'btnCancelSlot') }];
+}
+
 function menuText(ctx: ConversationContext): string {
   const menu = t(ctx.language, 'slotMainMenu', { doctorName: ctx.doctor.name });
-  return ctx.doctorCount > 1 ? `${menu}\n\n${t(ctx.language, 'doctorSwitchHint')}` : menu;
+  return ctx.doctorCount > 1 ? `${menu}\n\n${t(ctx.language, 'slotCancelHint')}` : menu;
 }
 
 async function menuResult(ctx: ConversationContext, extraFirst?: Reply[]): Promise<StepResult> {
   return {
     nextStep: Steps.SLOT_MENU,
-    replies: [
-      ...(extraFirst ?? []),
-      reply('slotMainMenu', menuText(ctx), [
-        { id: '1', title: t(ctx.language, 'btnBookSlot') },
-        { id: '2', title: t(ctx.language, 'btnMyAppointment') },
-        { id: '3', title: t(ctx.language, 'btnCancelSlot') },
-      ]),
-    ],
+    replies: [...(extraFirst ?? []), reply('slotMainMenu', menuText(ctx), menuButtons(ctx))],
     data: {},
   };
 }
