@@ -31,6 +31,15 @@ const workingHoursSchema = z
   })
   .default({});
 
+/**
+ * `.strict()` throughout: Zod strips unknown keys by default, so a misspelled or
+ * not-yet-deployed field was accepted, discarded, and reported as `updated: true`.
+ * A caller cannot tell that from a real write. These are JSON API bodies with no
+ * incidental fields, so rejecting the unexpected costs nothing.
+ *
+ * The console's form posts are deliberately NOT strict — a browser sends `_csrf`
+ * and other extras that must keep being ignored.
+ */
 const createDoctorBody = z.object({
   name: z.string().min(2),
   clinicName: z.string().min(2),
@@ -44,7 +53,7 @@ const createDoctorBody = z.object({
   defaultLanguage: z.enum(['EN', 'KN']).optional(),
   timezone: z.string().optional(),
   workingHours: workingHoursSchema.optional(),
-});
+}).strict();
 
 adminRouter.post('/admin/doctor', requireAdminKey, async (req, res) => {
   const parsed = createDoctorBody.safeParse(req.body);
@@ -137,7 +146,7 @@ const bookingModeBody = z.object({
   bookingMode: z.enum(['TOKEN', 'SLOT', 'HYBRID']),
   /** Explicit override for the write-once rule. */
   force: z.boolean().optional(),
-});
+}).strict();
 
 adminRouter.post('/admin/doctor/:id/booking-mode', requireAdminKey, async (req, res) => {
   const parsed = bookingModeBody.safeParse(req.body);
@@ -186,7 +195,7 @@ const configBody = z.object({
   missedCallNumber: z.string().optional(),
   workingHours: workingHoursSchema.optional(),
   leaveDates: z.array(z.string()).optional(),
-});
+}).strict();
 
 adminRouter.patch('/admin/doctor/:id', requireAdminKey, async (req, res) => {
   const parsed = configBody.safeParse(req.body);
@@ -213,26 +222,25 @@ adminRouter.patch('/admin/doctor/:id', requireAdminKey, async (req, res) => {
     return;
   }
 
+  // Built once and reported back, so a caller can tell a real write from a
+  // request that changed nothing. `updated: true` said the same either way.
+  const data = {
+    ...(body.dailyTokenCap !== undefined ? { dailyTokenCap: body.dailyTokenCap } : {}),
+    ...(body.consultDurationMins !== undefined
+      ? { consultDurationMins: body.consultDurationMins }
+      : {}),
+    ...(body.defaultLanguage ? { defaultLanguage: body.defaultLanguage } : {}),
+    ...(body.whatsappPhoneNumberId
+      ? { whatsappPhoneNumberId: body.whatsappPhoneNumberId }
+      : {}),
+    ...(whatsappNumber ? { whatsappNumber } : {}),
+    ...(body.missedCallNumber ? { missedCallNumber: body.missedCallNumber } : {}),
+    ...(body.workingHours ? { workingHours: body.workingHours as object } : {}),
+    ...(leaveDates ? { leaveDates: leaveDates as Date[] } : {}),
+  };
+
   const doctor = await prisma.doctor
-    .update({
-      where: { id: req.params['id'] ?? '' },
-      data: {
-        ...(body.dailyTokenCap !== undefined ? { dailyTokenCap: body.dailyTokenCap } : {}),
-        ...(body.consultDurationMins !== undefined
-          ? { consultDurationMins: body.consultDurationMins }
-          : {}),
-        ...(body.defaultLanguage ? { defaultLanguage: body.defaultLanguage } : {}),
-        ...(body.whatsappPhoneNumberId
-          ? { whatsappPhoneNumberId: body.whatsappPhoneNumberId }
-          : {}),
-        ...(whatsappNumber ? { whatsappNumber } : {}),
-        ...(body.missedCallNumber
-          ? { missedCallNumber: body.missedCallNumber }
-          : {}),
-        ...(body.workingHours ? { workingHours: body.workingHours as object } : {}),
-        ...(leaveDates ? { leaveDates: leaveDates as Date[] } : {}),
-      },
-    })
+    .update({ where: { id: req.params['id'] ?? '' }, data })
     .catch(() => null);
 
   if (!doctor) {
@@ -240,7 +248,8 @@ adminRouter.patch('/admin/doctor/:id', requireAdminKey, async (req, res) => {
     return;
   }
 
-  res.json({ id: doctor.id, updated: true });
+  // An empty list is the honest answer to "your request changed nothing".
+  res.json({ id: doctor.id, updated: Object.keys(data) });
 });
 
 /** List all doctors with pagination. */
@@ -276,7 +285,7 @@ adminRouter.get('/admin/doctors', requireAdminKey, async (req, res) => {
 /** Toggle doctor status between ACTIVE and DISABLED. */
 const statusToggleBody = z.object({
   status: z.enum(['ACTIVE', 'DISABLED']).optional(),
-});
+}).strict();
 
 adminRouter.post('/admin/doctor/:id/toggle-status', requireAdminKey, async (req, res) => {
   const parsed = statusToggleBody.safeParse(req.body);

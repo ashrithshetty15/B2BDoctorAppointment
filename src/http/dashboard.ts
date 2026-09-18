@@ -102,7 +102,7 @@ dashboardRouter.get('/doctor/:doctorId/today', requireDoctorScope, async (req, r
 // ---------------------------------------------------------------------------
 const statusBody = z.object({
   status: z.enum(['arrived', 'in-progress', 'done', 'no-show']),
-});
+}).strict();
 
 dashboardRouter.post('/appointment/:id/status', requireDoctorAuth, requireCsrf, async (req, res) => {
   const doctor = req.doctor!;
@@ -162,7 +162,7 @@ dashboardRouter.post('/appointment/:id/status', requireDoctorAuth, requireCsrf, 
 const delayBody = z.object({
   delayMins: z.coerce.number().int().min(1).max(480),
   date: z.string().optional(),
-});
+}).strict();
 
 dashboardRouter.post('/doctor/:doctorId/delay-broadcast', requireDoctorScope, requireCsrf, async (req, res) => {
   const doctor = req.doctor!;
@@ -199,7 +199,7 @@ const leaveBody = z.object({
   date: z.string(),
   /** Cancel and notify anyone already booked that day. Default true. */
   cancelExisting: z.boolean().optional(),
-});
+}).strict();
 
 dashboardRouter.post('/doctor/:doctorId/leave', requireDoctorScope, requireCsrf, async (req, res) => {
   const doctor = req.doctor!;
