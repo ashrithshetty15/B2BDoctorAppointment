@@ -76,6 +76,8 @@ export type TemplateSet = {
   slotPickPeriod: (p: { date: string }) => string;
   slotPickTime: (p: { date: string }) => string;
   slotNoneAvailable: (p: { date: string }) => string;
+  /** Nothing free on any day searched — distinct from one day being full. */
+  slotNothingAvailable: () => string;
   slotConfirmPrompt: (p: { doctorName: string; date: string; time: string }) => string;
   slotBooked: (p: { doctorName: string; clinicName: string; date: string; time: string }) => string;
   slotAlreadyBooked: (p: { date: string; time: string }) => string;
@@ -193,6 +195,8 @@ const en: TemplateSet = {
   slotPickTime: ({ date }) => `Available times on ${date} — pick one below.`,
   slotNoneAvailable: ({ date }) =>
     `Sorry, no appointment times are free on ${date}. Please choose another date.`,
+  slotNothingAvailable: () =>
+    'Sorry, all appointments are booked at the moment. Please try again tomorrow.',
   slotConfirmPrompt: ({ doctorName, date, time }) =>
     `Confirm your appointment?\n\nDr. ${doctorName}\n*${date} at ${time}*`,
   slotBooked: ({ doctorName, clinicName, date, time }) =>
@@ -314,6 +318,8 @@ const kn: TemplateSet = {
   slotPickTime: ({ date }) => `${date} ದಿನ ಲಭ್ಯವಿರುವ ಸಮಯಗಳು — ಕೆಳಗೆ ಒಂದನ್ನು ಆಯ್ಕೆ ಮಾಡಿ.`,
   slotNoneAvailable: ({ date }) =>
     `ಕ್ಷಮಿಸಿ, ${date} ದಿನ ಯಾವ ಸಮಯವೂ ಖಾಲಿ ಇಲ್ಲ. ದಯವಿಟ್ಟು ಬೇರೆ ದಿನಾಂಕ ಆಯ್ಕೆ ಮಾಡಿ.`,
+  slotNothingAvailable: () =>
+    'ಕ್ಷಮಿಸಿ, ಸದ್ಯಕ್ಕೆ ಎಲ್ಲಾ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್‌ಗಳೂ ಬುಕ್ ಆಗಿವೆ. ದಯವಿಟ್ಟು ನಾಳೆ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.',
   slotConfirmPrompt: ({ doctorName, date, time }) =>
     `ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಖಚಿತಪಡಿಸಬೇಕೆ?\n\nಡಾ. ${doctorName}\n*${date}, ${time} ಗೆ*`,
   slotBooked: ({ doctorName, clinicName, date, time }) =>

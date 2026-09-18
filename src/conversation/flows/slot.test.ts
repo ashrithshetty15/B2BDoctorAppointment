@@ -108,7 +108,7 @@ describe('menu', () => {
     vi.mocked(getNextAvailableDates).mockResolvedValue([]);
     const r = await slotFlow.handle(ctx(Steps.SLOT_MENU, '1'));
     expect(r.nextStep).toBe(Steps.SLOT_MENU);
-    expect(r.replies[0]?.templateName).toBe('slotNoneAvailable');
+    expect(r.replies[0]?.templateName).toBe('slotNothingAvailable');
   });
 
   /**
@@ -158,12 +158,35 @@ describe('greetings', () => {
 });
 
 describe('booking horizon', () => {
-  /** Clinics change their own plans inside a week; long-range bookings get moved by hand. */
-  it('looks no further ahead than three days', async () => {
+  /**
+   * Three days the doctor *works*, not three days on the calendar. Those were
+   * the same thing until a part-time doctor met it: a Monday-to-Friday
+   * afternoon clinic, asked on a Friday evening, had its past Friday plus
+   * Saturday and Sunday inside a three-calendar-day window — and offered
+   * nothing at all, as though it were fully booked.
+   */
+  it('offers three working days, searching past closed ones to find them', async () => {
     await slotFlow.handle(ctx(Steps.SLOT_MENU, '1'));
     const [, , count, lookAhead] = vi.mocked(getNextAvailableDates).mock.calls[0]!;
+
     expect(count).toBe(3);
-    expect(lookAhead).toBe(3);
+    // Wide enough that a doctor working two days a week still gets three.
+    expect(lookAhead).toBeGreaterThanOrEqual(14);
+  });
+
+  /**
+   * When there genuinely is nothing, say so — and do not name today, which is
+   * rarely the reason and reads as though tomorrow might be different.
+   */
+  it('says everything is booked rather than blaming today', async () => {
+    vi.mocked(getNextAvailableDates).mockResolvedValue([]);
+
+    const r = await slotFlow.handle(ctx(Steps.SLOT_MENU, '1'));
+
+    expect(r.nextStep).toBe(Steps.SLOT_MENU);
+    expect(r.replies[0]?.templateName).toBe('slotNothingAvailable');
+    expect(r.replies[0]?.text).toMatch(/try again tomorrow/i);
+    expect(r.replies[0]?.text).not.toMatch(/Fri|Sat|Sun|Mon/);
   });
 });
 

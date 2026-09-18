@@ -37,17 +37,29 @@ import {
  */
 
 /**
- * How far ahead a patient may book.
+ * How many days a patient is offered.
  *
- * Deliberately short. A clinic's own plans change inside a week — a conference,
- * a locum, a session moved — and every booking beyond that horizon is one the
- * desk is likely to have to move by hand. Three days also keeps the date list
- * to a glance rather than a scroll.
+ * Counted in days the doctor actually works, not days on the calendar. Those
+ * were the same thing until a part-time doctor met it: Kavya works Monday to
+ * Friday afternoons, so on a Friday evening a three-*calendar*-day window held
+ * her past Friday, Saturday and Sunday — and offered nothing at all, as though
+ * she were fully booked. Three working days gives her Monday, Tuesday,
+ * Wednesday.
  */
-const BOOKING_HORIZON_DAYS = 3;
+const DATES_OFFERED = 3;
 
-/** Dates offered at once. Capped by the horizon above, not by Meta's ten rows. */
-const DATE_PAGE = BOOKING_HORIZON_DAYS;
+/**
+ * How far to search to find those days.
+ *
+ * Wide enough for a doctor who works two days a week to still have three
+ * options, while a full-time doctor never sees beyond the end of the week —
+ * the search stops as soon as it has enough. This is a search bound, not a
+ * booking horizon: what limits how far ahead anyone books is DATES_OFFERED.
+ */
+const BOOKING_LOOKAHEAD_DAYS = 14;
+
+/** Dates offered at once. Well inside Meta's ten list rows. */
+const DATE_PAGE = DATES_OFFERED;
 
 /**
  * Times per page. Nine leaves the tenth row for "more times" — a clinic running
@@ -143,23 +155,22 @@ async function menuResult(ctx: ConversationContext, extraFirst?: Reply[]): Promi
 // ---- date picking ----
 
 async function askForDate(ctx: ConversationContext, extraFirst?: Reply[]): Promise<StepResult> {
-  // Horizon passed as the look-ahead too: without it the search would happily
-  // return a date three weeks out to fill the list.
   const dates = await getNextAvailableDates(
     ctx.doctor,
     ctx.today,
     DATE_PAGE,
-    BOOKING_HORIZON_DAYS,
+    BOOKING_LOOKAHEAD_DAYS,
   );
 
   if (dates.length === 0) {
-    // No free day inside the look-ahead window — send them back to the menu
-    // rather than parking them on a list with nothing in it.
+    // Nothing free anywhere in the search window — back to the menu rather than
+    // a list with nothing in it.
+    //
+    // Deliberately not "no times are free on <today>": naming today was both
+    // wrong and confusing, since today is rarely the reason. It reads as though
+    // tomorrow might work, when in fact every day searched was full.
     return menuResult(ctx, [
-      reply(
-        'slotNoneAvailable',
-        t(ctx.language, 'slotNoneAvailable', { date: formatDateForPatient(ctx.today) }),
-      ),
+      reply('slotNothingAvailable', t(ctx.language, 'slotNothingAvailable')),
     ]);
   }
 
