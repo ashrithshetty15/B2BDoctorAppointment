@@ -1,5 +1,6 @@
 import type { Doctor } from '@prisma/client';
 import { prisma } from '../db/prisma';
+import type { DoctorWithChannel } from './doctors';
 import { formatDateOnly } from '../utils/time';
 import { getOrCreateQueueState, isOnLeave } from './tokenQueue';
 import {
@@ -39,7 +40,7 @@ export interface DayClosurePreview extends Reachability {
  * including who will not hear about it.
  */
 export async function previewDayClosure(
-  doctor: Doctor,
+  doctor: DoctorWithChannel,
   date: Date,
   now: Date = new Date(),
 ): Promise<DayClosurePreview> {
@@ -81,7 +82,7 @@ export interface DayClosureResult {
 }
 
 export async function closeDay(
-  doctor: Doctor,
+  doctor: DoctorWithChannel,
   date: Date,
   now: Date = new Date(),
 ): Promise<DayClosureResult> {

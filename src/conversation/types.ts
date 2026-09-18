@@ -1,5 +1,5 @@
 import type { ListRow, ReplyButton } from '../messaging/types';
-import type { Doctor, Language, Patient } from '@prisma/client';
+import type { Clinic, Doctor, Language, Patient } from '@prisma/client';
 import type { TemplateName } from '../i18n/templates';
 
 /**
@@ -8,6 +8,11 @@ import type { TemplateName } from '../i18n/templates';
  * without a messaging provider (requirement 8).
  */
 export interface ConversationContext {
+  /**
+   * The practice the patient messaged. Owns the WhatsApp number and the name
+   * shown to patients; `doctor` is whichever of its doctors they chose.
+   */
+  clinic: Clinic;
   doctor: Doctor;
   patient: Patient;
   /** Current step the patient is parked on. */

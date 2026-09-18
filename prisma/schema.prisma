@@ -49,11 +49,69 @@ enum DoctorStatus {
   DISABLED
 }
 
+/// A practice: one WhatsApp number, one or more doctors behind it.
+///
+/// Introduced because the WhatsApp number is the scarce resource. Meta allows
+/// twenty numbers per WABA, so binding one to each *doctor* puts a five-doctor
+/// practice at a quarter of a WABA and makes a hundred clinics unworkable. The
+/// number belongs to the clinic; which doctor a patient wants is a question the
+/// bot asks, not a routing key.
+///
+/// Every field here was previously on Doctor and stays there during the
+/// transition — the columns are copied, not moved, so code running mid-deploy
+/// keeps working either way.
+model Clinic {
+  id   String @id @default(uuid())
+  name String
+
+  /// Meta `phone_number_id` that patients message. THE routing key.
+  whatsappPhoneNumberId String? @unique @map("whatsapp_phone_number_id")
+
+  /// Dialable form, digits only — builds the wa.me link and booking QR.
+  whatsappNumber String? @map("whatsapp_number")
+
+  /// Exotel Missed Call virtual number that triggers an auto-reply.
+  missedCallNumber String? @unique @map("missed_call_number")
+
+  /// Front-desk key: sees every doctor's queue in this clinic. Doctors keep
+  /// their own Doctor.apiKey, which sees only their own list.
+  apiKey String @unique @map("api_key")
+
+  timezone        String   @default("Asia/Kolkata")
+  defaultLanguage Language @default(EN) @map("default_language")
+
+  // ---- WhatsApp channel health ----
+  // Health is a property of the number, and the number belongs here now.
+  channelStatus    String?   @map("channel_status")
+  channelReason    String?   @map("channel_reason")
+  channelErrorCode Int?      @map("channel_error_code")
+  channelSource    String?   @map("channel_source")
+  channelCheckedAt DateTime? @map("channel_checked_at")
+
+  status DoctorStatus @default(ACTIVE)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  doctors  Doctor[]
+  sessions ConversationSession[]
+
+  @@map("clinics")
+}
+
 model Doctor {
   id       String @id @default(uuid())
   name     String
   /// Clinic / practice display name used in patient messages.
+  ///
+  /// Superseded by the Clinic relation below and kept only so code mid-deploy
+  /// still reads a name. Treat Clinic.name as the truth.
   clinicName String @map("clinic_name")
+
+  /// Nullable only so the column could be added to a live table; every row is
+  /// backfilled and the application treats it as required.
+  clinicId String? @map("clinic_id")
+  clinic   Clinic? @relation(fields: [clinicId], references: [id], onDelete: Cascade)
   /// Doctor's own contact number (not the WhatsApp business sender).
   phone    String
 
@@ -326,8 +384,16 @@ model QueueState {
 model ConversationSession {
   id String @id @default(uuid())
 
-  phone    String
-  doctorId String @map("doctor_id")
+  phone String
+
+  /// The clinic whose number the patient wrote to — the real key, since a
+  /// conversation is with a practice and which doctor they want is a question.
+  clinicId String? @map("clinic_id")
+
+  /// The doctor chosen for this conversation. Null until they pick one, which
+  /// is why it is nullable; a single-doctor clinic has it set on the first turn
+  /// and never sees a picker.
+  doctorId String? @map("doctor_id")
 
   /// Current step name, e.g. "TOKEN_MAIN_MENU". Owned by the state machine layer.
   step String
@@ -343,9 +409,14 @@ model ConversationSession {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  doctor  Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  clinic  Clinic?  @relation(fields: [clinicId], references: [id], onDelete: Cascade)
+  doctor  Doctor?  @relation(fields: [doctorId], references: [id], onDelete: Cascade)
   patient Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
 
+  /// Both kept during the transition. Postgres treats NULLs as distinct, so the
+  /// old key does not constrain the new clinic-scoped rows, and rows written by
+  /// code from either side of the deploy coexist.
+  @@unique([phone, clinicId], name: "phone_clinic")
   @@unique([phone, doctorId], name: "phone_doctor")
   @@index([expiresAt])
   @@map("conversation_sessions")

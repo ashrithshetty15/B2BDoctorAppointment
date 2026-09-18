@@ -23,6 +23,9 @@ export type TemplateSet = {
   sessionExpired: () => string;
   errorGeneric: () => string;
   unknownInput: () => string;
+  selectDoctor: () => string;
+  selectDoctorInvalid: () => string;
+  btnChooseDoctor: () => string;
   doctorOnLeave: (p: { doctorName: string; date: string }) => string;
   notConfigured: () => string;
   /** Substituted for the "now serving" value before the day's first consult. */
@@ -127,6 +130,9 @@ const en: TemplateSet = {
   errorGeneric: () =>
     'Sorry, something went wrong on our side. Please try again in a moment, or call the clinic.',
   unknownInput: () => 'Sorry, I did not understand that. Please reply with one of the numbers shown above.',
+  selectDoctor: () => 'Which doctor would you like to see?',
+  selectDoctorInvalid: () => 'Please choose one of the doctors shown above.',
+  btnChooseDoctor: () => 'Choose a doctor',
   doctorOnLeave: ({ doctorName, date }) =>
     `Dr. ${doctorName} is not available on ${date}. Please try another day.`,
   notConfigured: () =>
@@ -235,6 +241,9 @@ const kn: TemplateSet = {
     'ಕ್ಷಮಿಸಿ, ನಮ್ಮ ಕಡೆಯಿಂದ ಏನೋ ತಪ್ಪಾಗಿದೆ. ಸ್ವಲ್ಪ ಹೊತ್ತಿನ ನಂತರ ಪುನಃ ಪ್ರಯತ್ನಿಸಿ, ಅಥವಾ ಕ್ಲಿನಿಕ್‌ಗೆ ಫೋನ್ ಮಾಡಿ.',
   unknownInput: () =>
     'ಕ್ಷಮಿಸಿ, ನನಗೆ ಅರ್ಥವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮೇಲೆ ತೋರಿಸಿರುವ ಸಂಖ್ಯೆಗಳಲ್ಲಿ ಒಂದನ್ನು ಒತ್ತಿ.',
+  selectDoctor: () => 'ಯಾವ ವೈದ್ಯರನ್ನು ನೀವು ಭೇಟಿ ಮಾಡಲು ಬಯಸುವಿರಿ?',
+  selectDoctorInvalid: () => 'ದಯವಿಟ್ಟು ಮೇಲೆ ತೋರಿಸಿದ ವೈದ್ಯರಲ್ಲಿ ಒಬ್ಬರನ್ನು ಆಯ್ಕೆ ಮಾಡಿ.',
+  btnChooseDoctor: () => 'ವೈದ್ಯರನ್ನು ಆಯ್ಕೆಮಾಡಿ',
   doctorOnLeave: ({ doctorName, date }) =>
     `ಡಾ. ${doctorName} ${date} ದಿನ ಲಭ್ಯವಿಲ್ಲ. ದಯವಿಟ್ಟು ಬೇರೆ ದಿನ ಪ್ರಯತ್ನಿಸಿ.`,
   notConfigured: () =>

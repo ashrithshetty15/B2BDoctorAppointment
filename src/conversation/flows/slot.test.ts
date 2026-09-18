@@ -1,4 +1,4 @@
-import type { Appointment, Doctor, Patient } from '@prisma/client';
+import type { Appointment, Clinic, Doctor, Patient } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { bookSlot, getAvailableSlots, getNextAvailableDates } from '../../domain/slots';
 import { Steps } from '../steps';
@@ -37,11 +37,19 @@ const doctor = {
   timezone: 'Asia/Kolkata',
 } as unknown as Doctor;
 
+const clinic = {
+  id: 'clinic-1',
+  name: 'Lakeview Clinic',
+  timezone: 'Asia/Kolkata',
+  defaultLanguage: 'EN',
+} as unknown as Clinic;
+
 const patient = { id: 'pat-1', phone: '919876543210', name: 'Asha', language: 'EN' } as Patient;
 const today = new Date(Date.UTC(2026, 8, 18));
 
 function ctx(step: string, input: string, data: Record<string, unknown> = {}): ConversationContext {
   return {
+    clinic,
     doctor,
     patient,
     step,

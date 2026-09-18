@@ -8,6 +8,8 @@ export const Steps = {
   ENTRY: 'ENTRY',
   AWAITING_LANGUAGE: 'AWAITING_LANGUAGE',
   AWAITING_NAME: 'AWAITING_NAME',
+  /// Which doctor, at a clinic with more than one. Never reached by a solo clinic.
+  SELECT_DOCTOR: 'SELECT_DOCTOR',
 
   // TOKEN mode
   TOKEN_MENU: 'TOKEN_MENU',

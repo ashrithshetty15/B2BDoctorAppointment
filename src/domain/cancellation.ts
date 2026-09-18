@@ -1,4 +1,5 @@
-import type { Appointment, Doctor, Patient } from '@prisma/client';
+import type { Appointment, Patient } from '@prisma/client';
+import type { DoctorWithChannel } from './doctors';
 import { prisma } from '../db/prisma';
 import { cancelReminders } from '../queue/queues';
 import { notifyCancelledByClinic } from '../services/notifications';
@@ -140,7 +141,7 @@ export interface CancellationResult {
  * active filter.
  */
 export async function cancelBookings(
-  doctor: Doctor,
+  doctor: DoctorWithChannel,
   appointments: WithPatient[],
   now: Date = new Date(),
 ): Promise<CancellationResult> {

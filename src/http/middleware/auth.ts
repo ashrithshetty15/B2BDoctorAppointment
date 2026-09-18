@@ -2,7 +2,7 @@ import type { Doctor } from '@prisma/client';
 import type { NextFunction, Request, Response } from 'express';
 import { env } from '../../config/env';
 import { prisma } from '../../db/prisma';
-import { getDoctorByApiKey } from '../../domain/doctors';
+import { getDoctorByApiKey, type DoctorWithChannel } from '../../domain/doctors';
 import { wantsHtml } from '../web/negotiate';
 import {
   ADMIN_SESSION_COOKIE,
@@ -33,7 +33,7 @@ export type AuthMode = 'api-key' | 'cookie';
 
 declare module 'express-serve-static-core' {
   interface Request {
-    doctor?: Doctor;
+    doctor?: DoctorWithChannel;
     authMode?: AuthMode;
     /** Present only for cookie auth — the value pages must echo back. */
     csrfToken?: string;
@@ -61,11 +61,16 @@ function unauthorized(req: Request, res: Response, message: string): void {
   res.status(401).json({ error: message });
 }
 
-async function doctorFromCookie(req: Request): Promise<Doctor | null> {
+async function doctorFromCookie(req: Request): Promise<DoctorWithChannel | null> {
   const payload = verifySessionToken(readCookie(req, SESSION_COOKIE));
   if (!payload) return null;
 
-  const doctor = await prisma.doctor.findUnique({ where: { id: payload.d } });
+  // clinic included: routes reached this way go on to message patients, and
+  // must send from the clinic's number rather than the environment fallback.
+  const doctor = await prisma.doctor.findUnique({
+    where: { id: payload.d },
+    include: { clinic: true },
+  });
   if (!doctor) return null;
 
   // Revocation: the cookie pins a fingerprint of the API key it was minted

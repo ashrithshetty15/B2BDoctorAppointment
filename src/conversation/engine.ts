@@ -1,7 +1,7 @@
-import type { BookingMode, Doctor, Language, Patient } from '@prisma/client';
+import type { BookingMode, Clinic, Doctor, Language, Patient } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db/prisma';
-import { outboundChannelFor, resolveDoctorForChannel } from '../domain/doctors';
+import { outboundChannelForClinic, resolveClinicForChannel } from '../domain/clinics';
 import { findOrCreatePatient } from '../domain/patients';
 import { t } from '../i18n/templates';
 import type { InboundMessage } from '../messaging/types';
@@ -10,6 +10,7 @@ import { logger } from '../utils/logger';
 import { clinicToday } from '../utils/time';
 import { hybridFlow } from './flows/hybrid';
 import { runOnboarding } from './flows/onboarding';
+import { askWhichDoctor, readDoctorChoice } from './flows/selectDoctor';
 import { slotFlow } from './flows/slot';
 import { tokenFlow } from './flows/token';
 import { loadSession, saveSession } from './session';
@@ -48,32 +49,36 @@ export async function handleInboundMessage(inbound: InboundMessage): Promise<Han
     return { handled: false, replies: [], reason: 'DUPLICATE' };
   }
 
-  const doctor = await resolveDoctorForChannel(inbound.channelAddress);
-  if (!doctor) {
+  const resolved = await resolveClinicForChannel(inbound.channelAddress);
+  if (!resolved) {
     logger.warn(
       { channelAddress: inbound.channelAddress },
-      'Inbound message could not be mapped to a doctor; set DEFAULT_DOCTOR_ID or Doctor.whatsappPhoneNumberId',
+      'Inbound message could not be mapped to a clinic; set DEFAULT_DOCTOR_ID or Clinic.whatsappPhoneNumberId',
     );
     return { handled: false, replies: [], reason: 'NO_DOCTOR' };
   }
+  const { clinic, doctors } = resolved;
 
-  const patient = await findOrCreatePatient(inbound.from, { language: doctor.defaultLanguage });
+  const patient = await findOrCreatePatient(inbound.from, { language: clinic.defaultLanguage });
 
   // Opens the 24-hour window in which we may send this patient a free-form
   // message. Stamped before the turn runs, not after: a turn that throws still
   // means the patient messaged us, and the window opened regardless.
   //
-  // Per (patient, doctor): the window belongs to the business number they wrote
-  // to, so it must not be credited to a clinic they have never messaged.
-  await markInboundSeen(patient.id, doctor.id);
+  // Stamped for every doctor at the clinic, because the window belongs to the
+  // business *number* and the number is the clinic's. A patient who writes in
+  // and then picks Dr. B has opened the window for Dr. B just as much as for
+  // Dr. A. (The row is still keyed per doctor; folding it onto the clinic is a
+  // later migration.) It must never be credited to a clinic they never wrote to.
+  await Promise.all(doctors.map((d) => markInboundSeen(patient.id, d.id)));
 
   try {
-    const replies = await runTurn(doctor, patient, inbound);
+    const replies = await runTurn(clinic, doctors, patient, inbound);
     await markProcessed(inbound.providerMessageId);
     return { handled: true, replies };
   } catch (err) {
     logger.error(
-      { err, phone: inbound.from, doctorId: doctor.id },
+      { err, phone: inbound.from, clinicId: clinic.id },
       'Conversation turn failed; sending generic error to patient',
     );
 
@@ -82,7 +87,7 @@ export async function handleInboundMessage(inbound: InboundMessage): Promise<Han
       templateName: 'errorGeneric',
       text: t(language, 'errorGeneric'),
     };
-    await dispatchReplies(doctor, patient, [errorReply]);
+    await dispatchReplies(clinic, patient, [errorReply]);
 
     // Deliberately not marked processed: a Meta retry gets another chance.
     return { handled: false, replies: [errorReply], reason: 'ERROR' };
@@ -90,19 +95,25 @@ export async function handleInboundMessage(inbound: InboundMessage): Promise<Han
 }
 
 async function runTurn(
-  doctor: Doctor,
+  clinic: Clinic,
+  doctors: Doctor[],
   patientRow: Patient,
   inbound: InboundMessage,
 ): Promise<Reply[]> {
-  const session = await loadSession(inbound.from, doctor.id, patientRow.language);
-  const flow = flowFor(doctor.bookingMode);
-  const today = clinicToday(doctor.timezone);
+  const session = await loadSession(inbound.from, clinic.id, patientRow.language);
+  const today = clinicToday(clinic.timezone);
 
   let patient = patientRow;
   let language: Language = session.language;
 
+  // The doctor chosen earlier in this conversation, if they are still bookable.
+  // A placeholder stands in until one is picked: onboarding reads only the
+  // clinic, and no flow runs before selection completes.
+  let doctor = doctors.find((d) => d.id === session.doctorId) ?? null;
+
   const baseCtx: ConversationContext = {
-    doctor,
+    clinic,
+    doctor: doctor ?? doctors[0]!,
     patient,
     step: session.step,
     data: session.data,
@@ -126,25 +137,46 @@ async function runTurn(
     }
     prefix.push(...onboarding.prefixReplies);
 
-    // Park the patient on a step this flow understands. A doctor switching
-    // booking_mode mid-session lands here too.
-    const ownedStep = flow.owns(session.step) ? session.step : flow.entryStep;
-    const fresh = onboarding.enterFlowFresh || ownedStep !== session.step;
-
-    result = await flow.handle({
-      ...baseCtx,
-      patient,
+    // Which doctor, before any flow runs — a flow's every branch assumes one.
+    const selection = selectDoctor({
+      doctors,
+      chosen: doctor,
+      step: session.step,
+      data: session.data,
+      input: onboarding.enterFlowFresh ? '' : inbound.text,
       language,
-      step: ownedStep,
-      input: fresh ? '' : inbound.text,
     });
+
+    if (selection.pending) {
+      result = selection.result;
+    } else {
+      doctor = selection.doctor;
+      const flow = flowFor(doctor.bookingMode);
+
+      // Park the patient on a step this flow understands. A doctor switching
+      // booking_mode mid-session lands here too, as does a patient arriving
+      // from the doctor picker.
+      const ownedStep = flow.owns(session.step) ? session.step : flow.entryStep;
+      const fresh =
+        onboarding.enterFlowFresh || selection.justChosen || ownedStep !== session.step;
+
+      result = await flow.handle({
+        ...baseCtx,
+        doctor,
+        patient,
+        language,
+        step: ownedStep,
+        input: fresh ? '' : inbound.text,
+      });
+    }
   }
 
   if (result.language) language = result.language;
 
   await saveSession({
     phone: inbound.from,
-    doctorId: doctor.id,
+    clinicId: clinic.id,
+    doctorId: doctor?.id ?? null,
     step: result.nextStep,
     data: result.data ?? session.data,
     language,
@@ -152,15 +184,52 @@ async function runTurn(
   });
 
   const replies = [...prefix, ...result.replies];
-  await dispatchReplies(doctor, patient, replies);
+  await dispatchReplies(clinic, patient, replies);
   await runEffects(result.effects ?? []);
 
   return replies;
 }
 
+type Selection =
+  | { pending: true; result: StepResult }
+  | { pending: false; doctor: Doctor; justChosen: boolean };
+
+/**
+ * Settle which doctor this turn is for.
+ *
+ * A solo clinic never reaches the question: one doctor means one answer, and
+ * asking it would be a step for nothing. Once chosen, the doctor is carried in
+ * the session for the rest of the conversation.
+ */
+function selectDoctor(input: {
+  doctors: Doctor[];
+  chosen: Doctor | null;
+  step: string;
+  data: Record<string, unknown>;
+  input: string;
+  language: Language;
+}): Selection {
+  if (input.chosen) return { pending: false, doctor: input.chosen, justChosen: false };
+  if (input.doctors.length === 1) {
+    return { pending: false, doctor: input.doctors[0]!, justChosen: true };
+  }
+
+  if (input.step === Steps.SELECT_DOCTOR && input.input.trim() !== '') {
+    const offered = (input.data['doctorIds'] as string[] | undefined) ?? [];
+    const choice = readDoctorChoice(input.input, offered, input.doctors, input.language);
+    return choice.chosen
+      ? { pending: false, doctor: choice.chosen, justChosen: true }
+      : { pending: true, result: choice.result };
+  }
+
+  return { pending: true, result: askWhichDoctor(input.doctors, input.language) };
+}
+
 /** Hands replies to the outbound queue — never sends inline. */
-async function dispatchReplies(doctor: Doctor, patient: Patient, replies: Reply[]): Promise<void> {
+async function dispatchReplies(clinic: Clinic, patient: Patient, replies: Reply[]): Promise<void> {
   if (!replies.length) return;
+
+  const channelAddress = outboundChannelForClinic(clinic);
 
   await enqueueOutboundBulk(
     replies.map((r) => ({
@@ -169,7 +238,7 @@ async function dispatchReplies(doctor: Doctor, patient: Patient, replies: Reply[
       templateName: r.templateName,
       ...(r.buttons?.length ? { buttons: r.buttons } : {}),
       ...(r.list?.rows.length ? { list: r.list } : {}),
-      ...(outboundChannelFor(doctor) ? { channelAddress: outboundChannelFor(doctor) } : {}),
+      ...(channelAddress ? { channelAddress } : {}),
     })),
   );
 }

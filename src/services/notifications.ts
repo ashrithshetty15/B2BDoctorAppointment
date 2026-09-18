@@ -1,6 +1,6 @@
 import type { Appointment, AppointmentStatus, Doctor, Patient } from '@prisma/client';
 import { prisma } from '../db/prisma';
-import { outboundChannelFor } from '../domain/doctors';
+import { outboundChannelFor, type DoctorWithChannel } from '../domain/doctors';
 import {
   ACTIVE_TOKEN_STATUSES,
   computePosition,
@@ -22,7 +22,7 @@ import { formatDateForPatient, formatTimeForPatient, formatWait } from '../utils
 
 type WithPatient = Appointment & { patient: Patient };
 
-function jobFor(doctor: Doctor, patient: Patient, templateName: TemplateName, text: string): OutboundJob {
+function jobFor(doctor: DoctorWithChannel, patient: Patient, templateName: TemplateName, text: string): OutboundJob {
   const channelAddress = outboundChannelFor(doctor);
   return {
     to: patient.phone,
@@ -47,7 +47,10 @@ export async function broadcastQueuePositions(input: {
   /** Send even when the position is unchanged (used for delay broadcasts). */
   force?: boolean;
 }): Promise<{ notified: number }> {
-  const doctor = await prisma.doctor.findUnique({ where: { id: input.doctorId } });
+  const doctor = await prisma.doctor.findUnique({
+    where: { id: input.doctorId },
+    include: { clinic: true },
+  });
   if (!doctor) return { notified: 0 };
 
   const [activeTokens, queueState] = await Promise.all([
@@ -117,7 +120,7 @@ export async function broadcastQueuePositions(input: {
 /** Message the patient whose appointment status the doctor just changed. */
 export async function notifyStatusChange(
   appointment: WithPatient,
-  doctor: Doctor,
+  doctor: DoctorWithChannel,
   status: AppointmentStatus,
 ): Promise<void> {
   const patient = appointment.patient;
@@ -159,7 +162,7 @@ export async function notifyStatusChange(
 
 /** Tell every waiting patient the doctor is running late. */
 export async function broadcastDelay(
-  doctor: Doctor,
+  doctor: DoctorWithChannel,
   date: Date,
   delayMins: number,
 ): Promise<{ notified: number }> {
@@ -217,7 +220,7 @@ export async function broadcastDelay(
 
 /** Told to patients when the doctor marks a day as leave. */
 export async function notifyCancelledByClinic(
-  doctor: Doctor,
+  doctor: DoctorWithChannel,
   appointments: WithPatient[],
 ): Promise<{ notified: number }> {
   const jobs = appointments.map((appointment) => {

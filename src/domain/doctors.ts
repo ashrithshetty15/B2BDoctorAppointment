@@ -49,12 +49,35 @@ export async function resolveDoctorForChannel(channelAddress: string): Promise<D
   return null;
 }
 
-export async function getDoctorByApiKey(apiKey: string): Promise<Doctor | null> {
+export async function getDoctorByApiKey(apiKey: string): Promise<DoctorWithChannel | null> {
   if (!apiKey) return null;
-  return prisma.doctor.findUnique({ where: { apiKey } });
+  // clinic included so every console route that later messages a patient sends
+  // from the clinic's number rather than the environment fallback.
+  return prisma.doctor.findUnique({ where: { apiKey }, include: { clinic: true } });
 }
 
-/** Sender address to use when messaging this doctor's patients. */
-export function outboundChannelFor(doctor: Doctor): string | undefined {
-  return doctor.whatsappPhoneNumberId ?? undefined;
+/**
+ * A doctor with enough of their clinic loaded to know which number to send from.
+ *
+ * `clinic` is required, not optional, on purpose: optional would let a caller
+ * forget the `include` and compile cleanly, then send that doctor's reminders
+ * from the environment fallback — another clinic's number — with nothing to
+ * show for it. Required turns that into a type error at the call site.
+ */
+export type DoctorWithChannel = Doctor & {
+  clinic: { whatsappPhoneNumberId: string | null } | null;
+};
+
+/**
+ * Sender address to use when messaging this doctor's patients.
+ *
+ * The clinic's number wins: at a multi-doctor practice only one doctor row ever
+ * carried the number, so reading the doctor alone would send everyone else's
+ * reminders from the environment fallback — a different clinic's number.
+ *
+ * Callers must load `clinic`. Falling back to the doctor's own column keeps
+ * single-doctor rows working while the two coexist.
+ */
+export function outboundChannelFor(doctor: DoctorWithChannel): string | undefined {
+  return doctor.clinic?.whatsappPhoneNumberId ?? doctor.whatsappPhoneNumberId ?? undefined;
 }

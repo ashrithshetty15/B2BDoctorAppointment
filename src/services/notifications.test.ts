@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Appointment, Doctor, Patient } from '@prisma/client';
+import type { Appointment, Patient } from '@prisma/client';
+import type { DoctorWithChannel } from '../domain/doctors';
 
 const enqueueOutboundBulk = vi.fn();
 
@@ -24,8 +25,11 @@ const doctor = {
   name: 'Meera Nair',
   clinicName: 'Lakeview Clinic',
   timezone: 'Asia/Kolkata',
-  whatsappPhoneNumberId: 'pn-1',
-} as Doctor;
+  // No number of their own: at a multi-doctor clinic only one row ever carried
+  // it, and the clinic is where it lives now.
+  whatsappPhoneNumberId: null,
+  clinic: { whatsappPhoneNumberId: 'pn-clinic' },
+} as unknown as DoctorWithChannel;
 
 const patient = (over: Partial<Patient> = {}): Patient =>
   ({
@@ -65,6 +69,12 @@ describe('notifyCancelledByClinic', () => {
     expect(enqueueOutboundBulk.mock.calls[0]?.[0]).toHaveLength(2);
   });
 
+  /**
+   * The number belongs to the clinic, and at a multi-doctor practice only one
+   * doctor row ever carried it. Reading the doctor alone left every other
+   * doctor's messages with no channel, which silently falls back to the
+   * environment default — a different clinic's number entirely.
+   */
   it('addresses each job to the patient, from the clinic number', async () => {
     await notifyCancelledByClinic(doctor, [{ ...appointment(), patient: patient() }]);
 
@@ -74,7 +84,21 @@ describe('notifyCancelledByClinic', () => {
       channelAddress?: string;
     }[];
     expect(job?.to).toBe('919876543210');
-    expect(job?.channelAddress).toBe('pn-1');
+    expect(job?.channelAddress).toBe('pn-clinic');
+  });
+
+  /** A solo clinic whose number is still only on the doctor row keeps working. */
+  it('falls back to the doctor own number when the clinic has none', async () => {
+    const solo = {
+      ...doctor,
+      whatsappPhoneNumberId: 'pn-solo',
+      clinic: null,
+    } as unknown as typeof doctor;
+
+    await notifyCancelledByClinic(solo, [{ ...appointment(), patient: patient() }]);
+
+    const [job] = enqueueOutboundBulk.mock.calls[0]?.[0] as { channelAddress?: string }[];
+    expect(job?.channelAddress).toBe('pn-solo');
   });
 
   it('names the token and the date for a token booking', async () => {

@@ -83,7 +83,7 @@ export async function runOnboarding(ctx: ConversationContext): Promise<Onboardin
             nextStep: Steps.AWAITING_NAME,
             language: picked,
             replies: [
-              reply('askName', t(picked, 'askName', { clinicName: ctx.doctor.clinicName })),
+              reply('askName', t(picked, 'askName', { clinicName: ctx.clinic.name })),
             ],
           },
         };
@@ -137,7 +137,7 @@ export async function runOnboarding(ctx: ConversationContext): Promise<Onboardin
             'welcomeBack',
             t(ctx.language, 'welcomeBack', {
               patientName: ctx.patient.name,
-              clinicName: ctx.doctor.clinicName,
+              clinicName: ctx.clinic.name,
             }),
           ),
         ],

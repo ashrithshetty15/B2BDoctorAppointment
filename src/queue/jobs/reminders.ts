@@ -34,7 +34,7 @@ export async function processReminder(job: Job<ReminderJob>): Promise<void> {
 export async function scheduleRemindersFor(appointmentId: string): Promise<void> {
   const appointment = await prisma.appointment.findUnique({
     where: { id: appointmentId },
-    include: { doctor: true },
+    include: { doctor: { include: { clinic: true } } },
   });
   if (!appointment || appointment.type !== 'SLOT' || !appointment.slotStart) return;
 
@@ -51,7 +51,7 @@ export async function scheduleRemindersFor(appointmentId: string): Promise<void>
 async function sendReminder(appointmentId: string, kind: ReminderKind): Promise<boolean> {
   const appointment = await prisma.appointment.findUnique({
     where: { id: appointmentId },
-    include: { doctor: true, patient: true },
+    include: { doctor: { include: { clinic: true } }, patient: true },
   });
 
   if (!appointment || appointment.status !== 'BOOKED' || !appointment.slotStart) return false;
@@ -174,7 +174,7 @@ async function sweepDueFollowUps(): Promise<number> {
   const today = new Date();
   const due = await prisma.appointment.findMany({
     where: { followUpOn: { lte: today }, followUpSentAt: null },
-    include: { patient: true, doctor: true },
+    include: { patient: true, doctor: { include: { clinic: true } } },
     take: 200,
   });
 
