@@ -413,11 +413,11 @@ model ConversationSession {
   doctor  Doctor?  @relation(fields: [doctorId], references: [id], onDelete: Cascade)
   patient Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
 
-  /// Both kept during the transition. Postgres treats NULLs as distinct, so the
-  /// old key does not constrain the new clinic-scoped rows, and rows written by
-  /// code from either side of the deploy coexist.
+  /// The key. doctorId is deliberately NOT part of it, and must never be: it is
+  /// ordinary state that changes when a patient switches doctor, and a unique
+  /// index over a mutable field made switching to a doctor you had talked to
+  /// before fail outright.
   @@unique([phone, clinicId], name: "phone_clinic")
-  @@unique([phone, doctorId], name: "phone_doctor")
   @@index([expiresAt])
   @@map("conversation_sessions")
 }
