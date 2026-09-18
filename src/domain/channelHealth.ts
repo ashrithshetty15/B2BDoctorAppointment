@@ -59,20 +59,26 @@ export async function recordChannelHealth(
   // AVAILABLE and its number merely LIMITED while refusing every send with
   // #131005; letting the next sweep repaint that amber would have restored the
   // exact blind spot this is here to close.
-  const { count } = await prisma.doctor.updateMany({
-    where: {
-      id: doctorId,
-      NOT: { channelSource: 'send', channelStatus: 'BLOCKED' },
-    },
-    data,
+  //
+  // Decided here rather than as a NOT in the query on purpose. `NOT (source =
+  // 'send' AND status = 'BLOCKED')` is NULL, not true, for the rows where
+  // source is still NULL — so every clinic that had never been written by a
+  // send was silently excluded and stopped being refreshed at all. Three-valued
+  // logic is not worth the one saved round trip.
+  const current = await prisma.doctor.findUnique({
+    where: { id: doctorId },
+    select: { channelSource: true, channelStatus: true },
   });
 
-  // Held back by a proven failure. Still move the timestamp, so the console
-  // reads "blocked, checked a minute ago" rather than implying we stopped
-  // looking — the status is stale on purpose, the check is not.
-  if (count === 0) {
+  if (current?.channelSource === 'send' && current.channelStatus === 'BLOCKED') {
+    // Held back by a proven failure. Still move the timestamp, so the console
+    // reads "blocked, checked a minute ago" rather than implying we stopped
+    // looking — the status is stale on purpose, the check is not.
     await prisma.doctor.update({ where: { id: doctorId }, data: { channelCheckedAt: now } });
+    return;
   }
+
+  await prisma.doctor.update({ where: { id: doctorId }, data });
 }
 
 /**

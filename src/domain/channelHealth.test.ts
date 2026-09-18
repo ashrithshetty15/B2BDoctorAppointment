@@ -59,18 +59,8 @@ describe('poll versus send precedence', () => {
     });
   });
 
-  it('guards a poll against overwriting a send-proven block', async () => {
-    await recordChannelHealth('doc-1', { status: 'AVAILABLE' }, NOW, 'poll');
-
-    const where = updateMany.mock.calls[0]?.[0]?.where;
-    expect(where).toMatchObject({
-      id: 'doc-1',
-      NOT: { channelSource: 'send', channelStatus: 'BLOCKED' },
-    });
-  });
-
-  it('still moves the timestamp when the guard holds the poll back', async () => {
-    updateMany.mockResolvedValueOnce({ count: 0 });
+  it('holds a poll back from a send-proven block, moving only the timestamp', async () => {
+    findUnique.mockResolvedValueOnce({ channelSource: 'send', channelStatus: 'BLOCKED' });
 
     await recordChannelHealth('doc-1', { status: 'AVAILABLE' }, NOW, 'poll');
 
@@ -83,20 +73,60 @@ describe('poll versus send precedence', () => {
   });
 
   it('writes the poll through when nothing has been proven by a send', async () => {
-    updateMany.mockResolvedValueOnce({ count: 1 });
+    findUnique.mockResolvedValueOnce({ channelSource: 'poll', channelStatus: 'LIMITED' });
 
     await recordChannelHealth('doc-1', { status: 'LIMITED', reason: 'display name' }, NOW, 'poll');
 
-    expect(update).not.toHaveBeenCalled();
-    expect(updateMany.mock.calls[0]?.[0]?.data).toMatchObject({
+    expect(update.mock.calls[0]?.[0]?.data).toMatchObject({
       channelStatus: 'LIMITED',
       channelSource: 'poll',
     });
   });
 
+  /**
+   * Caught in production, not here. The guard was first written as a NOT in the
+   * query, and `NOT (source = 'send' AND status = 'BLOCKED')` is NULL — not
+   * true — while source is still NULL. Every clinic that had never been written
+   * by a send was excluded, so Sunrise's payment block would have stayed on
+   * screen forever after the payment was fixed.
+   */
+  it('refreshes a blocked clinic that no send has ever written', async () => {
+    findUnique.mockResolvedValueOnce({ channelSource: null, channelStatus: 'BLOCKED' });
+
+    await recordChannelHealth('doc-1', { status: 'AVAILABLE' }, NOW, 'poll');
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: 'doc-1' },
+      data: expect.objectContaining({ channelStatus: 'AVAILABLE', channelSource: 'poll' }),
+    });
+  });
+
+  it('writes through for a clinic with no reading at all yet', async () => {
+    findUnique.mockResolvedValueOnce({ channelSource: null, channelStatus: null });
+
+    await recordChannelHealth('doc-1', { status: 'AVAILABLE' }, NOW, 'poll');
+
+    expect(update.mock.calls[0]?.[0]?.data).toMatchObject({ channelStatus: 'AVAILABLE' });
+  });
+
+  /** A send that merely reported LIMITED is not a block, and must not pin one. */
+  it('does not treat a non-blocked send reading as proof', async () => {
+    findUnique.mockResolvedValueOnce({ channelSource: 'send', channelStatus: 'AVAILABLE' });
+
+    await recordChannelHealth('doc-1', { status: 'LIMITED' }, NOW, 'poll');
+
+    expect(update.mock.calls[0]?.[0]?.data).toMatchObject({ channelStatus: 'LIMITED' });
+  });
+
   it('defaults to a poll, so an unlabelled caller cannot fake proof', async () => {
+    findUnique.mockResolvedValueOnce({ channelSource: 'send', channelStatus: 'BLOCKED' });
+
     await recordChannelHealth('doc-1', { status: 'AVAILABLE' }, NOW);
-    expect(updateMany).toHaveBeenCalled();
+
+    expect(update).toHaveBeenCalledWith({
+      where: { id: 'doc-1' },
+      data: { channelCheckedAt: NOW },
+    });
   });
 });
 
