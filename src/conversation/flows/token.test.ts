@@ -57,6 +57,7 @@ function ctx(step: string, input: string, data: Record<string, unknown> = {}): C
   return {
     clinic,
     doctor,
+    doctorCount: 1,
     patient,
     step,
     data,

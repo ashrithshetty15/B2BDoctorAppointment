@@ -24,6 +24,7 @@ export type TemplateSet = {
   errorGeneric: () => string;
   unknownInput: () => string;
   selectDoctor: () => string;
+  doctorSwitchHint: () => string;
   selectDoctorInvalid: () => string;
   btnChooseDoctor: () => string;
   doctorOnLeave: (p: { doctorName: string; date: string }) => string;
@@ -131,6 +132,7 @@ const en: TemplateSet = {
     'Sorry, something went wrong on our side. Please try again in a moment, or call the clinic.',
   unknownInput: () => 'Sorry, I did not understand that. Please reply with one of the numbers shown above.',
   selectDoctor: () => 'Which doctor would you like to see?',
+  doctorSwitchHint: () => '_Reply *doctor* to see someone else._',
   selectDoctorInvalid: () => 'Please choose one of the doctors shown above.',
   btnChooseDoctor: () => 'Choose a doctor',
   doctorOnLeave: ({ doctorName, date }) =>
@@ -242,6 +244,7 @@ const kn: TemplateSet = {
   unknownInput: () =>
     'ಕ್ಷಮಿಸಿ, ನನಗೆ ಅರ್ಥವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮೇಲೆ ತೋರಿಸಿರುವ ಸಂಖ್ಯೆಗಳಲ್ಲಿ ಒಂದನ್ನು ಒತ್ತಿ.',
   selectDoctor: () => 'ಯಾವ ವೈದ್ಯರನ್ನು ನೀವು ಭೇಟಿ ಮಾಡಲು ಬಯಸುವಿರಿ?',
+  doctorSwitchHint: () => '_ಬೇರೆ ವೈದ್ಯರಿಗಾಗಿ *ವೈದ್ಯ* ಎಂದು ಕಳುಹಿಸಿ._',
   selectDoctorInvalid: () => 'ದಯವಿಟ್ಟು ಮೇಲೆ ತೋರಿಸಿದ ವೈದ್ಯರಲ್ಲಿ ಒಬ್ಬರನ್ನು ಆಯ್ಕೆ ಮಾಡಿ.',
   btnChooseDoctor: () => 'ವೈದ್ಯರನ್ನು ಆಯ್ಕೆಮಾಡಿ',
   doctorOnLeave: ({ doctorName, date }) =>

@@ -83,6 +83,38 @@ export function numericChoice(input: string): number | null {
   return Number.isInteger(n) ? n : null;
 }
 
+/**
+ * Asking for a different doctor, from anywhere in the conversation.
+ *
+ * Needed because the choice is otherwise made once and kept for the rest of the
+ * session: a patient who picked the wrong doctor had no way back short of
+ * waiting two hours for the session to expire.
+ *
+ * Matched on the whole message rather than a substring — "my appointment with
+ * the doctor" is not a request to switch.
+ */
+const DOCTOR_SWITCH_WORDS = [
+  'doctor',
+  'doctors',
+  'change doctor',
+  'switch doctor',
+  'other doctor',
+  'another doctor',
+  'different doctor',
+  'change dr',
+  'bere doctor',
+  'ವೈದ್ಯ',
+  'ವೈದ್ಯರು',
+  'ಡಾಕ್ಟರ್',
+  'ಬೇರೆ ವೈದ್ಯ',
+  'ಬೇರೆ ಡಾಕ್ಟರ್',
+  'ವೈದ್ಯರನ್ನು ಬದಲಿಸಿ',
+];
+
+export function isDoctorSwitchRequest(input: string): boolean {
+  return DOCTOR_SWITCH_WORDS.includes(clean(input));
+}
+
 export function isRestart(input: string): boolean {
   const c = clean(input);
   return RESTART_WORDS.includes(c);

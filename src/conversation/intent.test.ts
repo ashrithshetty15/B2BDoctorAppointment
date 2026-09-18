@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { isNo, isRestart, isYes, menuIntent, numericChoice } from './intent';
+import {
+  isDoctorSwitchRequest,
+  isNo,
+  isRestart,
+  isYes,
+  menuIntent,
+  numericChoice,
+} from './intent';
 
 describe('numericChoice', () => {
   it('reads bare numbers and ignores anything else', () => {
@@ -62,5 +69,37 @@ describe('yes / no / restart', () => {
     expect(isRestart('namaskara')).toBe(true);
     expect(isRestart('ನಮಸ್ಕಾರ')).toBe(true);
     expect(isRestart('book')).toBe(false);
+  });
+});
+
+/**
+ * Switching doctor. Without this the choice was made once and kept for the
+ * whole session: a patient who picked the wrong doctor had no way back short of
+ * waiting two hours for the session to expire.
+ */
+describe('isDoctorSwitchRequest', () => {
+  it.each([
+    'doctor',
+    'Doctor',
+    'change doctor',
+    'another doctor',
+    'different doctor',
+    'ವೈದ್ಯ',
+    'ಬೇರೆ ವೈದ್ಯ',
+    'ಡಾಕ್ಟರ್',
+  ])('treats %s as a request to switch', (input) => {
+    expect(isDoctorSwitchRequest(input)).toBe(true);
+  });
+
+  /** Whole-message match: a sentence mentioning a doctor is not a switch. */
+  it.each([
+    'my appointment with the doctor',
+    'is the doctor in today',
+    'doctor ok',
+    '1',
+    'hi',
+    '',
+  ])('leaves %s alone', (input) => {
+    expect(isDoctorSwitchRequest(input)).toBe(false);
   });
 });

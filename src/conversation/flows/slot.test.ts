@@ -47,10 +47,16 @@ const clinic = {
 const patient = { id: 'pat-1', phone: '919876543210', name: 'Asha', language: 'EN' } as Patient;
 const today = new Date(Date.UTC(2026, 8, 18));
 
-function ctx(step: string, input: string, data: Record<string, unknown> = {}): ConversationContext {
+function ctx(
+  step: string,
+  input: string,
+  data: Record<string, unknown> = {},
+  doctorCount = 3,
+): ConversationContext {
   return {
     clinic,
     doctor,
+    doctorCount,
     patient,
     step,
     data,
@@ -368,5 +374,30 @@ describe('tapping and typing are the same input', () => {
     const tapped = await slotFlow.handle(ctx(Steps.SLOT_AWAITING_TIME, ' 1 ', data));
     expect(tapped.nextStep).toBe(typed.nextStep);
     expect(tapped.data?.['slotStart']).toBe(typed.data?.['slotStart']);
+  });
+});
+
+/**
+ * The switch keyword is useless if nobody knows it exists, and the menu is the
+ * one screen a patient always sees. This is the whole of its discoverability.
+ */
+describe('switching doctor', () => {
+  it('offers the way back to the doctor list at a multi-doctor clinic', async () => {
+    const r = await slotFlow.handle(ctx(Steps.SLOT_MENU, '', {}, 3));
+    expect(r.replies[0]?.text).toContain('doctor');
+    expect(r.replies[0]?.text).toMatch(/Reply \*doctor\*/);
+  });
+
+  /** At a solo practice it would promise something that does not exist. */
+  it('says nothing about switching when the clinic has one doctor', async () => {
+    const r = await slotFlow.handle(ctx(Steps.SLOT_MENU, '', {}, 1));
+    expect(r.replies[0]?.text).not.toMatch(/Reply \*doctor\*/);
+  });
+
+  it('still names the doctor, hint or not', async () => {
+    for (const count of [1, 3]) {
+      const r = await slotFlow.handle(ctx(Steps.SLOT_MENU, '', {}, count));
+      expect(r.replies[0]?.text).toContain('Dr. Meera');
+    }
   });
 });

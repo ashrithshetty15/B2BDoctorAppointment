@@ -14,6 +14,12 @@ export interface ConversationContext {
    */
   clinic: Clinic;
   doctor: Doctor;
+  /**
+   * How many bookable doctors this clinic has. Flows use it to decide whether
+   * offering "reply *doctor* to switch" makes any sense — at a solo practice it
+   * is a promise of something that does not exist.
+   */
+  doctorCount: number;
   patient: Patient;
   /** Current step the patient is parked on. */
   step: string;

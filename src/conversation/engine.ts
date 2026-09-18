@@ -10,6 +10,7 @@ import { logger } from '../utils/logger';
 import { clinicToday } from '../utils/time';
 import { hybridFlow } from './flows/hybrid';
 import { runOnboarding } from './flows/onboarding';
+import { isDoctorSwitchRequest } from './intent';
 import { askWhichDoctor, readDoctorChoice } from './flows/selectDoctor';
 import { slotFlow } from './flows/slot';
 import { tokenFlow } from './flows/token';
@@ -114,6 +115,7 @@ async function runTurn(
   const baseCtx: ConversationContext = {
     clinic,
     doctor: doctor ?? doctors[0]!,
+    doctorCount: doctors.length,
     patient,
     step: session.step,
     data: session.data,
@@ -148,6 +150,10 @@ async function runTurn(
     });
 
     if (selection.pending) {
+      // Forget whoever was chosen before, so the answer to this question is
+      // read as a fresh choice. Left set, the next turn would honour the old
+      // doctor again and the switch could never complete.
+      doctor = null;
       result = selection.result;
     } else {
       doctor = selection.doctor;
@@ -209,10 +215,21 @@ function selectDoctor(input: {
   input: string;
   language: Language;
 }): Selection {
-  if (input.chosen) return { pending: false, doctor: input.chosen, justChosen: false };
+  // One doctor, one answer — the question would be a step for nothing, and
+  // there is nothing to switch to either.
   if (input.doctors.length === 1) {
     return { pending: false, doctor: input.doctors[0]!, justChosen: true };
   }
+
+  // "doctor", "ಬೇರೆ ವೈದ್ಯ" — re-open the choice. Checked before the chosen
+  // doctor is honoured, because otherwise the choice is made once and kept for
+  // the whole session: picking the wrong doctor left no way back short of
+  // waiting two hours for the session to expire.
+  if (isDoctorSwitchRequest(input.input)) {
+    return { pending: true, result: askWhichDoctor(input.doctors, input.language) };
+  }
+
+  if (input.chosen) return { pending: false, doctor: input.chosen, justChosen: false };
 
   if (input.step === Steps.SELECT_DOCTOR && input.input.trim() !== '') {
     const offered = (input.data['doctorIds'] as string[] | undefined) ?? [];

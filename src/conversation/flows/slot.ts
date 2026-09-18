@@ -90,12 +90,27 @@ const PERIOD_BUTTON = {
 
 // ---- menu ----
 
+/**
+ * The menu, plus a way back to the doctor list where there is one to go back to.
+ *
+ * The switch keyword is useless if nobody knows it exists, and the menu is the
+ * one screen a patient always sees. Shown only at a clinic with more than one
+ * doctor — at a solo practice it would promise something that does not exist.
+ *
+ * Two complete strings joined, not a sentence assembled from fragments: each
+ * half is independently translated.
+ */
+function menuText(ctx: ConversationContext): string {
+  const menu = t(ctx.language, 'slotMainMenu', { doctorName: ctx.doctor.name });
+  return ctx.doctorCount > 1 ? `${menu}\n\n${t(ctx.language, 'doctorSwitchHint')}` : menu;
+}
+
 async function menuResult(ctx: ConversationContext, extraFirst?: Reply[]): Promise<StepResult> {
   return {
     nextStep: Steps.SLOT_MENU,
     replies: [
       ...(extraFirst ?? []),
-      reply('slotMainMenu', t(ctx.language, 'slotMainMenu', { doctorName: ctx.doctor.name }), [
+      reply('slotMainMenu', menuText(ctx), [
         { id: '1', title: t(ctx.language, 'btnBookSlot') },
         { id: '2', title: t(ctx.language, 'btnMyAppointment') },
         { id: '3', title: t(ctx.language, 'btnCancelSlot') },
