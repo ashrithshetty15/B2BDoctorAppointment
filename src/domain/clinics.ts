@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import type { Clinic, Doctor } from '@prisma/client';
 import { env } from '../config/env';
 import { prisma } from '../db/prisma';
@@ -13,10 +14,95 @@ import { logger } from '../utils/logger';
  * sees it.
  */
 
+/**
+ * How many doctors one clinic may hold.
+ *
+ * Five is a product decision, but it also keeps the picker honest: WhatsApp
+ * allows ten list rows and the adapter silently drops the rest, so a clinic
+ * past ten would lose doctors from the menu with nothing to show for it. Five
+ * stays well inside that, and a five-item list is still a glance rather than a
+ * scroll.
+ */
+export const MAX_DOCTORS_PER_CLINIC = 5;
+
 export interface ClinicWithDoctors {
   clinic: Clinic;
   /** Bookable doctors, stable order so the offered numbers do not shuffle. */
   doctors: Doctor[];
+}
+
+export class ClinicFullError extends Error {
+  constructor(readonly clinicName: string) {
+    super(
+      `${clinicName} already has ${MAX_DOCTORS_PER_CLINIC} doctors, which is the limit. Disable one before adding another.`,
+    );
+    this.name = 'ClinicFullError';
+  }
+}
+
+/**
+ * The clinic a newly created doctor belongs to, made if it does not exist.
+ *
+ * Grouped by name, which is what the create form already collects. Two doctors
+ * typed with the same clinic name land in the same practice and therefore share
+ * its number — which is the whole point, and was not true before: every doctor
+ * created this way used to belong to no clinic at all and was unreachable.
+ *
+ * Throws when the clinic is full, so the caller reports it rather than silently
+ * creating a doctor nobody can book.
+ */
+export async function clinicForNewDoctor(input: {
+  clinicName: string;
+  whatsappPhoneNumberId?: string | undefined;
+  whatsappNumber?: string | undefined;
+  missedCallNumber?: string | undefined;
+  timezone?: string | undefined;
+  defaultLanguage?: 'EN' | 'KN' | undefined;
+}): Promise<Clinic> {
+  // Number first — it is unique and authoritative — then the name. Both are
+  // needed: looking up only by number would create a *second* clinic of the
+  // same name whenever the first was set up before it had a number, which is
+  // exactly how a practice ends up split in two with one half unroutable.
+  const byNumber = input.whatsappPhoneNumberId
+    ? await prisma.clinic.findUnique({
+        where: { whatsappPhoneNumberId: input.whatsappPhoneNumberId },
+      })
+    : null;
+  const existing =
+    byNumber ?? (await prisma.clinic.findFirst({ where: { name: input.clinicName } }));
+
+  if (!existing) {
+    return prisma.clinic.create({
+      data: {
+        name: input.clinicName,
+        ...(input.whatsappPhoneNumberId
+          ? { whatsappPhoneNumberId: input.whatsappPhoneNumberId }
+          : {}),
+        ...(input.whatsappNumber ? { whatsappNumber: input.whatsappNumber } : {}),
+        ...(input.missedCallNumber ? { missedCallNumber: input.missedCallNumber } : {}),
+        ...(input.timezone ? { timezone: input.timezone } : {}),
+        ...(input.defaultLanguage ? { defaultLanguage: input.defaultLanguage } : {}),
+        apiKey: `ck_${crypto.randomBytes(16).toString('hex')}`,
+      },
+    });
+  }
+
+  const count = await prisma.doctor.count({ where: { clinicId: existing.id } });
+  if (count >= MAX_DOCTORS_PER_CLINIC) throw new ClinicFullError(existing.name);
+
+  // A clinic created before it had a number of its own adopts the one supplied
+  // with this doctor, rather than leaving the practice unroutable.
+  if (!existing.whatsappPhoneNumberId && input.whatsappPhoneNumberId) {
+    return prisma.clinic.update({
+      where: { id: existing.id },
+      data: {
+        whatsappPhoneNumberId: input.whatsappPhoneNumberId,
+        ...(input.whatsappNumber ? { whatsappNumber: input.whatsappNumber } : {}),
+      },
+    });
+  }
+
+  return existing;
 }
 
 export async function activeDoctors(clinicId: string): Promise<Doctor[]> {

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { env } from '../config/env';
 import { prisma } from '../db/prisma';
 import { clinicToday } from '../utils/time';
+import { ClinicFullError, clinicForNewDoctor } from '../domain/clinics';
 import { getDoctorByApiKey } from '../domain/doctors';
 import type { WorkingHours } from '../domain/slots';
 import { buildWorkingHours as buildHours, workingHoursToText } from '../domain/workingHours';
@@ -285,11 +286,29 @@ appConsoleRouter.post(
       whatsappNumber = phone.digits;
     }
 
+    // Attach to a clinic, creating one if this is its first doctor. Doctors
+    // typed with the same clinic name join the same practice and share its
+    // WhatsApp number, which is what lets one number serve several doctors.
+    let clinic;
+    try {
+      clinic = await clinicForNewDoctor({
+        clinicName: data.clinicName,
+        ...(whatsappNumber ? { whatsappNumber } : {}),
+      });
+    } catch (err) {
+      if (err instanceof ClinicFullError) {
+        reject(err.message);
+        return;
+      }
+      throw err;
+    }
+
     try {
       const doctor = await prisma.doctor.create({
         data: {
           name: data.name,
-          clinicName: data.clinicName,
+          clinicName: clinic.name,
+          clinicId: clinic.id,
           phone: data.phone,
           bookingMode: data.bookingMode,
           bookingModeLockedAt: new Date(),

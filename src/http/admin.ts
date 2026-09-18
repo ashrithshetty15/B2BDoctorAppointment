@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../db/prisma';
+import { ClinicFullError, clinicForNewDoctor } from '../domain/clinics';
 import { normalisePhone, phoneError } from '../domain/phone';
 import { parseWorkingHours } from '../domain/slots';
 import { formatDateOnly, parseDateOnly } from '../utils/time';
@@ -79,10 +80,30 @@ adminRouter.post('/admin/doctor', requireAdminKey, async (req, res) => {
   const apiKey = `dk_${crypto.randomBytes(24).toString('hex')}`;
   const consultDurationMins = body.consultDurationMins ?? 10;
 
+  // Attach to a clinic, creating one if this is its first doctor. Without this
+  // the doctor belongs to no practice and no inbound message can ever reach them.
+  let clinic;
+  try {
+    clinic = await clinicForNewDoctor({
+      clinicName: body.clinicName,
+      whatsappPhoneNumberId: body.whatsappPhoneNumberId,
+      whatsappNumber,
+      timezone: body.timezone,
+      defaultLanguage: body.defaultLanguage,
+    });
+  } catch (err) {
+    if (err instanceof ClinicFullError) {
+      res.status(409).json({ error: err.message });
+      return;
+    }
+    throw err;
+  }
+
   const doctor = await prisma.doctor.create({
     data: {
       name: body.name,
-      clinicName: body.clinicName,
+      clinicName: clinic.name,
+      clinicId: clinic.id,
       phone: body.phone,
       bookingMode: body.bookingMode,
       bookingModeLockedAt: new Date(),
