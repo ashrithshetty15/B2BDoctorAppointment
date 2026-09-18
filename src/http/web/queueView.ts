@@ -739,6 +739,14 @@ export function queuePageV2(opts: {
       <main>
         ${opts.flash ? html`<div class="ok">${opts.flash}</div>` : ''}
         ${opts.onLeave ? html`<div class="caveat">${s.onLeave}</div>` : ''}
+        ${/* Phrased as what it means for the doctor, not the provider's error
+             code — they can act on "patients are not receiving updates", not on
+             "#141006". The operator console carries the technical detail. */ ''}
+        ${opts.doctor.channelStatus === 'BLOCKED' || opts.doctor.channelStatus === 'UNKNOWN'
+          ? html`<div class="err">${s.channelBlocked}</div>`
+          : opts.doctor.channelStatus === 'LIMITED'
+            ? html`<div class="caveat">${s.channelLimited}</div>`
+            : ''}
 
         <div class="live" style="margin-bottom:12px">
           <span class="dot beat" aria-hidden="true"></span>

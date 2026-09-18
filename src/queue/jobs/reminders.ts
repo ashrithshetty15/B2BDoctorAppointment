@@ -2,6 +2,7 @@ import type { Job } from 'bullmq';
 import { env } from '../../config/env';
 import { prisma } from '../../db/prisma';
 import { getMessagingAdapter } from '../../messaging';
+import { sweepChannelHealth } from '../../domain/channelHealth';
 import { outboundChannelFor } from '../../domain/doctors';
 import { dayBeforeReminderAt, hourBeforeReminderAt } from '../../domain/slots';
 import { t } from '../../i18n/templates';
@@ -137,6 +138,15 @@ async function sweepDueReminders(): Promise<number> {
   }
 
   sent += await sweepDueFollowUps();
+
+  // Rides this sweep rather than adding a second schedule. Health is a state,
+  // not an event -- there is no "your account broke" webhook to subscribe to.
+  const checked = await sweepChannelHealth().catch((err) => {
+    logger.warn({ err }, 'Channel health sweep failed');
+    return 0;
+  });
+  if (checked > 0) logger.debug({ checked }, 'Channel health refreshed');
+
   return sent;
 }
 

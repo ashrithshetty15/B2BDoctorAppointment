@@ -55,6 +55,20 @@ export function loginPage(opts: { error?: string; next?: string }): string {
   );
 }
 
+/**
+ * Channel health as a pill. UNKNOWN is shown as a fault, not as blank: "we could
+ * not find out" and "everything is fine" must never look the same.
+ */
+function channelPill(status: string | null, checkedAt: Date | null): RawHtml {
+  if (!status) return html`<span class="muted">not checked</span>`;
+  const cls =
+    status === 'AVAILABLE' ? 'active' : status === 'LIMITED' ? 'arrived' : 'disabled';
+  const label = status === 'AVAILABLE' ? 'OK' : status;
+  return html`<span class="pill ${cls}" title="${checkedAt ? `checked ${checkedAt.toISOString()}` : ''}"
+    >${label}</span
+  >`;
+}
+
 export function doctorsPage(opts: {
   doctors: Doctor[];
   csrfToken: string;
@@ -79,6 +93,7 @@ export function doctorsPage(opts: {
                     <th>Cap</th>
                     <th>Consult</th>
                     <th>Status</th>
+                    <th>WhatsApp</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -95,6 +110,7 @@ export function doctorsPage(opts: {
                             >${d.status}</span
                           >
                         </td>
+                        <td>${channelPill(d.channelStatus, d.channelCheckedAt)}</td>
                       </tr>
                     `,
                   )}
@@ -153,6 +169,20 @@ export function doctorDetailPage(opts: {
             <tr><th>WhatsApp number id</th><td>${d.whatsappPhoneNumberId ?? html`<span class="muted">not set</span>`}</td></tr>
             <tr><th>WhatsApp number</th><td>${d.whatsappNumber ? html`+${d.whatsappNumber}` : html`<span class="muted">not set — no QR or booking link</span>`}</td></tr>
             <tr><th>Missed-call number</th><td>${d.missedCallNumber ?? html`<span class="muted">not set</span>`}</td></tr>
+            <tr>
+              <th>WhatsApp channel</th>
+              <td>
+                ${channelPill(d.channelStatus, d.channelCheckedAt)}
+                ${d.channelReason
+                  ? html`<div class="sub">
+                      ${d.channelErrorCode ? html`(#${d.channelErrorCode}) ` : ''}${d.channelReason}
+                    </div>`
+                  : ''}
+                ${d.channelCheckedAt
+                  ? html`<div class="hint">checked ${d.channelCheckedAt.toISOString().slice(0, 16).replace('T', ' ')} UTC</div>`
+                  : html`<div class="hint">never checked</div>`}
+              </td>
+            </tr>
             <tr>
               <th>Working hours</th>
               <td>

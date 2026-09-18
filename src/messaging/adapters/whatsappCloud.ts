@@ -1,7 +1,9 @@
 import crypto from 'node:crypto';
 import { env } from '../../config/env';
 import { logger } from '../../utils/logger';
+import { parseChannelHealth } from '../health';
 import {
+  type ChannelHealth,
   MAX_LIST_ROWS,
   MAX_REPLY_BUTTONS,
   type InboundMessage,
@@ -152,6 +154,41 @@ export class WhatsAppCloudAdapter implements MessagingAdapter {
     }
 
     return providerMessageId ? { providerMessageId } : {};
+  }
+
+  /**
+   * Ask Meta whether this number can currently deliver, and why not.
+   *
+   * Read-only and cheap, so a failure here is reported as UNKNOWN rather than
+   * thrown: a health check that breaks the caller would be worse than no health
+   * check at all.
+   */
+  async getChannelHealth(channelAddress: string): Promise<ChannelHealth> {
+    const phoneNumberId = channelAddress || env.WHATSAPP_PHONE_NUMBER_ID;
+    if (!phoneNumberId) return { status: 'UNKNOWN' };
+
+    try {
+      const url = `https://graph.facebook.com/${env.WHATSAPP_API_VERSION}/${phoneNumberId}?fields=health_status`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${env.WHATSAPP_ACCESS_TOKEN}` },
+      });
+      const body = (await res.json()) as unknown;
+
+      if (!res.ok) {
+        const err = (body as { error?: { message?: string; code?: number } }).error;
+        logger.warn({ phoneNumberId, err }, 'Channel health check failed');
+        return {
+          status: 'UNKNOWN',
+          ...(err?.message ? { reason: err.message } : {}),
+          ...(err?.code !== undefined ? { code: err.code } : {}),
+        };
+      }
+
+      return parseChannelHealth(body);
+    } catch (err) {
+      logger.warn({ err, phoneNumberId }, 'Channel health check errored');
+      return { status: 'UNKNOWN' };
+    }
   }
 
   async sendTemplate(message: TemplateMessage): Promise<SendResult> {

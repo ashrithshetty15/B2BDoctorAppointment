@@ -118,6 +118,32 @@ export interface WebhookVerification {
   challenge?: string;
 }
 
+/**
+ * Whether a clinic's channel can actually deliver messages right now.
+ *
+ * Normalised across providers so the console does not learn Meta's vocabulary —
+ * the same reason sendText is on this interface rather than the adapter being
+ * reached into directly.
+ */
+export type ChannelStatus = 'AVAILABLE' | 'LIMITED' | 'BLOCKED' | 'UNKNOWN';
+
+export interface ChannelHealth {
+  /** Rollup. LIMITED still delivers; BLOCKED does not. */
+  status: ChannelStatus;
+  /**
+   * Why, in the provider's words. Deliberately the *blocking entity's* message
+   * rather than the rollup's: a number can report LIMITED while the account
+   * above it is BLOCKED on billing, and the account is the actionable part.
+   */
+  reason?: string;
+  /** Provider error code, for a support ticket. */
+  code?: number;
+  /** Which layer is at fault — the number, the account, the app. */
+  entity?: string;
+  /** What the provider suggests doing about it. */
+  solution?: string;
+}
+
 export interface MessagingAdapter {
   readonly name: string;
 
@@ -140,4 +166,12 @@ export interface MessagingAdapter {
 
   /** Send a pre-approved template message (business-initiated, e.g., missed-call reply). */
   sendTemplate?(message: TemplateMessage): Promise<SendResult>;
+
+  /**
+   * Can this channel deliver right now, and if not, why?
+   *
+   * Optional: a provider that cannot report health simply has none, and the
+   * console shows UNKNOWN rather than pretending everything is fine.
+   */
+  getChannelHealth?(channelAddress: string): Promise<ChannelHealth>;
 }

@@ -114,6 +114,24 @@ model Doctor {
 
   status DoctorStatus @default(ACTIVE)
 
+  // ---- WhatsApp channel health ----
+  /// Whether this clinic's number can currently deliver messages, as last
+  /// reported by the provider. AVAILABLE | LIMITED | BLOCKED | UNKNOWN.
+  ///
+  /// Refreshed on the reminder sweep rather than read live, so the console must
+  /// always show channelCheckedAt alongside it — stale health presented as
+  /// current is worse than none.
+  channelStatus String? @map("channel_status")
+
+  /// Why, in the provider's words, and from the entity actually at fault: a
+  /// number can report LIMITED while the account above it is BLOCKED on billing.
+  channelReason String? @map("channel_reason")
+
+  /// Provider error code, so a support ticket can quote it.
+  channelErrorCode Int? @map("channel_error_code")
+
+  channelCheckedAt DateTime? @map("channel_checked_at")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

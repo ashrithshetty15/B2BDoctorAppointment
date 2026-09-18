@@ -207,6 +207,9 @@ export interface ConsoleStrings {
   delayActive: (mins: number) => string;
   onLeave: string;
   listClosed: string;
+  /** Shown when the provider is refusing to deliver this clinic's messages. */
+  channelBlocked: string;
+  channelLimited: string;
 }
 
 const en: ConsoleStrings = {
@@ -405,6 +408,10 @@ const en: ConsoleStrings = {
   delayActive: (m) => `Running ${m} min late`,
   onLeave: 'You are marked on leave today',
   listClosed: 'Token list is closed — no new bookings today',
+  channelBlocked:
+    'WhatsApp is not delivering your messages right now, so patients are not receiving booking updates. Please contact your clinic administrator.',
+  channelLimited:
+    'WhatsApp is limiting how many patients you can message today. Bookings still work.',
 };
 
 const kn: ConsoleStrings = {
@@ -603,6 +610,10 @@ const kn: ConsoleStrings = {
   delayActive: (m) => `${m} ನಿಮಿಷ ತಡವಾಗಿ ನಡೆಯುತ್ತಿದೆ`,
   onLeave: 'ಇವತ್ತು ನೀವು ರಜೆಯಲ್ಲಿದ್ದೀರಿ ಎಂದು ಗುರುತಿಸಲಾಗಿದೆ',
   listClosed: 'ಟೋಕನ್ ಪಟ್ಟಿ ಮುಚ್ಚಲಾಗಿದೆ — ಇವತ್ತು ಹೊಸ ಬುಕಿಂಗ್ ಇಲ್ಲ',
+  channelBlocked:
+    'ಸದ್ಯಕ್ಕೆ ವಾಟ್ಸಾಪ್ ನಿಮ್ಮ ಸಂದೇಶಗಳನ್ನು ತಲುಪಿಸುತ್ತಿಲ್ಲ, ಹಾಗಾಗಿ ರೋಗಿಗಳಿಗೆ ಬುಕಿಂಗ್ ಮಾಹಿತಿ ಸಿಗುತ್ತಿಲ್ಲ. ದಯವಿಟ್ಟು ನಿಮ್ಮ ಕ್ಲಿನಿಕ್ ನಿರ್ವಾಹಕರನ್ನು ಸಂಪರ್ಕಿಸಿ.',
+  channelLimited:
+    'ಇವತ್ತು ಎಷ್ಟು ರೋಗಿಗಳಿಗೆ ಸಂದೇಶ ಕಳುಹಿಸಬಹುದು ಎಂಬುದನ್ನು ವಾಟ್ಸಾಪ್ ಮಿತಿಗೊಳಿಸಿದೆ. ಬುಕಿಂಗ್ ಎಂದಿನಂತೆ ನಡೆಯುತ್ತದೆ.',
 };
 
 export const consoleStrings: Record<Language, ConsoleStrings> = { EN: en, KN: kn };

@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import { logger } from '../../utils/logger';
 import type {
+  ChannelHealth,
   InboundMessage,
   MessagingAdapter,
   OutboundMessage,
@@ -55,6 +56,11 @@ export class ConsoleAdapter implements MessagingAdapter {
         raw: b,
       },
     ];
+  }
+
+  /** The console adapter has no provider to be unhealthy. */
+  async getChannelHealth(): Promise<ChannelHealth> {
+    return { status: 'AVAILABLE' };
   }
 
   async sendText(message: OutboundMessage): Promise<SendResult> {
