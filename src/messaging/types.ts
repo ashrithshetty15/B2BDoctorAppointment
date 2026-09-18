@@ -49,6 +49,24 @@ export interface ReplyButton {
 /** Meta allows at most three reply buttons on one message. */
 export const MAX_REPLY_BUTTONS = 3;
 
+/**
+ * One row of an interactive list. Same contract as a button: `id` is what comes
+ * back on selection, so it is the token the typed flow already accepts.
+ */
+export interface ListRow {
+  id: string;
+  /** Meta truncates past ~24 characters. */
+  title: string;
+  /** Optional second line, ~72 characters. */
+  description?: string;
+}
+
+/**
+ * Meta allows at most ten rows across all sections of one list — the reason the
+ * slot picker has to page rather than render a whole morning of times.
+ */
+export const MAX_LIST_ROWS = 10;
+
 export interface OutboundMessage {
   /** Patient's phone, digits only. */
   to: string;
@@ -61,6 +79,16 @@ export interface OutboundMessage {
    * always type the number instead.
    */
   buttons?: ReplyButton[];
+  /**
+   * Render as an interactive list instead. Used where there are more options
+   * than buttons allow — picking an appointment time, for instance. Mutually
+   * exclusive with `buttons`; buttons win if both are somehow set.
+   */
+  list?: {
+    /** Label on the button that opens the list, e.g. "Choose a time". */
+    buttonText: string;
+    rows: ListRow[];
+  };
 }
 
 export interface SendResult {

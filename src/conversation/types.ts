@@ -1,4 +1,4 @@
-import type { ReplyButton } from '../messaging/types';
+import type { ListRow, ReplyButton } from '../messaging/types';
 import type { Doctor, Language, Patient } from '@prisma/client';
 import type { TemplateName } from '../i18n/templates';
 
@@ -33,6 +33,8 @@ export interface Reply {
    * patient taps or types.
    */
   buttons?: ReplyButton[];
+  /** Offer as an interactive list when there are more options than buttons allow. */
+  list?: { buttonText: string; rows: ListRow[] };
 }
 
 export interface StepResult {
@@ -70,4 +72,14 @@ export function reply(
   buttons?: ReplyButton[],
 ): Reply {
   return { templateName, text, ...(buttons?.length ? { buttons } : {}) };
+}
+
+/** Same as reply(), but offering a list — used where options exceed three. */
+export function replyWithList(
+  templateName: TemplateName,
+  text: string,
+  buttonText: string,
+  rows: ListRow[],
+): Reply {
+  return { templateName, text, ...(rows.length ? { list: { buttonText, rows } } : {}) };
 }

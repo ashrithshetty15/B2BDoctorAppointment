@@ -2,7 +2,7 @@ import { Queue, type JobsOptions } from 'bullmq';
 import { env } from '../config/env';
 import { getRedis } from './connection';
 import { formatDateOnly } from '../utils/time';
-import type { ReplyButton } from '../messaging/types';
+import type { ListRow, ReplyButton } from '../messaging/types';
 
 export const QUEUE_OUTBOUND = 'outbound-messages';
 export const QUEUE_TOKEN_EVENTS = 'token-queue-events';
@@ -15,6 +15,8 @@ export interface OutboundJob {
   text: string;
   /** Rendered as tappable reply buttons; the text body is sent regardless. */
   buttons?: ReplyButton[];
+  /** Rendered as an interactive list; the text body is sent regardless. */
+  list?: { buttonText: string; rows: ListRow[] };
   /** Provider sender address (Meta phone_number_id). */
   channelAddress?: string;
   /** Diagnostics only. */

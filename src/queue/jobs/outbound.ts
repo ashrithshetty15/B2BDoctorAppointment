@@ -13,13 +13,14 @@ import type { OutboundJob } from '../queues';
  */
 export async function processOutbound(job: Job<OutboundJob>): Promise<void> {
   const adapter = getMessagingAdapter();
-  const { to, text, buttons, channelAddress, templateName } = job.data;
+  const { to, text, buttons, list, channelAddress, templateName } = job.data;
 
   const result = await adapter.sendText({
     to,
     text,
     ...(channelAddress ? { channelAddress } : {}),
     ...(buttons?.length ? { buttons } : {}),
+    ...(list?.rows.length ? { list } : {}),
   });
 
   logger.info(

@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { env } from '../../config/env';
 import { logger } from '../../utils/logger';
 import {
+  MAX_LIST_ROWS,
   MAX_REPLY_BUTTONS,
   type InboundMessage,
   type MessagingAdapter,
@@ -211,6 +212,9 @@ export class WhatsAppCloudAdapter implements MessagingAdapter {
  * translation degrades to a clipped label instead of no message at all.
  */
 const BUTTON_TITLE_MAX = 20;
+const LIST_TITLE_MAX = 24;
+const LIST_DESC_MAX = 72;
+const LIST_BUTTON_MAX = 20;
 
 /**
  * Render as interactive reply buttons when the caller supplied them, otherwise
@@ -222,6 +226,34 @@ const BUTTON_TITLE_MAX = 20;
  */
 function interactiveOrText(message: OutboundMessage): Record<string, unknown> {
   const buttons = message.buttons?.slice(0, MAX_REPLY_BUTTONS) ?? [];
+  const rows = message.list?.rows.slice(0, MAX_LIST_ROWS) ?? [];
+
+  if (buttons.length === 0 && rows.length > 0) {
+    return {
+      type: 'interactive',
+      interactive: {
+        type: 'list',
+        body: { text: message.text },
+        action: {
+          button: (message.list?.buttonText ?? 'Choose').slice(0, LIST_BUTTON_MAX),
+          // One unnamed section: the ten-row cap is across all sections anyway,
+          // so splitting them buys nothing here.
+          sections: [
+            {
+              rows: rows.map((r) => ({
+                id: r.id,
+                title: r.title.slice(0, LIST_TITLE_MAX),
+                ...(r.description
+                  ? { description: r.description.slice(0, LIST_DESC_MAX) }
+                  : {}),
+              })),
+            },
+          ],
+        },
+      },
+    };
+  }
+
   if (buttons.length === 0) {
     return { type: 'text', text: { preview_url: false, body: message.text } };
   }

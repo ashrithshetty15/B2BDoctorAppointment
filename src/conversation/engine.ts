@@ -168,6 +168,7 @@ async function dispatchReplies(doctor: Doctor, patient: Patient, replies: Reply[
       text: r.text,
       templateName: r.templateName,
       ...(r.buttons?.length ? { buttons: r.buttons } : {}),
+      ...(r.list?.rows.length ? { list: r.list } : {}),
       ...(outboundChannelFor(doctor) ? { channelAddress: outboundChannelFor(doctor) } : {}),
     })),
   );
