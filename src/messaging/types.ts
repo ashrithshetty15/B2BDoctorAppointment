@@ -144,6 +144,24 @@ export interface ChannelHealth {
   solution?: string;
 }
 
+/**
+ * What became of a message we sent.
+ *
+ * `failed` is the one that matters and the one the product was blind to: Meta
+ * returns a message id for a send it will never deliver, so "accepted" and
+ * "arrived" are different facts and only this reports the second.
+ */
+export interface MessageStatus {
+  providerMessageId: string;
+  /** sent | delivered | read | failed, plus anything new the provider adds. */
+  status: string;
+  /** The recipient, as the provider identifies them. */
+  recipient?: string;
+  /** Which of our numbers it was sent from. */
+  channelAddress?: string;
+  errors?: Array<{ code?: number; title?: string; details?: string }>;
+}
+
 export interface MessagingAdapter {
   readonly name: string;
 
@@ -161,6 +179,16 @@ export interface MessagingAdapter {
    * callbacks (delivered/read) and other noise yield an empty array.
    */
   parseInbound(body: unknown): InboundMessage[];
+
+  /**
+   * Extract delivery receipts from a webhook payload.
+   *
+   * Optional, because not every provider reports them — but where one does,
+   * this is the only place a *delivery* failure is visible. The send API can
+   * accept a message, return an id, and the message still never arrive; without
+   * these the product cannot tell that apart from success.
+   */
+  parseStatuses?(body: unknown): MessageStatus[];
 
   sendText(message: OutboundMessage): Promise<SendResult>;
 

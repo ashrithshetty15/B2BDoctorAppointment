@@ -35,6 +35,37 @@ webhookRouter.post('/webhook', async (req, res) => {
     return;
   }
 
+  // Delivery receipts, before anything else. The provider can accept a send,
+  // return a message id, and never deliver it — these are the only place that
+  // shows up, and without them a silently undelivered reply is indistinguishable
+  // from a working one.
+  if (adapter.parseStatuses) {
+    try {
+      for (const s of adapter.parseStatuses(req.body)) {
+        if (s.status === 'failed') {
+          logger.warn(
+            {
+              providerMessageId: s.providerMessageId,
+              recipient: s.recipient,
+              channelAddress: s.channelAddress,
+              errors: s.errors,
+            },
+            'Outbound message was not delivered',
+          );
+        } else {
+          logger.debug(
+            { providerMessageId: s.providerMessageId, status: s.status },
+            'Delivery receipt',
+          );
+        }
+      }
+    } catch (err) {
+      // A receipt we cannot read must never cost us the message in the same
+      // payload, nor make Meta retry the whole thing.
+      logger.warn({ err }, 'Failed to parse delivery receipts');
+    }
+  }
+
   let messages: ReturnType<typeof adapter.parseInbound> = [];
   try {
     messages = adapter.parseInbound(req.body);

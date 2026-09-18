@@ -8,6 +8,7 @@ import {
   MAX_LIST_ROWS,
   MAX_REPLY_BUTTONS,
   type InboundMessage,
+  type MessageStatus,
   type MessagingAdapter,
   type OutboundMessage,
   type SendResult,
@@ -30,11 +31,18 @@ interface CloudApiMessage {
   };
 }
 
+interface CloudApiStatus {
+  id?: string;
+  status?: string;
+  recipient_id?: string;
+  errors?: Array<{ code?: number; title?: string; message?: string; error_data?: { details?: string } }>;
+}
+
 interface CloudApiValue {
   metadata?: { phone_number_id?: string; display_phone_number?: string };
   contacts?: Array<{ wa_id?: string; profile?: { name?: string } }>;
   messages?: CloudApiMessage[];
-  statuses?: unknown[];
+  statuses?: CloudApiStatus[];
 }
 
 interface CloudApiPayload {
@@ -113,6 +121,47 @@ export class WhatsAppCloudAdapter implements MessagingAdapter {
               ? new Date(Number(msg.timestamp) * 1000)
               : new Date(),
             raw: msg,
+          });
+        }
+      }
+    }
+
+    return out;
+  }
+
+  parseStatuses(body: unknown): MessageStatus[] {
+    const payload = body as CloudApiPayload;
+    if (!payload || payload.object !== 'whatsapp_business_account') return [];
+
+    const out: MessageStatus[] = [];
+
+    for (const entry of payload.entry ?? []) {
+      for (const change of entry.changes ?? []) {
+        const value = change.value;
+        if (!value?.statuses?.length) continue;
+
+        const channelAddress = value.metadata?.phone_number_id;
+
+        for (const s of value.statuses) {
+          if (!s.id || !s.status) continue;
+          out.push({
+            providerMessageId: s.id,
+            status: s.status,
+            ...(s.recipient_id ? { recipient: s.recipient_id } : {}),
+            ...(channelAddress ? { channelAddress } : {}),
+            ...(s.errors?.length
+              ? {
+                  errors: s.errors.map((e) => ({
+                    ...(e.code !== undefined ? { code: e.code } : {}),
+                    ...(e.title ? { title: e.title } : {}),
+                    // Meta puts the useful sentence in error_data.details and
+                    // leaves `title` generic, so keep whichever is present.
+                    ...(e.error_data?.details ?? e.message
+                      ? { details: e.error_data?.details ?? e.message }
+                      : {}),
+                  })),
+                }
+              : {}),
           });
         }
       }
