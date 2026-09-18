@@ -7,6 +7,7 @@ import { appConsoleRouter } from './appConsole';
 import { callWebhookRouter } from './call-webhook';
 import { doctorConsoleRouter } from './doctorConsole';
 import { dashboardRouter } from './dashboard';
+import { displayRouter } from './display';
 import { legalRouter } from './legal';
 import { webhookRouter } from './webhook';
 
@@ -88,6 +89,10 @@ export function createApp() {
   // reviewer fetches these anonymously, and a redirect to /app/login reads as
   // "no privacy policy" — which is what keeps the app unpublished.
   app.use(legalRouter);
+
+  // The waiting-room board. Public and read-only, for the same reason as the
+  // pages above: whatever opens it is a television with nobody signed in to it.
+  app.use(displayRouter);
 
   app.use(webhookRouter);
   app.use(callWebhookRouter);

@@ -104,6 +104,9 @@ export interface ConsoleStrings {
   removePhoto: string;
   saveProfile: string;
   profileSaved: string;
+  waitingRoomBoard: string;
+  waitingRoomBoardBody: string;
+  openBoard: string;
   clinicDetails: string;
   bookingConfig: string;
   workingHours: string;
@@ -306,6 +309,10 @@ const en: ConsoleStrings = {
   removePhoto: 'Remove photo',
   saveProfile: 'Save profile',
   profileSaved: 'Profile updated',
+  waitingRoomBoard: 'Waiting-room screen',
+  waitingRoomBoardBody:
+    'Open this on a TV or a spare tablet in the waiting room. It shows the token being seen now — never a patient name. Anyone with the link can view it, so keep it off social media.',
+  openBoard: 'Open the screen',
   clinicDetails: 'Clinic',
   bookingConfig: 'Booking',
   workingHours: 'Working hours',
@@ -508,6 +515,10 @@ const kn: ConsoleStrings = {
   removePhoto: 'ಫೋಟೋ ತೆಗೆಯಿರಿ',
   saveProfile: 'ಪ್ರೊಫೈಲ್ ಉಳಿಸಿ',
   profileSaved: 'ಪ್ರೊಫೈಲ್ ನವೀಕರಿಸಲಾಗಿದೆ',
+  waitingRoomBoard: 'ಕಾಯುವ ಕೋಣೆಯ ಪರಮೆ',
+  waitingRoomBoardBody:
+    'ಇದನ್ನು ಕಾಯುವ ಕೋಣೆಯ TV ಅಥವಾ ಟ್ಯಾಬ್ಲೆಟ್‌ನಲ್ಲಿ ತೆರೆಯಿರಿ. ಈಗ ನಡೆಯುತ್ತಿರುವ ಟೋಕನ್ ಮಾತ್ರ ತೋರಿಸುತ್ತದೆ — ರೋಗಿಯ ಹೆಸರನ್ನು ಅಲ್ಲ. ಲಿಂಕ್ ಇರುವ ಯಾರು ಬೇಕಾದರೂ ನೋಡಬಹುದು.',
+  openBoard: 'ಪರಮೆ ತೆರೆಯಿರಿ',
   clinicDetails: 'ಕ್ಲಿನಿಕ್',
   bookingConfig: 'ಬುಕಿಂಗ್',
   workingHours: 'ಕೆಲಸದ ಸಮಯ',

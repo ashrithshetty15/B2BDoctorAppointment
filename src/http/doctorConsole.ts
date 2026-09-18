@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import type { Doctor } from '@prisma/client';
 import { type Response, Router } from 'express';
 import { z } from 'zod';
@@ -1300,12 +1301,26 @@ function dayLabels(s: ConsoleStrings): Record<DayKey, string> {
   };
 }
 
+/**
+ * Minted the first time the doctor opens settings rather than at signup, so no
+ * existing row needs backfilling and a clinic that never puts a screen up never
+ * has a live public URL.
+ */
+async function ensureDisplayKey(doctor: Doctor): Promise<string> {
+  if (doctor.displayKey) return doctor.displayKey;
+
+  const displayKey = `scr_${crypto.randomBytes(16).toString('hex')}`;
+  await prisma.doctor.update({ where: { id: doctor.id }, data: { displayKey } });
+  return displayKey;
+}
+
 /** Everything the settings page needs beyond the doctor row itself. */
 async function settingsContext(doctor: Doctor, csrfToken: string) {
   const s = c(doctor.defaultLanguage);
   const today = clinicToday(doctor.timezone);
   return {
     doctor,
+    displayPath: `/display/${await ensureDisplayKey(doctor)}`,
     queueCount: await waitingCount(doctor.id, doctor.timezone),
     csrfToken,
     hours: workingHoursToText(doctor.workingHours),

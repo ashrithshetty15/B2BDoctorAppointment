@@ -88,6 +88,8 @@ export function settingsPage(opts: {
   /** Working hours as editable text, one field per day. */
   hours: Record<DayKey, string>;
   upcomingLeave: LeaveDay[];
+  /** Path to this doctor's waiting-room board, e.g. /display/scr_a1b2... */
+  displayPath: string;
   /** Today in the clinic's timezone, YYYY-MM-DD — the date picker's floor. */
   today: string;
   flash?: string;
@@ -303,6 +305,16 @@ export function settingsPage(opts: {
             <input id="closeDate" name="date" type="date" min="${opts.today}" required />
             <button class="secondary" type="submit">${s.closeDay}</button>
           </form>
+        </div>
+
+        <div class="card">
+          <h2>${s.waitingRoomBoard}</h2>
+          <p class="sub">${s.waitingRoomBoardBody}</p>
+          <p>
+            <a class="walink" href="${opts.displayPath}" target="_blank" rel="noopener"
+              >${s.openBoard}</a
+            >
+          </p>
         </div>
 
         ${link

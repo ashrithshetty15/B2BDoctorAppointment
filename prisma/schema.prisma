@@ -170,6 +170,14 @@ model Doctor {
   /// Simple per-doctor API key for the dashboard routes (MVP auth).
   apiKey String @unique @map("api_key")
 
+  /// Opens the waiting-room board, and nothing else.
+  ///
+  /// Deliberately separate from apiKey. This URL gets pinned to a wall, typed
+  /// into a shared tablet and read off the screen by whoever is standing near
+  /// it; if it were the console key, a glance at the address bar would be full
+  /// access to every patient record. Read-only, rotatable, and safe to lose.
+  displayKey String? @unique @map("display_key")
+
   status DoctorStatus @default(ACTIVE)
 
   // ---- WhatsApp channel health ----
