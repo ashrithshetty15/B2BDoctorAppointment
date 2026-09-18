@@ -53,12 +53,20 @@ function ctx(step: string, input: string, data: Record<string, unknown> = {}): C
   };
 }
 
-/** n slots 20 minutes apart from 09:00 IST on 18 Sep. */
-const slotsFrom = (n: number) =>
+/**
+ * n slots from 09:00 IST on 18 Sep, `stepMins` apart.
+ *
+ * At the default 20 minutes, 15 slots run 09:00–13:40 and therefore straddle
+ * noon — which is what makes them useful for the morning/afternoon split.
+ */
+const slotsFrom = (n: number, stepMins = 20) =>
   Array.from({ length: n }, (_, i) => {
-    const start = new Date(Date.UTC(2026, 8, 18, 3, 30) + i * 20 * 60_000);
-    return { start, end: new Date(start.getTime() + 20 * 60_000) };
+    const start = new Date(Date.UTC(2026, 8, 18, 3, 30) + i * stepMins * 60_000);
+    return { start, end: new Date(start.getTime() + stepMins * 60_000) };
   });
+
+/** n slots that all fall before noon IST, so only one period is on offer. */
+const morningOnly = (n: number) => slotsFrom(n, 10);
 
 beforeEach(() => {
   vi.mocked(getNextAvailableDates).mockReset().mockResolvedValue([today]);
@@ -85,15 +93,148 @@ describe('menu', () => {
     expect(r.nextStep).toBe(Steps.SLOT_MENU);
     expect(r.replies[0]?.templateName).toBe('slotNoneAvailable');
   });
+
+  /**
+   * The menu no longer prints "1. Book / 2. Check / 3. Cancel" — the buttons
+   * say it — so typing a word has to work as well as typing a number.
+   */
+  it.each([
+    ['book', Steps.SLOT_AWAITING_DATE],
+    ['ಬುಕ್', Steps.SLOT_AWAITING_DATE],
+    ['cancel', Steps.SLOT_MENU],
+  ])('acts on the typed word %s', async (input, expected) => {
+    const r = await slotFlow.handle(ctx(Steps.SLOT_MENU, input));
+    expect(r.nextStep).toBe(expected);
+    expect(r.replies.some((x) => x.templateName === 'unknownInput')).toBe(false);
+  });
+});
+
+/**
+ * "Sorry, I did not understand that" was the most common thing a patient saw,
+ * because a greeting matched nothing at any step. It is a request to start over.
+ */
+describe('greetings', () => {
+  it.each(['hi', 'HI', 'hello', 'menu', 'ನಮಸ್ಕಾರ'])(
+    'treats %s as start over, with no error',
+    async (input) => {
+      const r = await slotFlow.handle(ctx(Steps.SLOT_MENU, input));
+      expect(r.nextStep).toBe(Steps.SLOT_MENU);
+      expect(r.replies).toHaveLength(1);
+      expect(r.replies[0]?.templateName).toBe('slotMainMenu');
+    },
+  );
+
+  /** Mid-booking too: the old code answered "hi" with "invalid choice". */
+  it.each([Steps.SLOT_AWAITING_DATE, Steps.SLOT_AWAITING_PERIOD, Steps.SLOT_AWAITING_TIME])(
+    'starts over from %s without complaining',
+    async (step) => {
+      const r = await slotFlow.handle(ctx(step, 'hi', { date: '2026-09-18' }));
+      expect(r.nextStep).toBe(Steps.SLOT_MENU);
+      expect(r.replies[0]?.templateName).toBe('slotMainMenu');
+    },
+  );
+
+  it('still complains about input that means nothing', async () => {
+    const r = await slotFlow.handle(ctx(Steps.SLOT_MENU, 'kya haal hai'));
+    expect(r.replies[0]?.templateName).toBe('unknownInput');
+  });
+});
+
+describe('booking horizon', () => {
+  /** Clinics change their own plans inside a week; long-range bookings get moved by hand. */
+  it('looks no further ahead than three days', async () => {
+    await slotFlow.handle(ctx(Steps.SLOT_MENU, '1'));
+    const [, , count, lookAhead] = vi.mocked(getNextAvailableDates).mock.calls[0]!;
+    expect(count).toBe(3);
+    expect(lookAhead).toBe(3);
+  });
+});
+
+/**
+ * Asking which part of the day comes before showing times. A clinic with a
+ * morning and an evening session produced more free times than a WhatsApp list
+ * can hold, so wanting 6 PM meant paging past every morning slot to reach it.
+ */
+describe('picking a part of the day', () => {
+  it('asks which part of the day when the day spans more than one', async () => {
+    vi.mocked(getAvailableSlots).mockResolvedValue(slotsFrom(15));
+    const r = await slotFlow.handle(
+      ctx(Steps.SLOT_AWAITING_DATE, '1', { dates: ['2026-09-18'] }),
+    );
+
+    expect(r.nextStep).toBe(Steps.SLOT_AWAITING_PERIOD);
+    expect(r.replies.at(-1)?.buttons?.map((b) => b.title)).toEqual(['Morning', 'Afternoon']);
+    expect(r.data?.['periods']).toEqual(['MORNING', 'AFTERNOON']);
+  });
+
+  /** A question with one possible answer is worse than no question. */
+  it('skips the question when only one part of the day is free', async () => {
+    vi.mocked(getAvailableSlots).mockResolvedValue(morningOnly(4));
+    const r = await slotFlow.handle(
+      ctx(Steps.SLOT_AWAITING_DATE, '1', { dates: ['2026-09-18'] }),
+    );
+
+    expect(r.nextStep).toBe(Steps.SLOT_AWAITING_TIME);
+    expect(r.replies.at(-1)?.list?.rows).toHaveLength(4);
+  });
+
+  it('narrows the times to the part of the day chosen', async () => {
+    vi.mocked(getAvailableSlots).mockResolvedValue(slotsFrom(15));
+    const r = await slotFlow.handle(
+      ctx(Steps.SLOT_AWAITING_PERIOD, '2', {
+        date: '2026-09-18',
+        periods: ['MORNING', 'AFTERNOON'],
+      }),
+    );
+
+    expect(r.nextStep).toBe(Steps.SLOT_AWAITING_TIME);
+    expect(r.data?.['period']).toBe('AFTERNOON');
+    // 09:00-13:40 at 20 minutes: nine before noon, six after.
+    expect(r.replies.at(-1)!.list!.rows).toHaveLength(6);
+    for (const iso of r.data?.['times'] as string[]) {
+      expect(new Date(iso).getTime()).toBeGreaterThanOrEqual(
+        Date.parse('2026-09-18T06:30:00.000Z'), // noon IST
+      );
+    }
+  });
+
+  it('re-asks on a choice outside the parts offered', async () => {
+    const r = await slotFlow.handle(
+      ctx(Steps.SLOT_AWAITING_PERIOD, '3', {
+        date: '2026-09-18',
+        periods: ['MORNING', 'AFTERNOON'],
+      }),
+    );
+    expect(r.nextStep).toBe(Steps.SLOT_AWAITING_PERIOD);
+    expect(r.replies[0]?.templateName).toBe('slotInvalidChoice');
+  });
+
+  /** The period is carried so a pager or a retaken slot stays in that part. */
+  it('keeps the chosen part of the day when re-offering after a taken slot', async () => {
+    vi.mocked(getAvailableSlots).mockResolvedValue(slotsFrom(15));
+    vi.mocked(bookSlot).mockResolvedValue({ ok: false, reason: 'TAKEN' });
+
+    const r = await slotFlow.handle(
+      ctx(Steps.SLOT_CONFIRM_BOOKING, '1', {
+        date: '2026-09-18',
+        period: 'AFTERNOON',
+        slotStart: '2026-09-18T06:30:00.000Z',
+      }),
+    );
+
+    expect(r.nextStep).toBe(Steps.SLOT_AWAITING_TIME);
+    expect(r.data?.['period']).toBe('AFTERNOON');
+    expect(r.replies.at(-1)!.list!.rows).toHaveLength(6);
+  });
 });
 
 describe('picking a time', () => {
   /**
-   * Meta allows ten list rows. A clinic on 20-minute consults easily exceeds
-   * that, so the tenth row is a pager rather than a slot.
+   * Meta allows ten list rows. A clinic on 10-minute consults exceeds that
+   * within a single morning, so the tenth row is a pager rather than a slot.
    */
   it('pages at nine times plus a "more" row', async () => {
-    vi.mocked(getAvailableSlots).mockResolvedValue(slotsFrom(15));
+    vi.mocked(getAvailableSlots).mockResolvedValue(morningOnly(15));
     const r = await slotFlow.handle(
       ctx(Steps.SLOT_AWAITING_DATE, '1', { dates: ['2026-09-18'] }),
     );
@@ -104,7 +245,7 @@ describe('picking a time', () => {
   });
 
   it('does not add a pager when everything fits', async () => {
-    vi.mocked(getAvailableSlots).mockResolvedValue(slotsFrom(4));
+    vi.mocked(getAvailableSlots).mockResolvedValue(morningOnly(4));
     const r = await slotFlow.handle(
       ctx(Steps.SLOT_AWAITING_DATE, '1', { dates: ['2026-09-18'] }),
     );

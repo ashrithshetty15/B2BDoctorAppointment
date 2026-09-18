@@ -7,10 +7,11 @@ import {
   slotLabel,
   type Slot,
 } from '../../domain/slots';
+import { availablePeriods, splitByPeriod, type Period } from '../../domain/dayPeriods';
 import { t } from '../../i18n/templates';
 import type { ListRow, ReplyButton } from '../../messaging/types';
 import { formatDateForPatient, formatDateOnly, parseDateOnly } from '../../utils/time';
-import { isNo, isYes, numericChoice } from '../intent';
+import { isNo, isRestart, isYes, menuIntent, numericChoice } from '../intent';
 import { Steps } from '../steps';
 import {
   reply,
@@ -34,13 +35,26 @@ import {
  * not an edge case — it re-offers rather than apologising.
  */
 
-/** Dates offered at once. Meta allows ten list rows; leave room for nothing else. */
-const DATE_PAGE = 8;
+/**
+ * How far ahead a patient may book.
+ *
+ * Deliberately short. A clinic's own plans change inside a week — a conference,
+ * a locum, a session moved — and every booking beyond that horizon is one the
+ * desk is likely to have to move by hand. Three days also keeps the date list
+ * to a glance rather than a scroll.
+ */
+const BOOKING_HORIZON_DAYS = 3;
+
+/** Dates offered at once. Capped by the horizon above, not by Meta's ten rows. */
+const DATE_PAGE = BOOKING_HORIZON_DAYS;
 
 /**
  * Times per page. Nine leaves the tenth row for "more times" — a clinic running
  * 10-minute consults over a morning has more than twenty slots, and a list
  * cannot hold them.
+ *
+ * Since times are asked for one part of the day at a time, paging is now the
+ * exception rather than the rule.
  */
 const TIME_PAGE = 9;
 
@@ -49,6 +63,8 @@ const MORE = 'more';
 interface SlotData {
   /** YYYY-MM-DD. Stored as a date, never an index into a regenerated list. */
   date?: string;
+  /** Which part of the day is being shown, if the patient was asked. */
+  period?: Period;
   /** Offset into the day's available times, for paging. */
   offset?: number;
   /** ISO instant of the time being confirmed. */
@@ -66,10 +82,11 @@ function confirmButtons(language: Language): ReplyButton[] {
   ];
 }
 
-/** "1. Fri, 18 Sep" lines, matching the numbers used as list-row ids. */
-function numberedLines(labels: string[]): string {
-  return labels.map((label, i) => `${i + 1}. ${label}`).join('\n');
-}
+const PERIOD_BUTTON = {
+  MORNING: 'btnMorning',
+  AFTERNOON: 'btnAfternoon',
+  EVENING: 'btnEvening',
+} as const;
 
 // ---- menu ----
 
@@ -91,7 +108,14 @@ async function menuResult(ctx: ConversationContext, extraFirst?: Reply[]): Promi
 // ---- date picking ----
 
 async function askForDate(ctx: ConversationContext, extraFirst?: Reply[]): Promise<StepResult> {
-  const dates = await getNextAvailableDates(ctx.doctor, ctx.today, DATE_PAGE);
+  // Horizon passed as the look-ahead too: without it the search would happily
+  // return a date three weeks out to fill the list.
+  const dates = await getNextAvailableDates(
+    ctx.doctor,
+    ctx.today,
+    DATE_PAGE,
+    BOOKING_HORIZON_DAYS,
+  );
 
   if (dates.length === 0) {
     // No free day inside the look-ahead window — send them back to the menu
@@ -114,12 +138,7 @@ async function askForDate(ctx: ConversationContext, extraFirst?: Reply[]): Promi
     nextStep: Steps.SLOT_AWAITING_DATE,
     replies: [
       ...(extraFirst ?? []),
-      replyWithList(
-        'slotPickDate',
-        t(ctx.language, 'slotPickDate', { options: numberedLines(labels) }),
-        t(ctx.language, 'btnChooseDate'),
-        rows,
-      ),
+      replyWithList('slotPickDate', t(ctx.language, 'slotPickDate'), t(ctx.language, 'btnChooseDate'), rows),
     ],
     // The chosen dates are re-derived on the next turn from this list, so store
     // the dates themselves rather than trusting the ordering to survive.
@@ -139,29 +158,102 @@ async function handleDateChoice(ctx: ConversationContext): Promise<StepResult> {
     };
   }
 
-  return askForTime(ctx, offered[choice - 1]!, 0);
+  return askForPeriod(ctx, offered[choice - 1]!);
 }
 
-// ---- time picking ----
+// ---- period picking ----
 
-async function askForTime(
+/**
+ * Ask which part of the day, before showing times.
+ *
+ * A clinic with a morning and an evening session produces more free times than
+ * a WhatsApp list can hold, so wanting 6 PM meant paging past every morning
+ * slot to find it. Three buttons is exactly what WhatsApp allows, and it turns
+ * that into one tap.
+ *
+ * Skipped entirely when only one part of the day has anything free — asking a
+ * question with one possible answer is worse than not asking.
+ */
+async function askForPeriod(
   ctx: ConversationContext,
   dateKey: string,
-  offset: number,
   extraFirst?: Reply[],
 ): Promise<StepResult> {
   const date = parseDateOnly(dateKey);
   if (!date) return menuResult(ctx);
 
   const all = await getAvailableSlots(ctx.doctor, date, ctx.receivedAt);
-  if (all.length === 0) {
-    // Everything went while they were deciding. Back to the dates.
-    return askForDate(ctx, [
-      reply('slotNoneAvailable', t(ctx.language, 'slotNoneAvailable', {
-        date: formatDateForPatient(date),
-      })),
-    ]);
+  if (all.length === 0) return noTimesLeft(ctx, date);
+
+  const periods = availablePeriods(all, ctx.doctor.timezone, (s) => s.start);
+  if (periods.length <= 1) {
+    return askForTime(ctx, dateKey, periods[0], 0, extraFirst);
   }
+
+  return {
+    nextStep: Steps.SLOT_AWAITING_PERIOD,
+    replies: [
+      ...(extraFirst ?? []),
+      reply(
+        'slotPickPeriod',
+        t(ctx.language, 'slotPickPeriod', { date: formatDateForPatient(date) }),
+        periods.map((p, i) => ({ id: String(i + 1), title: t(ctx.language, PERIOD_BUTTON[p]) })),
+      ),
+    ],
+    // Store which periods were offered, so the reply maps back to the same one
+    // even if availability shifts before the patient answers.
+    data: { date: dateKey, periods },
+  };
+}
+
+async function handlePeriodChoice(ctx: ConversationContext): Promise<StepResult> {
+  const data = readData(ctx);
+  const offered = (ctx.data?.['periods'] as Period[] | undefined) ?? [];
+  if (!data.date) return menuResult(ctx);
+
+  const choice = numericChoice(ctx.input);
+  if (choice === null || choice < 1 || choice > offered.length) {
+    return {
+      nextStep: Steps.SLOT_AWAITING_PERIOD,
+      replies: [reply('slotInvalidChoice', t(ctx.language, 'slotInvalidChoice'))],
+      data: ctx.data,
+    };
+  }
+
+  return askForTime(ctx, data.date, offered[choice - 1]!, 0);
+}
+
+// ---- time picking ----
+
+/** Everything went while they were deciding. Back to the dates. */
+async function noTimesLeft(ctx: ConversationContext, date: Date): Promise<StepResult> {
+  return askForDate(ctx, [
+    reply(
+      'slotNoneAvailable',
+      t(ctx.language, 'slotNoneAvailable', { date: formatDateForPatient(date) }),
+    ),
+  ]);
+}
+
+async function askForTime(
+  ctx: ConversationContext,
+  dateKey: string,
+  period: Period | undefined,
+  offset: number,
+  extraFirst?: Reply[],
+): Promise<StepResult> {
+  const date = parseDateOnly(dateKey);
+  if (!date) return menuResult(ctx);
+
+  const everything = await getAvailableSlots(ctx.doctor, date, ctx.receivedAt);
+  if (everything.length === 0) return noTimesLeft(ctx, date);
+
+  // Narrow to the chosen part of the day. If that part emptied while they were
+  // choosing, fall back to the whole day rather than showing an empty list.
+  const inPeriod = period
+    ? splitByPeriod(everything, ctx.doctor.timezone, (s) => s.start)[period]
+    : everything;
+  const all = inPeriod.length > 0 ? inPeriod : everything;
 
   const page = all.slice(offset, offset + TIME_PAGE);
   const hasMore = all.length > offset + TIME_PAGE;
@@ -173,10 +265,7 @@ async function askForTime(
   }));
   if (hasMore) rows.push({ id: MORE, title: t(ctx.language, 'btnMoreTimes') });
 
-  const body = t(ctx.language, 'slotPickTime', {
-    date: formatDateForPatient(date),
-    options: numberedLines(labels) + (hasMore ? `\n\n${t(ctx.language, 'btnMoreTimes')}` : ''),
-  });
+  const body = t(ctx.language, 'slotPickTime', { date: formatDateForPatient(date) });
 
   return {
     nextStep: Steps.SLOT_AWAITING_TIME,
@@ -188,6 +277,7 @@ async function askForTime(
     // silently shift if a slot were booked in between.
     data: {
       date: dateKey,
+      ...(period ? { period } : {}),
       offset,
       times: page.map((s: Slot) => s.start.toISOString()),
       hasMore,
@@ -203,7 +293,7 @@ async function handleTimeChoice(ctx: ConversationContext): Promise<StepResult> {
   if (!data.date) return menuResult(ctx);
 
   if (input === MORE && ctx.data?.['hasMore']) {
-    return askForTime(ctx, data.date, (data.offset ?? 0) + TIME_PAGE);
+    return askForTime(ctx, data.date, data.period, (data.offset ?? 0) + TIME_PAGE);
   }
 
   const choice = numericChoice(ctx.input);
@@ -285,7 +375,7 @@ async function handleBookingConfirmation(ctx: ConversationContext): Promise<Step
       case 'TAKEN':
         // Somebody booked it mid-conversation. Expected, given availability is
         // derived live — re-offer the day rather than dead-ending.
-        return askForTime(ctx, data.date, 0, [
+        return askForTime(ctx, data.date, data.period, 0, [
           reply('slotTaken', t(ctx.language, 'slotTaken')),
         ]);
       case 'PATIENT_HAS_SLOT':
@@ -312,7 +402,7 @@ async function handleBookingConfirmation(ctx: ConversationContext): Promise<Step
       case 'NOT_A_SLOT':
       default:
         // The offered time expired or never existed — start the day again.
-        return askForTime(ctx, data.date, 0, [
+        return askForTime(ctx, data.date, data.period, 0, [
           reply('slotInvalidChoice', t(ctx.language, 'slotInvalidChoice')),
         ]);
     }
@@ -452,9 +542,17 @@ export const slotFlow: ConversationFlow = {
   },
 
   async handle(ctx) {
+    // "hi", "menu", "ನಮಸ್ಕಾರ" — a greeting is a request to start over, at any
+    // step, and answering it with "I did not understand that" is both wrong and
+    // the single most common thing a patient sees. Checked before the switch so
+    // it works mid-booking, not only at the menu.
+    if (isRestart(ctx.input)) return menuResult(ctx);
+
     switch (ctx.step) {
       case Steps.SLOT_AWAITING_DATE:
         return handleDateChoice(ctx);
+      case Steps.SLOT_AWAITING_PERIOD:
+        return handlePeriodChoice(ctx);
       case Steps.SLOT_AWAITING_TIME:
         return handleTimeChoice(ctx);
       case Steps.SLOT_CONFIRM_BOOKING:
@@ -464,16 +562,23 @@ export const slotFlow: ConversationFlow = {
 
       case Steps.SLOT_MENU:
       default: {
-        const choice = numericChoice(ctx.input);
-        if (choice === 1) return askForDate(ctx);
-        if (choice === 2) return showStatus(ctx);
-        if (choice === 3) return askCancelConfirmation(ctx);
-
-        // Anything unrecognised re-shows the menu, which is also the entry path
-        // for a fresh conversation (input is blanked by the engine).
-        return ctx.input.trim() === ''
-          ? menuResult(ctx)
-          : menuResult(ctx, [reply('unknownInput', t(ctx.language, 'unknownInput'))]);
+        // menuIntent rather than a bare number, so "book", "cancel" and their
+        // Kannada equivalents work as well as 1/2/3 — the numbers are no longer
+        // printed in the message, so typing a word is the natural fallback.
+        switch (menuIntent(ctx.input)) {
+          case 'BOOK':
+            return askForDate(ctx);
+          case 'STATUS':
+            return showStatus(ctx);
+          case 'CANCEL':
+            return askCancelConfirmation(ctx);
+          default:
+            // Anything unrecognised re-shows the menu, which is also the entry
+            // path for a fresh conversation (input is blanked by the engine).
+            return ctx.input.trim() === ''
+              ? menuResult(ctx)
+              : menuResult(ctx, [reply('unknownInput', t(ctx.language, 'unknownInput'))]);
+        }
       }
     }
   },

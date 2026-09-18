@@ -67,8 +67,9 @@ export type TemplateSet = {
 
   // ---- SLOT mode ----
   slotMainMenu: (p: { doctorName: string }) => string;
-  slotPickDate: (p: { options: string }) => string;
-  slotPickTime: (p: { date: string; options: string }) => string;
+  slotPickDate: () => string;
+  slotPickPeriod: (p: { date: string }) => string;
+  slotPickTime: (p: { date: string }) => string;
   slotNoneAvailable: (p: { date: string }) => string;
   slotConfirmPrompt: (p: { doctorName: string; date: string; time: string }) => string;
   slotBooked: (p: { doctorName: string; clinicName: string; date: string; time: string }) => string;
@@ -105,6 +106,9 @@ export type TemplateSet = {
   btnChooseDate: () => string;
   btnChooseTime: () => string;
   btnMoreTimes: () => string;
+  btnMorning: () => string;
+  btnAfternoon: () => string;
+  btnEvening: () => string;
   btnYes: () => string;
   btnNo: () => string;
 
@@ -166,17 +170,20 @@ const en: TemplateSet = {
     `Sorry — your *token #${tokenNumber}* for ${date} has been cancelled as the doctor is unavailable. Please book again for another day.`,
 
   // ---- SLOT mode ----
-  slotMainMenu: ({ doctorName }) =>
-    `Dr. ${doctorName}\n\n1. Book an appointment\n2. Check my appointment\n3. Cancel my appointment\n\nReply with 1, 2 or 3.`,
-  slotPickDate: ({ options }) => `Please choose a date:\n\n${options}\n\nReply with the number.`,
-  slotPickTime: ({ date, options }) =>
-    `Available times on ${date}:\n\n${options}\n\nReply with the number of your preferred time.`,
+  // The options used to be repeated as a numbered list in the body. The buttons
+  // below already say the same thing, so the text said everything twice and the
+  // message was three times longer than it needed to be. The numbers still work
+  // as input for anyone who types them.
+  slotMainMenu: ({ doctorName }) => `Dr. ${doctorName}\n\nHow can we help you today?`,
+  slotPickDate: () => 'Which day would you like to come in?',
+  slotPickPeriod: ({ date }) => `${date}\n\nWhat time of day suits you?`,
+  slotPickTime: ({ date }) => `Available times on ${date} — pick one below.`,
   slotNoneAvailable: ({ date }) =>
     `Sorry, no appointment times are free on ${date}. Please choose another date.`,
   slotConfirmPrompt: ({ doctorName, date, time }) =>
-    `Confirm your appointment?\n\nDr. ${doctorName}\n${date} at ${time}\n\n1. Yes, confirm\n2. No, go back`,
+    `Confirm your appointment?\n\nDr. ${doctorName}\n*${date} at ${time}*`,
   slotBooked: ({ doctorName, clinicName, date, time }) =>
-    `Your appointment is confirmed.\n\nDr. ${doctorName} — ${clinicName}\n*${date} at ${time}*\n\nWe will remind you the evening before and again 1 hour ahead. Reply 3 to cancel.`,
+    `Your appointment is confirmed.\n\nDr. ${doctorName} — ${clinicName}\n*${date} at ${time}*\n\nWe will remind you the evening before and again 1 hour ahead. Reply *cancel* if you cannot make it.`,
   slotAlreadyBooked: ({ date, time }) =>
     `You already have an appointment on *${date} at ${time}*. Reply 3 to cancel it first.`,
   slotTaken: () => 'Sorry, that time was just taken. Please pick another one.',
@@ -206,6 +213,9 @@ const en: TemplateSet = {
   btnChooseDate: () => 'Choose a date',
   btnChooseTime: () => 'Choose a time',
   btnMoreTimes: () => 'More times',
+  btnMorning: () => 'Morning',
+  btnAfternoon: () => 'Afternoon',
+  btnEvening: () => 'Evening',
   btnYes: () => 'Yes, confirm',
   btnNo: () => 'No, go back',
 
@@ -267,17 +277,16 @@ const kn: TemplateSet = {
     `ಕ್ಷಮಿಸಿ — ಡಾಕ್ಟರ್ ಲಭ್ಯವಿಲ್ಲದ ಕಾರಣ ${date} ಗೆ ಇರುವ ನಿಮ್ಮ *ಟೋಕನ್ #${tokenNumber}* ರದ್ದು ಮಾಡಲಾಗಿದೆ. ದಯವಿಟ್ಟು ಬೇರೆ ದಿನಕ್ಕೆ ಮತ್ತೆ ಬುಕ್ ಮಾಡಿ.`,
 
   // ---- SLOT mode ----
-  slotMainMenu: ({ doctorName }) =>
-    `ಡಾ. ${doctorName}\n\n1. ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಬುಕ್ ಮಾಡಿ\n2. ನನ್ನ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ನೋಡಿ\n3. ನನ್ನ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ರದ್ದು ಮಾಡಿ\n\n1, 2 ಅಥವಾ 3 ಒತ್ತಿ.`,
-  slotPickDate: ({ options }) => `ದಯವಿಟ್ಟು ದಿನಾಂಕ ಆಯ್ಕೆ ಮಾಡಿ:\n\n${options}\n\nಸಂಖ್ಯೆ ಒತ್ತಿ.`,
-  slotPickTime: ({ date, options }) =>
-    `${date} ದಿನ ಲಭ್ಯವಿರುವ ಸಮಯಗಳು:\n\n${options}\n\nನಿಮಗೆ ಬೇಕಾದ ಸಮಯದ ಸಂಖ್ಯೆ ಒತ್ತಿ.`,
+  slotMainMenu: ({ doctorName }) => `ಡಾ. ${doctorName}\n\nಇಂದು ನಾವು ಹೇಗೆ ಸಹಾಯ ಮಾಡಬಹುದು?`,
+  slotPickDate: () => 'ಯಾವ ದಿನ ಬರಲು ಇಷ್ಟಪಡುತ್ತೀರಿ?',
+  slotPickPeriod: ({ date }) => `${date}\n\nದಿನದ ಯಾವ ಸಮಯ ನಿಮಗೆ ಅನುಕೂಲ?`,
+  slotPickTime: ({ date }) => `${date} ದಿನ ಲಭ್ಯವಿರುವ ಸಮಯಗಳು — ಕೆಳಗೆ ಒಂದನ್ನು ಆಯ್ಕೆ ಮಾಡಿ.`,
   slotNoneAvailable: ({ date }) =>
     `ಕ್ಷಮಿಸಿ, ${date} ದಿನ ಯಾವ ಸಮಯವೂ ಖಾಲಿ ಇಲ್ಲ. ದಯವಿಟ್ಟು ಬೇರೆ ದಿನಾಂಕ ಆಯ್ಕೆ ಮಾಡಿ.`,
   slotConfirmPrompt: ({ doctorName, date, time }) =>
-    `ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಖಚಿತಪಡಿಸಬೇಕೆ?\n\nಡಾ. ${doctorName}\n${date}, ${time} ಗೆ\n\n1. ಹೌದು, ಖಚಿತಪಡಿಸಿ\n2. ಇಲ್ಲ, ಹಿಂದೆ ಹೋಗಿ`,
+    `ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಖಚಿತಪಡಿಸಬೇಕೆ?\n\nಡಾ. ${doctorName}\n*${date}, ${time} ಗೆ*`,
   slotBooked: ({ doctorName, clinicName, date, time }) =>
-    `ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಖಚಿತವಾಗಿದೆ.\n\nಡಾ. ${doctorName} — ${clinicName}\n*${date}, ${time} ಗೆ*\n\nಹಿಂದಿನ ದಿನ ಸಂಜೆ ಮತ್ತು 1 ಗಂಟೆ ಮೊದಲು ನಿಮಗೆ ನೆನಪಿಸುತ್ತೇವೆ. ರದ್ದು ಮಾಡಲು 3 ಒತ್ತಿ.`,
+    `ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಖಚಿತವಾಗಿದೆ.\n\nಡಾ. ${doctorName} — ${clinicName}\n*${date}, ${time} ಗೆ*\n\nಹಿಂದಿನ ದಿನ ಸಂಜೆ ಮತ್ತು 1 ಗಂಟೆ ಮೊದಲು ನಿಮಗೆ ನೆನಪಿಸುತ್ತೇವೆ. ಬರಲು ಆಗದಿದ್ದರೆ *ರದ್ದು* ಎಂದು ಕಳುಹಿಸಿ.`,
   slotAlreadyBooked: ({ date, time }) =>
     `ನಿಮಗೆ ಈಗಾಗಲೇ *${date}, ${time} ಗೆ* ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಇದೆ. ಮೊದಲು ಅದನ್ನು ರದ್ದು ಮಾಡಲು 3 ಒತ್ತಿ.`,
   slotTaken: () => 'ಕ್ಷಮಿಸಿ, ಆ ಸಮಯ ಈಗ ತಾನೇ ಬುಕ್ ಆಯಿತು. ದಯವಿಟ್ಟು ಬೇರೆ ಒಂದು ಆಯ್ಕೆ ಮಾಡಿ.',
@@ -307,6 +316,9 @@ const kn: TemplateSet = {
   btnChooseDate: () => 'ದಿನ ಆಯ್ಕೆಮಾಡಿ',
   btnChooseTime: () => 'ಸಮಯ ಆಯ್ಕೆಮಾಡಿ',
   btnMoreTimes: () => 'ಇನ್ನಷ್ಟು ಸಮಯ',
+  btnMorning: () => 'ಬೆಳಿಗ್ಗೆ',
+  btnAfternoon: () => 'ಮಧ್ಯಾಹ್ನ',
+  btnEvening: () => 'ಸಂಜೆ',
   btnYes: () => 'ಹೌದು, ಖಚಿತ',
   btnNo: () => 'ಇಲ್ಲ, ಹಿಂದೆ',
 
