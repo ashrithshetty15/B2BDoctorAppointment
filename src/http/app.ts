@@ -7,6 +7,7 @@ import { appConsoleRouter } from './appConsole';
 import { callWebhookRouter } from './call-webhook';
 import { doctorConsoleRouter } from './doctorConsole';
 import { dashboardRouter } from './dashboard';
+import { legalRouter } from './legal';
 import { webhookRouter } from './webhook';
 
 export function createApp() {
@@ -82,6 +83,11 @@ export function createApp() {
       res.status(503).json({ ok: false });
     }
   });
+
+  // Ahead of the console routers, and outside every auth and CSRF check: Meta's
+  // reviewer fetches these anonymously, and a redirect to /app/login reads as
+  // "no privacy policy" — which is what keeps the app unpublished.
+  app.use(legalRouter);
 
   app.use(webhookRouter);
   app.use(callWebhookRouter);

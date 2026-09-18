@@ -33,6 +33,14 @@ const schema = z.object({
    */
   WHATSAPP_FOLLOWUP_TEMPLATE: z.string().optional(),
 
+  /**
+   * Address published on /privacy and /terms for data questions and deletion
+   * requests. Unset is handled rather than faked: the pages then tell the
+   * reader to contact their clinic, which is true, instead of printing a
+   * placeholder that bounces.
+   */
+  LEGAL_CONTACT_EMAIL: z.string().email().optional(),
+
   DEFAULT_DOCTOR_ID: z.string().optional(),
   /** Idle expiry for a patient's WhatsApp conversation state. */
   SESSION_TTL_MINUTES: z.coerce.number().int().positive().default(120),
