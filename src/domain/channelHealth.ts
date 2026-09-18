@@ -28,19 +28,100 @@ export function isFailing(status: string | null): boolean {
   return status === 'BLOCKED' || status === 'UNKNOWN';
 }
 
+/**
+ * Where a reading came from. A poll is the provider's opinion; a send is what
+ * actually happened. They disagree, and when they do the send is right.
+ */
+export type HealthSource = 'poll' | 'send';
+
 export async function recordChannelHealth(
   doctorId: string,
   health: ChannelHealth,
   now: Date = new Date(),
+  source: HealthSource = 'poll',
 ): Promise<void> {
-  await prisma.doctor.update({
-    where: { id: doctorId },
+  const data = {
+    channelStatus: health.status,
+    // Cleared rather than left behind: a stale reason next to a healthy status
+    // is how someone ends up chasing a problem that was fixed hours ago.
+    channelReason: health.reason ?? null,
+    channelErrorCode: health.code ?? null,
+    channelSource: source,
+    channelCheckedAt: now,
+  };
+
+  if (source === 'send') {
+    await prisma.doctor.update({ where: { id: doctorId }, data });
+    return;
+  }
+
+  // A poll may not talk over a send. Meta reported this clinic's account
+  // AVAILABLE and its number merely LIMITED while refusing every send with
+  // #131005; letting the next sweep repaint that amber would have restored the
+  // exact blind spot this is here to close.
+  const { count } = await prisma.doctor.updateMany({
+    where: {
+      id: doctorId,
+      NOT: { channelSource: 'send', channelStatus: 'BLOCKED' },
+    },
+    data,
+  });
+
+  // Held back by a proven failure. Still move the timestamp, so the console
+  // reads "blocked, checked a minute ago" rather than implying we stopped
+  // looking — the status is stale on purpose, the check is not.
+  if (count === 0) {
+    await prisma.doctor.update({ where: { id: doctorId }, data: { channelCheckedAt: now } });
+  }
+}
+
+/**
+ * A send the provider refused on permission grounds, attributed to whichever
+ * clinic sends from that number.
+ *
+ * This is the signal the health poll cannot give. Nothing else in the system
+ * noticed that every reply was being rejected: the job threw, BullMQ backed
+ * off, and the console stayed green while the queue filled with undeliverable
+ * messages.
+ */
+export async function recordSendFailure(
+  channelAddress: string,
+  reason: string,
+  code: number | undefined,
+  now: Date = new Date(),
+): Promise<void> {
+  const doctor = await prisma.doctor.findUnique({
+    where: { whatsappPhoneNumberId: channelAddress },
+    select: { id: true },
+  });
+  // A send from the shared fallback number belongs to no clinic in particular;
+  // there is nobody to attribute it to and guessing would be worse.
+  if (!doctor) return;
+
+  await recordChannelHealth(
+    doctor.id,
+    { status: 'BLOCKED', reason, ...(code !== undefined ? { code } : {}) },
+    now,
+    'send',
+  );
+}
+
+/**
+ * A send that went through, which is the only thing that can clear a failure
+ * proven by a send. Scoped to rows actually parked as blocked so the common
+ * case is a single indexed no-op rather than a write on every message.
+ */
+export async function clearSendFailure(
+  channelAddress: string,
+  now: Date = new Date(),
+): Promise<void> {
+  await prisma.doctor.updateMany({
+    where: { whatsappPhoneNumberId: channelAddress, channelSource: 'send', channelStatus: 'BLOCKED' },
     data: {
-      channelStatus: health.status,
-      // Cleared rather than left behind: a stale reason next to a healthy status
-      // is how someone ends up chasing a problem that was fixed hours ago.
-      channelReason: health.reason ?? null,
-      channelErrorCode: health.code ?? null,
+      channelStatus: 'AVAILABLE',
+      channelReason: null,
+      channelErrorCode: null,
+      channelSource: 'send',
       channelCheckedAt: now,
     },
   });

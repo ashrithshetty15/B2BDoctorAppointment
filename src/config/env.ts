@@ -72,6 +72,17 @@ if (env.MESSAGING_PROVIDER === 'whatsapp_cloud' && !env.WHATSAPP_ACCESS_TOKEN) {
   throw new Error('MESSAGING_PROVIDER=whatsapp_cloud requires WHATSAPP_ACCESS_TOKEN');
 }
 
+// The webhook is a public URL that books appointments and cancels them. Without
+// the app secret there is nothing distinguishing Meta from anyone who guesses
+// the path, and the adapter's signature check has no key to verify against.
+//
+// A refusal to boot is the right failure here: the alternative was accepting
+// unsigned posts while logging a warning nobody reads. Find it under
+// App Dashboard -> Settings -> Basic -> App Secret.
+if (env.MESSAGING_PROVIDER === 'whatsapp_cloud' && !env.WHATSAPP_APP_SECRET) {
+  throw new Error('MESSAGING_PROVIDER=whatsapp_cloud requires WHATSAPP_APP_SECRET');
+}
+
 // Fail at boot rather than at the moment a doctor tries to upload a report: a
 // half-configured bucket looks fine until someone needs it.
 if (env.STORAGE_DRIVER === 's3') {

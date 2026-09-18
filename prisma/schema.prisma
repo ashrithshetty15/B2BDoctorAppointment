@@ -130,6 +130,16 @@ model Doctor {
   /// Provider error code, so a support ticket can quote it.
   channelErrorCode Int? @map("channel_error_code")
 
+  /// Where this reading came from: "poll" (the provider's health endpoint) or
+  /// "send" (a real message that was accepted or refused).
+  ///
+  /// The two disagree, and when they do the send is right. Meta reported this
+  /// clinic's account AVAILABLE and the number merely LIMITED while refusing
+  /// every single send with #131005 — the console would have shown a mild amber
+  /// while nothing at all was being delivered. So a poll may not overwrite what
+  /// a send has proven; only another send may.
+  channelSource String? @map("channel_source")
+
   channelCheckedAt DateTime? @map("channel_checked_at")
 
   createdAt DateTime @default(now()) @map("created_at")

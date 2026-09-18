@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { env } from '../../config/env';
 import { logger } from '../../utils/logger';
 import { parseChannelHealth } from '../health';
+import { SendError, parseProviderError } from '../sendError';
 import {
   type ChannelHealth,
   MAX_LIST_ROWS,
@@ -61,9 +62,11 @@ export class WhatsAppCloudAdapter implements MessagingAdapter {
   ): boolean {
     const secret = env.WHATSAPP_APP_SECRET;
     if (!secret) {
-      // No app secret configured — dev mode. Loud enough to notice in logs.
-      logger.warn('WHATSAPP_APP_SECRET not set; skipping webhook signature verification');
-      return true;
+      // Fail closed. Reaching here means the boot check in config/env.ts was
+      // bypassed (this adapter constructed directly in a test or a script), and
+      // an unverifiable payload is not worth acting on either way.
+      logger.error('WHATSAPP_APP_SECRET not set; rejecting webhook');
+      return false;
     }
 
     const header = headers['x-hub-signature-256'];
@@ -141,8 +144,15 @@ export class WhatsAppCloudAdapter implements MessagingAdapter {
 
     const bodyText = await res.text();
     if (!res.ok) {
-      // Thrown so BullMQ retries with backoff.
-      throw new Error(`WhatsApp send failed (${res.status}): ${bodyText}`);
+      // Thrown so BullMQ retries with backoff. SendError rather than Error so
+      // the caller can tell a standing permission refusal from a transient 5xx.
+      const { message: reason, code } = parseProviderError(bodyText);
+      throw new SendError({
+        message: `WhatsApp send failed (${res.status}): ${reason ?? bodyText}`,
+        status: res.status,
+        code,
+        channelAddress: phoneNumberId,
+      });
     }
 
     let providerMessageId: string | undefined;
@@ -224,7 +234,13 @@ export class WhatsAppCloudAdapter implements MessagingAdapter {
 
     const bodyText = await res.text();
     if (!res.ok) {
-      throw new Error(`WhatsApp template send failed (${res.status}): ${bodyText}`);
+      const { message: reason, code } = parseProviderError(bodyText);
+      throw new SendError({
+        message: `WhatsApp template send failed (${res.status}): ${reason ?? bodyText}`,
+        status: res.status,
+        code,
+        channelAddress: phoneNumberId,
+      });
     }
 
     let providerMessageId: string | undefined;
