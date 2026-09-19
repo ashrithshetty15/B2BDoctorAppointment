@@ -116,6 +116,7 @@ export interface ConsoleStrings {
   moreActions: string;
   waitingNone: string;
   expectedNone: string;
+  viewingAs: string;
   waitingRoomBoard: string;
   waitingRoomBoardBody: string;
   openBoard: string;
@@ -331,6 +332,7 @@ const en: ConsoleStrings = {
   moreActions: 'More',
   waitingNone: 'Nobody in the waiting room',
   expectedNone: 'Nobody else expected today',
+  viewingAs: 'Viewing as',
   waitingRoomBoard: 'Waiting-room screen',
   waitingRoomBoardBody:
     'Open this on a TV or a spare tablet in the waiting room. It shows the token being seen now — never a patient name. Anyone with the link can view it, so keep it off social media.',
@@ -547,6 +549,7 @@ const kn: ConsoleStrings = {
   moreActions: 'ಹೆಚ್ು',
   waitingNone: 'ಕಾಯುವ ಕೋಣೆಯಲ್ಲಿ ಯಾರೂ ಇಲ್ಲ',
   expectedNone: 'ಇಂದು ಬೇರೆ ಯಾರೂ ನಿರೀಕ್ಷಿತ ಇಲ್ಲ',
+  viewingAs: 'ನೋಡುತ್ತಿರುವುದು',
   waitingRoomBoard: 'ಕಾಯುವ ಕೋಣೆಯ ಪರಮೆ',
   waitingRoomBoardBody:
     'ಇದನ್ನು ಕಾಯುವ ಕೋಣೆಯ TV ಅಥವಾ ಟ್ಯಾಬ್ಲೆಟ್‌ನಲ್ಲಿ ತೆರೆಯಿರಿ. ಈಗ ನಡೆಯುತ್ತಿರುವ ಟೋಕನ್ ಮಾತ್ರ ತೋರಿಸುತ್ತದೆ — ರೋಗಿಯ ಹೆಸರನ್ನು ಅಲ್ಲ. ಲಿಂಕ್ ಇರುವ ಯಾರು ಬೇಕಾದರೂ ನೋಡಬಹುದು.',

@@ -23,9 +23,21 @@ export const CSRF_HEADER = 'x-csrf-token';
 const VERSION = 'v1';
 
 export interface SessionPayload {
-  /** Doctor id. */
+  /**
+   * The clinic, when this session was opened with a clinic key.
+   *
+   * Its presence is what separates the two kinds of sign-in: with it, `d` is
+   * merely whichever doctor is being looked at and may be switched freely
+   * within this clinic; without it, `d` is who signed in and cannot change.
+   */
+  c?: string;
+  /** Doctor id — who signed in, or who is being viewed. */
   d: string;
-  /** apiKey fingerprint — see apiKeyFingerprint(). */
+  /**
+   * Fingerprint of the key this session was minted from — the doctor's for a
+   * doctor session, the clinic's for a clinic one. Rotating that key ends every
+   * outstanding session, which is the only revocation there is.
+   */
   k: string;
   /** Expiry, epoch seconds. */
   exp: number;
@@ -102,14 +114,19 @@ export function verifySessionToken(token: string | null | undefined): SessionPay
     typeof p.d !== 'string' ||
     typeof p.k !== 'string' ||
     typeof p.csrf !== 'string' ||
-    typeof p.exp !== 'number'
+    typeof p.exp !== 'number' ||
+    (p.c !== undefined && typeof p.c !== 'string')
   ) {
     return null;
   }
 
   if (p.exp * 1000 <= Date.now()) return null;
 
-  return { d: p.d, k: p.k, exp: p.exp, csrf: p.csrf };
+  // Rebuilt field by field rather than returned whole, so nothing a forged body
+  // carries beyond the known shape survives. Every field therefore has to be
+  // named here — `c` was added to the type and missed here, which silently
+  // turned every clinic session back into a doctor one.
+  return { d: p.d, k: p.k, exp: p.exp, csrf: p.csrf, ...(p.c ? { c: p.c } : {}) };
 }
 
 /** Read one cookie without pulling in cookie-parser. */

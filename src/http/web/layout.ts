@@ -651,6 +651,22 @@ details.overflow .menu-items button{width:100%;text-align:left}
   .queue-2col>.col-list{min-width:0}
   .queue-2col .qrow .body{min-width:0}
 }
+
+/* ---- doctor switcher inside the account sheet ---- */
+.sheet-label{
+  font-size:var(--t-xs);text-transform:uppercase;letter-spacing:.08em;
+  color:var(--ink-3);padding:var(--s2) var(--s3) var(--s1);
+}
+/* Doctor names are longer than "Settings", so the sheet has to be allowed to
+   grow left from the avatar instead of running off the right edge. */
+.menu .sheet{max-width:min(260px,calc(100vw - 2 * var(--s4)))}
+.menu .sheet button,.menu .sheet a{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sheet-current{
+  padding:var(--s2) var(--s3);font-weight:600;color:var(--accent);
+  display:flex;align-items:center;min-height:var(--tap);
+}
+.sheet-current::before{content:"✓";margin-right:var(--s2)}
+.sheet-rule{border-top:1px solid var(--line);margin:var(--s2) 0}
 `;
 
 export interface NavLink {

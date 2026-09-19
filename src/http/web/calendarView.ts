@@ -2,7 +2,7 @@ import type { Doctor } from '@prisma/client';
 import type { CalendarSlot } from '../../domain/slots';
 import { c } from '../../i18n/console';
 import { html, page } from './layout';
-import { doctorBottomNav, doctorHeader } from './nav';
+import { doctorBottomNav, doctorHeader, type ConsoleDoctor } from './nav';
 
 function timeOnly(at: Date, timezone: string): string {
   return new Intl.DateTimeFormat('en-GB', {
@@ -27,7 +27,7 @@ function personName(name: string | null): string {
  * hides both, so this uses getDaySchedule instead.
  */
 export function calendarPage(opts: {
-  doctor: Doctor;
+  doctor: ConsoleDoctor;
   slots: CalendarSlot[];
   date: string;
   prevDate: string;
@@ -52,6 +52,7 @@ export function calendarPage(opts: {
     photo: doctor.photo,
     specialty: doctor.specialty,
     bookingMode: doctor.bookingMode,
+    ...(doctor.clinicDoctors ? { clinicDoctors: doctor.clinicDoctors } : {}),
   };
 
   const booked = slots.filter((x) => x.appointment).length;
@@ -139,7 +140,7 @@ export function calendarPage(opts: {
 
 /** Who is taking a given slot — name, number, language. */
 export function slotBookPage(opts: {
-  doctor: Doctor;
+  doctor: ConsoleDoctor;
   date: string;
   slotIso: string;
   slotLabel: string;
@@ -161,6 +162,7 @@ export function slotBookPage(opts: {
     photo: opts.doctor.photo,
     specialty: opts.doctor.specialty,
     bookingMode: opts.doctor.bookingMode,
+    ...(opts.doctor.clinicDoctors ? { clinicDoctors: opts.doctor.clinicDoctors } : {}),
   };
 
   return page(

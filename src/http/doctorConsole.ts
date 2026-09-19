@@ -6,6 +6,13 @@ import { env } from '../config/env';
 import { prisma } from '../db/prisma';
 import { applyStatusChange, toAppointmentStatus } from '../domain/appointments';
 import { bookingNumberFor, type DoctorWithChannel } from '../domain/doctors';
+import {
+  apiKeyFingerprint,
+  newCsrfToken,
+  sessionExpiry,
+  setSessionCookie,
+  signSession,
+} from './middleware/session';
 import { buildReport, listPatientsForDoctor, patientHistory } from '../domain/reports';
 import { addDocument, deleteDocument, getDocumentForDoctor } from '../domain/documents';
 import { storage } from '../domain/storage';
@@ -91,6 +98,17 @@ function notFound(res: Response, message: string): void {
 // wider AppointmentStatus. A Set<string> widens once here rather than needing a
 // cast at each call site.
 const ACTIVE = new Set<string>(ACTIVE_TOKEN_STATUSES);
+
+/**
+ * Put back what the database read dropped.
+ *
+ * loadDay re-reads the doctor row, so the list a clinic session attached does
+ * not survive it — and without that list the header renders no switcher, which
+ * is how a front desk signed in for three doctors could still only see one.
+ */
+function withSession<T extends object>(row: T, session: DoctorWithChannel): T {
+  return session.clinicDoctors ? { ...row, clinicDoctors: session.clinicDoctors } : row;
+}
 
 /** Shared by the queue and bookings views: one date's rows plus queue state. */
 async function loadDay(doctorId: string, date: Date) {
@@ -212,7 +230,7 @@ doctorConsoleRouter.get('/app/queue', requireDoctorAuth, async (req, res) => {
     res.type('html').send(
       queueBody({
       bookingNumber: bookingNumberFor(doctor),
-        doctor: day.doctor,
+        doctor: withSession(day.doctor, doctor),
         rows: day.rows,
         queue: day.queue,
         avgWaitMins,
@@ -225,7 +243,7 @@ doctorConsoleRouter.get('/app/queue', requireDoctorAuth, async (req, res) => {
   res.type('html').send(
     queuePageV2({
       bookingNumber: bookingNumberFor(doctor),
-      doctor: day.doctor,
+      doctor: withSession(day.doctor, doctor),
       rows: day.rows,
       queue: day.queue,
       avgWaitMins,
@@ -307,6 +325,59 @@ doctorConsoleRouter.post(
 
     const back = typeof req.body?.back === 'string' ? safeNextPath(req.body.back) : null;
     res.redirect(302, `${back ?? '/app/queue'}?flash=${encodeURIComponent(s.noteSaved)}`);
+  },
+);
+
+// ---- switching doctor within a clinic sign-in ----
+
+/**
+ * Point a clinic session at a different doctor.
+ *
+ * Only re-signs the cookie; it grants nothing. The doctor must be active and in
+ * the session's own clinic, checked here as well as on every later request —
+ * an id alone must never be enough to open another clinic's queue.
+ */
+doctorConsoleRouter.post(
+  '/app/switch-doctor',
+  requireDoctorAuth,
+  requireFormCsrf,
+  async (req, res) => {
+    const clinicId = req.clinicId;
+    // A doctor signed in with their own key has nobody to switch to.
+    if (!clinicId) {
+      res.redirect(302, '/app/queue');
+      return;
+    }
+
+    const wanted = typeof req.body?.doctorId === 'string' ? req.body.doctorId : '';
+    const target = await prisma.doctor.findFirst({
+      where: { id: wanted, clinicId, status: 'ACTIVE' },
+      select: { id: true },
+    });
+    if (!target) {
+      res.redirect(302, '/app/queue');
+      return;
+    }
+
+    const clinic = await prisma.clinic.findUnique({ where: { id: clinicId } });
+    if (!clinic) {
+      res.redirect(302, '/app/queue');
+      return;
+    }
+
+    setSessionCookie(
+      res,
+      signSession({
+        c: clinic.id,
+        d: target.id,
+        k: apiKeyFingerprint(clinic.apiKey),
+        exp: sessionExpiry(),
+        csrf: req.csrfToken ?? newCsrfToken(),
+      }),
+    );
+
+    const back = typeof req.body?.back === 'string' ? safeNextPath(req.body.back) : null;
+    res.redirect(302, back ?? '/app/queue');
   },
 );
 
@@ -789,7 +860,7 @@ doctorConsoleRouter.get('/app/bookings', requireDoctorAuth, async (req, res) => 
   res.type('html').send(
     bookingsPage({
       bookingNumber: bookingNumberFor(doctor),
-      doctor: day.doctor,
+      doctor: withSession(day.doctor, doctor),
       queueCount: await waitingCount(doctor.id, doctor.timezone),
       rows: day.rows,
       queue: day.queue,

@@ -13,6 +13,7 @@ import {
   readCookie,
   verifyAdminSessionToken,
   verifySessionToken,
+  type SessionPayload,
 } from './session';
 
 /**
@@ -34,6 +35,12 @@ export type AuthMode = 'api-key' | 'cookie';
 declare module 'express-serve-static-core' {
   interface Request {
     doctor?: DoctorWithChannel;
+    /**
+     * Every doctor this session may switch to. Set only for a clinic sign-in —
+     * its absence is what tells a view not to render a switcher.
+     */
+    clinicDoctors?: Array<{ id: string; name: string; specialty: string | null }>;
+    clinicId?: string;
     authMode?: AuthMode;
     /** Present only for cookie auth — the value pages must echo back. */
     csrfToken?: string;
@@ -65,6 +72,14 @@ async function doctorFromCookie(req: Request): Promise<DoctorWithChannel | null>
   const payload = verifySessionToken(readCookie(req, SESSION_COOKIE));
   if (!payload) return null;
 
+  return payload.c ? clinicSession(req, payload) : doctorSession(req, payload);
+}
+
+/** Signed in as one doctor: the session is that doctor and cannot become another. */
+async function doctorSession(
+  req: Request,
+  payload: SessionPayload,
+): Promise<DoctorWithChannel | null> {
   // clinic included: routes reached this way go on to message patients, and
   // must send from the clinic's number rather than the environment fallback.
   const doctor = await prisma.doctor.findUnique({
@@ -79,6 +94,42 @@ async function doctorFromCookie(req: Request): Promise<DoctorWithChannel | null>
 
   req.csrfToken = payload.csrf;
   return doctor;
+}
+
+/**
+ * Signed in with the clinic's key: one login for a front desk covering several
+ * doctors, switching between them without signing out.
+ *
+ * The doctor in the cookie is only ever *viewed*, and is re-checked against the
+ * clinic on every request. Trusting the id alone would let an edited cookie
+ * open another clinic's queue — the fingerprint proves which clinic you hold a
+ * key for, and this proves the doctor belongs to it.
+ */
+async function clinicSession(
+  req: Request,
+  payload: SessionPayload,
+): Promise<DoctorWithChannel | null> {
+  const clinic = await prisma.clinic.findUnique({ where: { id: payload.c! } });
+  if (!clinic || clinic.status !== 'ACTIVE') return null;
+  if (apiKeyFingerprint(clinic.apiKey) !== payload.k) return null;
+
+  const doctors = await prisma.doctor.findMany({
+    where: { clinicId: clinic.id, status: 'ACTIVE' },
+    include: { clinic: true },
+    orderBy: { name: 'asc' },
+  });
+  if (doctors.length === 0) return null;
+
+  // A doctor who was disabled or moved since the cookie was written falls back
+  // to the first, rather than logging the desk out mid-shift.
+  const viewing = doctors.find((d) => d.id === payload.d) ?? doctors[0]!;
+
+  const siblings = doctors.map((d) => ({ id: d.id, name: d.name, specialty: d.specialty }));
+
+  req.csrfToken = payload.csrf;
+  req.clinicDoctors = siblings;
+  req.clinicId = clinic.id;
+  return { ...viewing, clinicDoctors: siblings };
 }
 
 /**

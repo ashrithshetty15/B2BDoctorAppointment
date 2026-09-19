@@ -66,6 +66,15 @@ export async function getDoctorByApiKey(apiKey: string): Promise<DoctorWithChann
  */
 export type DoctorWithChannel = Doctor & {
   clinic: { whatsappPhoneNumberId: string | null; whatsappNumber: string | null } | null;
+  /**
+   * The doctors this session may switch between, attached by a clinic sign-in.
+   *
+   * Not a column — it is decoration the session adds, and it rides on the
+   * doctor because that object already reaches every page. Absent for a doctor
+   * signed in with their own key, which is what stops the switcher appearing
+   * for someone with nobody to switch to.
+   */
+  clinicDoctors?: Array<{ id: string; name: string; specialty: string | null }>;
 };
 
 /**

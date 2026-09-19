@@ -1,3 +1,4 @@
+import type { Doctor } from '@prisma/client';
 import type { ConsoleStrings } from '../../i18n/console';
 import { type RawHtml, html, initials, raw } from './layout';
 
@@ -11,6 +12,17 @@ import { type RawHtml, html, initials, raw } from './layout';
  */
 
 export type DoctorTab = 'queue' | 'calendar' | 'bookings' | 'patients' | 'reports';
+
+/**
+ * A doctor as the console sees one: the row, plus whatever the session attached.
+ *
+ * `clinicDoctors` is not a column — a clinic sign-in adds it so the header can
+ * offer the switcher, and its absence is what keeps that control off the page
+ * for a doctor signed in with their own key.
+ */
+export type ConsoleDoctor = Doctor & {
+  clinicDoctors?: Array<{ id: string; name: string; specialty: string | null }>;
+};
 
 export interface DoctorNavOptions {
   clinicName: string;
@@ -26,6 +38,13 @@ export interface DoctorNavOptions {
   photo?: string | null;
   /** Shown under the clinic name when set. */
   specialty?: string | null;
+  /**
+   * Every doctor this session may switch to, for a clinic sign-in.
+   *
+   * Absent for a doctor signed in with their own key — they have nobody to
+   * switch to, and offering the control would imply otherwise.
+   */
+  clinicDoctors?: Array<{ id: string; name: string; specialty: string | null }>;
 }
 
 const ICONS: Record<DoctorTab, RawHtml> = {
@@ -102,6 +121,21 @@ export function doctorHeader(opts: DoctorNavOptions): RawHtml {
           </span>
         </summary>
         <div class="sheet">
+          ${opts.clinicDoctors && opts.clinicDoctors.length > 1
+            ? html`
+                <div class="sheet-label">${s.viewingAs}</div>
+                ${opts.clinicDoctors.map((d) =>
+                  d.name === doctorName
+                    ? html`<div class="sheet-current">Dr. ${d.name}</div>`
+                    : html`<form method="post" action="/app/switch-doctor">
+                        <input type="hidden" name="_csrf" value="${csrfToken}" />
+                        <input type="hidden" name="doctorId" value="${d.id}" />
+                        <button type="submit">Dr. ${d.name}</button>
+                      </form>`,
+                )}
+                <div class="sheet-rule"></div>
+              `
+            : ''}
           <a href="/app/settings">${s.settings}</a>
           <form method="post" action="/app/doctor-logout">
             <input type="hidden" name="_csrf" value="${csrfToken}" />

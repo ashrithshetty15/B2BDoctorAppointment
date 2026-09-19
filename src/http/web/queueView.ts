@@ -10,7 +10,7 @@ import {
 } from '../../domain/queueLifecycle';
 import { statusPill, type QueueRow, type QueueState } from './doctorViews';
 import { type RawHtml, html, page, raw } from './layout';
-import { doctorBottomNav, doctorHeader } from './nav';
+import { doctorBottomNav, doctorHeader, type ConsoleDoctor } from './nav';
 import { bookingLink, qrSvg } from './qr';
 
 /** Waiting longer than this turns the row amber. */
@@ -438,7 +438,7 @@ function emptyState(bookingNumber: string | null, s: ConsoleStrings): RawHtml {
 export function queueBody(opts: {
   /** Dialable number for the QR — the clinic's, not the doctor's own. */
   bookingNumber: string | null;
-  doctor: Doctor;
+  doctor: ConsoleDoctor;
   rows: QueueRow[];
   queue: QueueState;
   avgWaitMins: number | null;
@@ -573,7 +573,7 @@ export function queueBody(opts: {
  * take a relative's number for a patient without a phone.
  */
 export function walkInPage(opts: {
-  doctor: Doctor;
+  doctor: ConsoleDoctor;
   queueCount: number;
   csrfToken: string;
   values?: { name?: string; phone?: string; language?: string; notes?: string };
@@ -591,6 +591,7 @@ export function walkInPage(opts: {
     photo: opts.doctor.photo,
     specialty: opts.doctor.specialty,
     bookingMode: opts.doctor.bookingMode,
+    ...(opts.doctor.clinicDoctors ? { clinicDoctors: opts.doctor.clinicDoctors } : {}),
   };
 
   return page(
@@ -796,7 +797,7 @@ function closeTodaySheet(opts: {
 
 /** Step two: show the exact text and recipient count before anything is sent. */
 export function delayConfirmPage(opts: {
-  doctor: Doctor;
+  doctor: ConsoleDoctor;
   delayMins: number;
   recipients: number;
   messagePreview: string;
@@ -813,6 +814,7 @@ export function delayConfirmPage(opts: {
     photo: opts.doctor.photo,
     specialty: opts.doctor.specialty,
     bookingMode: opts.doctor.bookingMode,
+    ...(opts.doctor.clinicDoctors ? { clinicDoctors: opts.doctor.clinicDoctors } : {}),
   };
   return page(
     { title: s.runningLate, csrfToken: opts.csrfToken, bare: true },
@@ -880,7 +882,7 @@ const POLL = `
 export function queuePageV2(opts: {
   /** Dialable number for the QR — the clinic's, not the doctor's own. */
   bookingNumber: string | null;
-  doctor: Doctor;
+  doctor: ConsoleDoctor;
   rows: QueueRow[];
   queue: QueueState;
   avgWaitMins: number | null;
@@ -902,6 +904,7 @@ export function queuePageV2(opts: {
     photo: opts.doctor.photo,
     specialty: opts.doctor.specialty,
     bookingMode: opts.doctor.bookingMode,
+    ...(opts.doctor.clinicDoctors ? { clinicDoctors: opts.doctor.clinicDoctors } : {}),
   };
 
   return page(

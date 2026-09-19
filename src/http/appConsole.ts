@@ -5,6 +5,7 @@ import { env } from '../config/env';
 import { prisma } from '../db/prisma';
 import { clinicToday } from '../utils/time';
 import { ClinicFullError, clinicForNewDoctor } from '../domain/clinics';
+import { clinicByApiKey } from '../domain/clinics';
 import { getDoctorByApiKey } from '../domain/doctors';
 import type { WorkingHours } from '../domain/slots';
 import { buildWorkingHours as buildHours, workingHoursToText } from '../domain/workingHours';
@@ -137,6 +138,39 @@ appConsoleRouter.post('/app/login', loginLimiter, async (req, res) => {
       .status(401)
       .type('html')
       .send(loginPage({ error, next: next ?? undefined }));
+
+  // A clinic key signs the whole front desk in once and can switch between its
+  // doctors; a doctor key signs in that doctor alone. Checked first, and by its
+  // own prefix — folded into the dk_ branch it was simply never reached.
+  if (submitted.startsWith('ck_')) {
+    const clinic = await clinicByApiKey(submitted);
+    if (!clinic || clinic.status !== 'ACTIVE') {
+      reject();
+      return;
+    }
+
+    const first = await prisma.doctor.findFirst({
+      where: { clinicId: clinic.id, status: 'ACTIVE' },
+      orderBy: { name: 'asc' },
+    });
+    if (!first) {
+      reject('That clinic has no active doctors yet.');
+      return;
+    }
+
+    setSessionCookie(
+      res,
+      signSession({
+        c: clinic.id,
+        d: first.id,
+        k: apiKeyFingerprint(clinic.apiKey),
+        exp: sessionExpiry(),
+        csrf: newCsrfToken(),
+      }),
+    );
+    res.redirect(302, next ?? '/app/queue');
+    return;
+  }
 
   if (submitted.startsWith('dk_')) {
     const doctor = await getDoctorByApiKey(submitted);

@@ -180,3 +180,9 @@ async function findClinic(channelAddress: string): Promise<Clinic | null> {
 export function outboundChannelForClinic(clinic: Clinic): string | undefined {
   return clinic.whatsappPhoneNumberId ?? undefined;
 }
+
+/** The front-desk key: one sign-in covering every doctor at a clinic. */
+export async function clinicByApiKey(apiKey: string): Promise<Clinic | null> {
+  if (!apiKey) return null;
+  return prisma.clinic.findUnique({ where: { apiKey } });
+}

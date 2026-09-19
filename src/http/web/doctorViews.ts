@@ -43,7 +43,7 @@ export interface QueueState {
 
 /** Nav options for a doctor page; queueCount drives the live badge. */
 function navFor(
-  doctor: Doctor,
+  doctor: Doctor & { clinicDoctors?: Array<{ id: string; name: string; specialty: string | null }> },
   current: DoctorTab,
   queueCount: number,
   csrfToken: string,
@@ -54,6 +54,7 @@ function navFor(
     current,
     queueCount,
     csrfToken,
+    ...(doctor.clinicDoctors ? { clinicDoctors: doctor.clinicDoctors } : {}),
     s: c(doctor.defaultLanguage),
     photo: doctor.photo,
     specialty: doctor.specialty,

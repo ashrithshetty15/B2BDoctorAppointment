@@ -2,7 +2,7 @@ import type { Doctor } from '@prisma/client';
 import { type ConsoleStrings, c } from '../../i18n/console';
 import { type DayKey, DAY_KEYS } from '../../domain/slots';
 import { html, initials, page, raw } from './layout';
-import { doctorBottomNav, doctorHeader } from './nav';
+import { doctorBottomNav, doctorHeader, type ConsoleDoctor } from './nav';
 import { bookingLink, qrSvg } from './qr';
 
 /** Weekday names are translated now; they used to be hardcoded English here. */
@@ -82,7 +82,7 @@ const PHOTO_SCRIPT = `
  * operator.
  */
 export function settingsPage(opts: {
-  doctor: Doctor;
+  doctor: ConsoleDoctor;
   queueCount: number;
   csrfToken: string;
   /** Working hours as editable text, one field per day. */
@@ -114,6 +114,7 @@ export function settingsPage(opts: {
     photo: opts.doctor.photo,
     specialty: opts.doctor.specialty,
     bookingMode: opts.doctor.bookingMode,
+    ...(doctor.clinicDoctors ? { clinicDoctors: doctor.clinicDoctors } : {}),
   };
   const link = opts.bookingNumber ? bookingLink(opts.bookingNumber) : null;
 
