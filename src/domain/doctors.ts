@@ -65,7 +65,7 @@ export async function getDoctorByApiKey(apiKey: string): Promise<DoctorWithChann
  * show for it. Required turns that into a type error at the call site.
  */
 export type DoctorWithChannel = Doctor & {
-  clinic: { whatsappPhoneNumberId: string | null } | null;
+  clinic: { whatsappPhoneNumberId: string | null; whatsappNumber: string | null } | null;
 };
 
 /**
@@ -80,4 +80,17 @@ export type DoctorWithChannel = Doctor & {
  */
 export function outboundChannelFor(doctor: DoctorWithChannel): string | undefined {
   return doctor.clinic?.whatsappPhoneNumberId ?? doctor.whatsappPhoneNumberId ?? undefined;
+}
+
+/**
+ * The dialable number patients message — what the QR code and the wa.me link
+ * are built from.
+ *
+ * The clinic's wins, for the same reason as outboundChannelFor: at a
+ * multi-doctor practice only one doctor row ever carried a number, so reading
+ * the doctor alone leaves everyone else with no QR code at all. Falling back to
+ * the doctor's own keeps a solo clinic working while both columns exist.
+ */
+export function bookingNumberFor(doctor: DoctorWithChannel): string | null {
+  return doctor.clinic?.whatsappNumber ?? doctor.whatsappNumber ?? null;
 }

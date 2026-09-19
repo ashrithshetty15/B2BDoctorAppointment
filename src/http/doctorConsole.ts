@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { env } from '../config/env';
 import { prisma } from '../db/prisma';
 import { applyStatusChange, toAppointmentStatus } from '../domain/appointments';
+import { bookingNumberFor, type DoctorWithChannel } from '../domain/doctors';
 import { buildReport, listPatientsForDoctor, patientHistory } from '../domain/reports';
 import { addDocument, deleteDocument, getDocumentForDoctor } from '../domain/documents';
 import { storage } from '../domain/storage';
@@ -199,6 +200,7 @@ doctorConsoleRouter.get('/app/queue', requireDoctorAuth, async (req, res) => {
   if (req.query['fragment'] !== undefined) {
     res.type('html').send(
       queueBody({
+      bookingNumber: bookingNumberFor(doctor),
         doctor: day.doctor,
         rows: day.rows,
         queue: day.queue,
@@ -211,6 +213,7 @@ doctorConsoleRouter.get('/app/queue', requireDoctorAuth, async (req, res) => {
 
   res.type('html').send(
     queuePageV2({
+      bookingNumber: bookingNumberFor(doctor),
       doctor: day.doctor,
       rows: day.rows,
       queue: day.queue,
@@ -764,6 +767,7 @@ doctorConsoleRouter.get('/app/bookings', requireDoctorAuth, async (req, res) => 
 
   res.type('html').send(
     bookingsPage({
+      bookingNumber: bookingNumberFor(doctor),
       doctor: day.doctor,
       queueCount: await waitingCount(doctor.id, doctor.timezone),
       rows: day.rows,
@@ -790,6 +794,7 @@ doctorConsoleRouter.get('/app/patients', requireDoctorAuth, async (req, res) => 
   ]);
   res.type('html').send(
     patientsPage({
+      bookingNumber: bookingNumberFor(doctor),
       doctor,
       patients,
       followUpsDue: counts.due,
@@ -1315,11 +1320,12 @@ async function ensureDisplayKey(doctor: Doctor): Promise<string> {
 }
 
 /** Everything the settings page needs beyond the doctor row itself. */
-async function settingsContext(doctor: Doctor, csrfToken: string) {
+async function settingsContext(doctor: DoctorWithChannel, csrfToken: string) {
   const s = c(doctor.defaultLanguage);
   const today = clinicToday(doctor.timezone);
   return {
     doctor,
+    bookingNumber: bookingNumberFor(doctor),
     displayPath: `/display/${await ensureDisplayKey(doctor)}`,
     queueCount: await waitingCount(doctor.id, doctor.timezone),
     csrfToken,
@@ -1466,7 +1472,7 @@ doctorConsoleRouter.post(
     // even while this form is being re-rendered with an error.
     const render = (extra: { flash?: string; error?: string }) =>
       prisma.doctor
-        .findUnique({ where: { id: doctor.id } })
+        .findUnique({ where: { id: doctor.id }, include: { clinic: true } })
         .then(async (fresh) => {
           const ctx = await settingsContext(fresh ?? doctor, req.csrfToken ?? '');
           res.type('html').send(settingsPage({ ...ctx, ...extra }));

@@ -90,6 +90,8 @@ export function settingsPage(opts: {
   upcomingLeave: LeaveDay[];
   /** Path to this doctor's waiting-room board, e.g. /display/scr_a1b2... */
   displayPath: string;
+  /** Dialable number for the QR — the clinic's, not the doctor's own. */
+  bookingNumber: string | null;
   /** Today in the clinic's timezone, YYYY-MM-DD — the date picker's floor. */
   today: string;
   flash?: string;
@@ -113,7 +115,7 @@ export function settingsPage(opts: {
     specialty: opts.doctor.specialty,
     bookingMode: opts.doctor.bookingMode,
   };
-  const link = doctor.whatsappNumber ? bookingLink(doctor.whatsappNumber) : null;
+  const link = opts.bookingNumber ? bookingLink(opts.bookingNumber) : null;
 
   return page(
     { title: s.settings, csrfToken: opts.csrfToken, bare: true },
@@ -326,7 +328,7 @@ export function settingsPage(opts: {
                   <div class="qr">${qrSvg(link, { title: s.scanToBook })}</div>
                   <div>
                     <a class="walink" href="${link}" target="_blank" rel="noopener"
-                      >+${doctor.whatsappNumber}</a
+                      >+${opts.bookingNumber}</a
                     >
                   </div>
                 </div>

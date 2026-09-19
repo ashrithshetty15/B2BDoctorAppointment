@@ -73,7 +73,27 @@ function timeOnly(at: Date | null, timezone: string): string {
   }).format(at);
 }
 
+/**
+ * The QR and wa.me link an empty state offers.
+ *
+ * Shared because the copy beside it says "show this code at reception" — the
+ * Bookings empty state printed that sentence with nothing under it, so the page
+ * promised a code it never rendered.
+ */
+function bookingQr(bookingNumber: string | null, s: ConsoleStrings): RawHtml {
+  if (!bookingNumber) return html``;
+  const link = bookingLink(bookingNumber);
+  return html`
+    <div class="qr">${qrSvg(link, { title: s.scanToBook })}</div>
+    <div>
+      <a class="walink" href="${link}" target="_blank" rel="noopener">+${bookingNumber}</a>
+    </div>
+  `;
+}
+
 export function bookingsPage(opts: {
+  /** Dialable number for the QR — the clinic's, not the doctor's own. */
+  bookingNumber: string | null;
   doctor: Doctor;
   rows: QueueRow[];
   queue: QueueState;
@@ -131,6 +151,7 @@ export function bookingsPage(opts: {
               <div class="empty">
                 <h3>${s.noBookingsThisDay}</h3>
                 <p>${s.noBookingsBody}</p>
+                ${bookingQr(opts.bookingNumber, s)}
               </div>
             </div>`
           : html`<div class="card flush">
@@ -171,9 +192,10 @@ export function patientsPage(opts: {
   followUpsDue: number;
   queueCount: number;
   csrfToken: string;
+  /** Dialable number for the QR — the clinic's, not the doctor's own. */
+  bookingNumber: string | null;
 }): string {
   const s = c(opts.doctor.defaultLanguage);
-  const link = opts.doctor.whatsappNumber ? bookingLink(opts.doctor.whatsappNumber) : null;
 
   return page(
     {
@@ -206,14 +228,7 @@ export function patientsPage(opts: {
             <div class="empty">
               <h3>${s.noPatientsTitle}</h3>
               <p>${s.noPatientsBody}</p>
-              ${link
-                ? html`<div class="qr">${qrSvg(link, { title: s.scanToBook })}</div>
-                    <div>
-                      <a class="walink" href="${link}" target="_blank" rel="noopener"
-                        >+${opts.doctor.whatsappNumber}</a
-                      >
-                    </div>`
-                : ''}
+              ${bookingQr(opts.bookingNumber, s)}
             </div>
           </div>`
         : html`

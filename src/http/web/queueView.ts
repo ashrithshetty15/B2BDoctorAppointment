@@ -292,8 +292,8 @@ function servingRow(opts: {
 
 // ---- empty state ----
 
-function emptyState(doctor: Doctor, s: ConsoleStrings): RawHtml {
-  if (!doctor.whatsappNumber) {
+function emptyState(bookingNumber: string | null, s: ConsoleStrings): RawHtml {
+  if (!bookingNumber) {
     return html`
       <div class="empty">
         <h3>${s.noBookingsTitle}</h3>
@@ -305,7 +305,7 @@ function emptyState(doctor: Doctor, s: ConsoleStrings): RawHtml {
     `;
   }
 
-  const link = bookingLink(doctor.whatsappNumber);
+  const link = bookingLink(bookingNumber);
   return html`
     <div class="empty">
       <h3>${s.noBookingsTitle}</h3>
@@ -313,7 +313,7 @@ function emptyState(doctor: Doctor, s: ConsoleStrings): RawHtml {
       <div class="qr">${qrSvg(link, { title: s.scanToBook })}</div>
       <div>
         <a class="walink" href="${link}" target="_blank" rel="noopener">
-          ${WA_ICON} +${doctor.whatsappNumber}
+          ${WA_ICON} +${bookingNumber}
         </a>
       </div>
     </div>
@@ -323,6 +323,8 @@ function emptyState(doctor: Doctor, s: ConsoleStrings): RawHtml {
 // ---- the live region (what the poll replaces) ----
 
 export function queueBody(opts: {
+  /** Dialable number for the QR — the clinic's, not the doctor's own. */
+  bookingNumber: string | null;
   doctor: Doctor;
   rows: QueueRow[];
   queue: QueueState;
@@ -389,7 +391,7 @@ export function queueBody(opts: {
               : ''}
           </div>
         `
-      : html`<div class="card">${emptyState(doctor, s)}</div>`}
+      : html`<div class="card">${emptyState(opts.bookingNumber, s)}</div>`}
   `;
 }
 
@@ -708,6 +710,8 @@ const POLL = `
 `;
 
 export function queuePageV2(opts: {
+  /** Dialable number for the QR — the clinic's, not the doctor's own. */
+  bookingNumber: string | null;
   doctor: Doctor;
   rows: QueueRow[];
   queue: QueueState;
@@ -755,6 +759,7 @@ export function queuePageV2(opts: {
 
         <div id="live" data-labels="${labels}">
           ${queueBody({
+            bookingNumber: opts.bookingNumber,
             doctor: opts.doctor,
             rows: opts.rows,
             queue: opts.queue,
