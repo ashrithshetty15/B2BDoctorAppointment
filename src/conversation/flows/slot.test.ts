@@ -191,84 +191,65 @@ describe('booking horizon', () => {
 });
 
 /**
- * Asking which part of the day comes before showing times. A clinic with a
- * morning and an evening session produced more free times than a WhatsApp list
- * can hold, so wanting 6 PM meant paging past every morning slot to reach it.
+ * One sectioned list instead of a Morning/Afternoon/Evening question.
+ *
+ * The separate step cost every patient an extra tap to help the minority of
+ * clinics with more times than a list can hold. Sections do the same job inside
+ * one message.
  */
-describe('picking a part of the day', () => {
-  it('asks which part of the day when the day spans more than one', async () => {
-    vi.mocked(getAvailableSlots).mockResolvedValue(slotsFrom(15));
-    const r = await slotFlow.handle(
-      ctx(Steps.SLOT_AWAITING_DATE, '1', { dates: ['2026-09-18'] }),
-    );
-
-    expect(r.nextStep).toBe(Steps.SLOT_AWAITING_PERIOD);
-    expect(r.replies.at(-1)?.buttons?.map((b) => b.title)).toEqual(['Morning', 'Afternoon']);
-    expect(r.data?.['periods']).toEqual(['MORNING', 'AFTERNOON']);
-  });
-
-  /** A question with one possible answer is worse than no question. */
-  it('skips the question when only one part of the day is free', async () => {
-    vi.mocked(getAvailableSlots).mockResolvedValue(morningOnly(4));
-    const r = await slotFlow.handle(
-      ctx(Steps.SLOT_AWAITING_DATE, '1', { dates: ['2026-09-18'] }),
-    );
-
-    expect(r.nextStep).toBe(Steps.SLOT_AWAITING_TIME);
-    expect(r.replies.at(-1)?.list?.rows).toHaveLength(4);
-  });
-
-  it('narrows the times to the part of the day chosen', async () => {
-    vi.mocked(getAvailableSlots).mockResolvedValue(slotsFrom(15));
-    const r = await slotFlow.handle(
-      ctx(Steps.SLOT_AWAITING_PERIOD, '2', {
-        date: '2026-09-18',
-        periods: ['MORNING', 'AFTERNOON'],
-      }),
-    );
-
-    expect(r.nextStep).toBe(Steps.SLOT_AWAITING_TIME);
-    expect(r.data?.['period']).toBe('AFTERNOON');
-    // 09:00-13:40 at 20 minutes: nine before noon, six after.
-    expect(r.replies.at(-1)!.list!.rows).toHaveLength(6);
-    for (const iso of r.data?.['times'] as string[]) {
-      expect(new Date(iso).getTime()).toBeGreaterThanOrEqual(
-        Date.parse('2026-09-18T06:30:00.000Z'), // noon IST
-      );
-    }
-  });
-
-  it('re-asks on a choice outside the parts offered', async () => {
-    const r = await slotFlow.handle(
-      ctx(Steps.SLOT_AWAITING_PERIOD, '3', {
-        date: '2026-09-18',
-        periods: ['MORNING', 'AFTERNOON'],
-      }),
-    );
-    expect(r.nextStep).toBe(Steps.SLOT_AWAITING_PERIOD);
-    expect(r.replies[0]?.templateName).toBe('slotInvalidChoice');
-  });
-
-  /** The period is carried so a pager or a retaken slot stays in that part. */
-  it('keeps the chosen part of the day when re-offering after a taken slot', async () => {
-    vi.mocked(getAvailableSlots).mockResolvedValue(slotsFrom(15));
-    vi.mocked(bookSlot).mockResolvedValue({ ok: false, reason: 'TAKEN' });
-
-    const r = await slotFlow.handle(
-      ctx(Steps.SLOT_CONFIRM_BOOKING, '1', {
-        date: '2026-09-18',
-        period: 'AFTERNOON',
-        slotStart: '2026-09-18T06:30:00.000Z',
-      }),
-    );
-
-    expect(r.nextStep).toBe(Steps.SLOT_AWAITING_TIME);
-    expect(r.data?.['period']).toBe('AFTERNOON');
-    expect(r.replies.at(-1)!.list!.rows).toHaveLength(6);
-  });
-});
-
 describe('picking a time', () => {
+  const sectionsOf = (r: Awaited<ReturnType<typeof slotFlow.handle>>) =>
+    (r.replies.at(-1)?.list?.rows ?? []).map((x) => x.section);
+
+  it('goes straight from a date to the times, with no extra question', async () => {
+    vi.mocked(getAvailableSlots).mockResolvedValue(slotsFrom(4));
+    const r = await slotFlow.handle(ctx(Steps.SLOT_AWAITING_DATE, '1', { dates: ['2026-09-18'] }));
+
+    expect(r.nextStep).toBe(Steps.SLOT_AWAITING_TIME);
+    expect(r.replies.at(-1)?.list?.rows.length).toBeGreaterThan(0);
+  });
+
+  it('groups the times under the part of the day they fall in', async () => {
+    vi.mocked(getAvailableSlots).mockResolvedValue(slotsFrom(15));
+    const r = await slotFlow.handle(ctx(Steps.SLOT_AWAITING_DATE, '1', { dates: ['2026-09-18'] }));
+
+    expect(new Set(sectionsOf(r))).toEqual(new Set(['Morning', 'Afternoon', undefined]));
+  });
+
+  /** Everything visible in one message when it fits. */
+  it('shows every time when the day fits in one list', async () => {
+    vi.mocked(getAvailableSlots).mockResolvedValue(morningOnly(6));
+    const r = await slotFlow.handle(ctx(Steps.SLOT_AWAITING_DATE, '1', { dates: ['2026-09-18'] }));
+
+    expect(r.replies.at(-1)!.list!.rows).toHaveLength(6);
+    expect(r.data?.['hasMore']).toBe(false);
+  });
+
+  /**
+   * The reason the removed step existed: a clinic with a morning and an evening
+   * session must not show nine morning times and bury the evening behind "more".
+   */
+  it('gives every part of the day a share when they do not all fit', async () => {
+    vi.mocked(getAvailableSlots).mockResolvedValue(slotsFrom(15));
+    const r = await slotFlow.handle(ctx(Steps.SLOT_AWAITING_DATE, '1', { dates: ['2026-09-18'] }));
+
+    const sections = sectionsOf(r).filter(Boolean);
+    expect(sections).toContain('Morning');
+    expect(sections).toContain('Afternoon');
+    expect(r.data?.['hasMore']).toBe(true);
+  });
+
+  it('pages at nine times plus a "more" row', async () => {
+    vi.mocked(getAvailableSlots).mockResolvedValue(morningOnly(15));
+    const r = await slotFlow.handle(ctx(Steps.SLOT_AWAITING_DATE, '1', { dates: ['2026-09-18'] }));
+    const rows = r.replies.at(-1)!.list!.rows;
+
+    expect(rows).toHaveLength(10);
+    expect(rows.at(-1)!.id).toBe('more');
+    expect(r.data?.['hasMore']).toBe(true);
+  });
+
+
   /**
    * Meta allows ten list rows. A clinic on 10-minute consults exceeds that
    * within a single morning, so the tenth row is a pager rather than a slot.

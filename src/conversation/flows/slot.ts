@@ -9,9 +9,9 @@ import {
   slotLabel,
   type Slot,
 } from '../../domain/slots';
-import { availablePeriods, splitByPeriod, type Period } from '../../domain/dayPeriods';
+import { PERIODS, periodOf, splitByPeriod, type Period } from '../../domain/dayPeriods';
 import { t } from '../../i18n/templates';
-import type { ListRow, ReplyButton } from '../../messaging/types';
+import { MAX_LIST_ROWS, type ListRow, type ReplyButton } from '../../messaging/types';
 import { formatDateForPatient, formatDateOnly, parseDateOnly } from '../../utils/time';
 import { isNo, isRestart, isYes, menuIntent, numericChoice } from '../intent';
 import { Steps } from '../steps';
@@ -77,8 +77,6 @@ const MORE = 'more';
 interface SlotData {
   /** YYYY-MM-DD. Stored as a date, never an index into a regenerated list. */
   date?: string;
-  /** Which part of the day is being shown, if the patient was asked. */
-  period?: Period;
   /** Offset into the day's available times, for paging. */
   offset?: number;
   /** ISO instant of the time being confirmed. */
@@ -95,12 +93,6 @@ function confirmButtons(language: Language): ReplyButton[] {
     { id: '2', title: t(language, 'btnNo') },
   ];
 }
-
-const PERIOD_BUTTON = {
-  MORNING: 'btnMorning',
-  AFTERNOON: 'btnAfternoon',
-  EVENING: 'btnEvening',
-} as const;
 
 // ---- menu ----
 
@@ -205,69 +197,7 @@ async function handleDateChoice(ctx: ConversationContext): Promise<StepResult> {
     };
   }
 
-  return askForPeriod(ctx, offered[choice - 1]!);
-}
-
-// ---- period picking ----
-
-/**
- * Ask which part of the day, before showing times.
- *
- * A clinic with a morning and an evening session produces more free times than
- * a WhatsApp list can hold, so wanting 6 PM meant paging past every morning
- * slot to find it. Three buttons is exactly what WhatsApp allows, and it turns
- * that into one tap.
- *
- * Skipped entirely when only one part of the day has anything free — asking a
- * question with one possible answer is worse than not asking.
- */
-async function askForPeriod(
-  ctx: ConversationContext,
-  dateKey: string,
-  extraFirst?: Reply[],
-): Promise<StepResult> {
-  const date = parseDateOnly(dateKey);
-  if (!date) return menuResult(ctx);
-
-  const all = await getAvailableSlots(ctx.doctor, date, ctx.receivedAt);
-  if (all.length === 0) return noTimesLeft(ctx, date);
-
-  const periods = availablePeriods(all, ctx.doctor.timezone, (s) => s.start);
-  if (periods.length <= 1) {
-    return askForTime(ctx, dateKey, periods[0], 0, extraFirst);
-  }
-
-  return {
-    nextStep: Steps.SLOT_AWAITING_PERIOD,
-    replies: [
-      ...(extraFirst ?? []),
-      reply(
-        'slotPickPeriod',
-        t(ctx.language, 'slotPickPeriod', { date: formatDateForPatient(date) }),
-        periods.map((p, i) => ({ id: String(i + 1), title: t(ctx.language, PERIOD_BUTTON[p]) })),
-      ),
-    ],
-    // Store which periods were offered, so the reply maps back to the same one
-    // even if availability shifts before the patient answers.
-    data: { date: dateKey, periods },
-  };
-}
-
-async function handlePeriodChoice(ctx: ConversationContext): Promise<StepResult> {
-  const data = readData(ctx);
-  const offered = (ctx.data?.['periods'] as Period[] | undefined) ?? [];
-  if (!data.date) return menuResult(ctx);
-
-  const choice = numericChoice(ctx.input);
-  if (choice === null || choice < 1 || choice > offered.length) {
-    return {
-      nextStep: Steps.SLOT_AWAITING_PERIOD,
-      replies: [reply('slotInvalidChoice', t(ctx.language, 'slotInvalidChoice'))],
-      data: ctx.data,
-    };
-  }
-
-  return askForTime(ctx, data.date, offered[choice - 1]!, 0);
+  return askForTime(ctx, offered[choice - 1]!, 0);
 }
 
 // ---- time picking ----
@@ -282,10 +212,74 @@ async function noTimesLeft(ctx: ConversationContext, date: Date): Promise<StepRe
   ]);
 }
 
+const PERIOD_HEADING = {
+  MORNING: 'btnMorning',
+  AFTERNOON: 'btnAfternoon',
+  EVENING: 'btnEvening',
+} as const;
+
+/**
+ * Choose which times to show, grouped under Morning / Afternoon / Evening.
+ *
+ * Asking which part of the day first was a whole extra tap on every booking,
+ * paid by everyone to help the minority of clinics with more times than a list
+ * can hold. Sections do the same job inside one message: the patient sees the
+ * shape of the day and picks in one go.
+ *
+ * When everything fits, everything is shown. When it does not, each part of the
+ * day gets a share of the rows rather than the first nine chronologically —
+ * otherwise a clinic with a morning and an evening session shows nine morning
+ * times and hides the evening behind "more", which is the problem the removed
+ * step existed to solve.
+ */
+function pickRows(
+  slots: Slot[],
+  timezone: string,
+  language: Language,
+): { shown: Slot[]; rows: ListRow[]; hasMore: boolean } {
+  const byPeriod = splitByPeriod(slots, timezone, (s) => s.start);
+  const present = PERIODS.filter((p) => byPeriod[p].length > 0);
+  const fitsWhole = slots.length <= MAX_LIST_ROWS;
+  const budget = fitsWhole ? slots.length : TIME_PAGE;
+
+  // Round-robin so a short period does not waste its share and a long one takes
+  // up the slack.
+  const taken: Record<Period, Slot[]> = { MORNING: [], AFTERNOON: [], EVENING: [] };
+  let placed = 0;
+  for (let depth = 0; placed < budget; depth += 1) {
+    let progressed = false;
+    for (const p of present) {
+      if (placed >= budget) break;
+      const next = byPeriod[p][depth];
+      if (!next) continue;
+      taken[p].push(next);
+      placed += 1;
+      progressed = true;
+    }
+    if (!progressed) break;
+  }
+
+  const shown = PERIODS.flatMap((p) => taken[p]);
+  const rows: ListRow[] = [];
+  for (const p of PERIODS) {
+    for (const slot of taken[p]) {
+      rows.push({
+        id: String(shown.indexOf(slot) + 1),
+        title: slotLabel(slot, timezone),
+        section: t(language, PERIOD_HEADING[p]),
+      });
+    }
+  }
+
+  const hasMore = shown.length < slots.length;
+  if (hasMore) rows.push({ id: MORE, title: t(language, 'btnMoreTimes') });
+
+  return { shown, rows, hasMore };
+}
+
 async function askForTime(
   ctx: ConversationContext,
   dateKey: string,
-  period: Period | undefined,
   offset: number,
   extraFirst?: Reply[],
 ): Promise<StepResult> {
@@ -295,41 +289,53 @@ async function askForTime(
   const everything = await getAvailableSlots(ctx.doctor, date, ctx.receivedAt);
   if (everything.length === 0) return noTimesLeft(ctx, date);
 
-  // Narrow to the chosen part of the day. If that part emptied while they were
-  // choosing, fall back to the whole day rather than showing an empty list.
-  const inPeriod = period
-    ? splitByPeriod(everything, ctx.doctor.timezone, (s) => s.start)[period]
-    : everything;
-  const all = inPeriod.length > 0 ? inPeriod : everything;
-
-  const page = all.slice(offset, offset + TIME_PAGE);
-  const hasMore = all.length > offset + TIME_PAGE;
-  const labels = page.map((s) => slotLabel(s, ctx.doctor.timezone));
-
-  const rows: ListRow[] = page.map((_, i) => ({
-    id: String(i + 1),
-    title: labels[i]!,
-  }));
-  if (hasMore) rows.push({ id: MORE, title: t(ctx.language, 'btnMoreTimes') });
-
-  const body = t(ctx.language, 'slotPickTime', { date: formatDateForPatient(date) });
+  // Page one is the spread across the day; "more times" then walks the rest in
+  // order, for someone who wants a particular time rather than a rough slot.
+  const remaining = offset > 0 ? everything.slice(offset) : everything;
+  const picked =
+    offset > 0
+      ? chronologicalPage(remaining, ctx.doctor.timezone, ctx.language)
+      : pickRows(everything, ctx.doctor.timezone, ctx.language);
 
   return {
     nextStep: Steps.SLOT_AWAITING_TIME,
     replies: [
       ...(extraFirst ?? []),
-      replyWithList('slotPickTime', body, t(ctx.language, 'btnChooseTime'), rows),
+      replyWithList(
+        'slotPickTime',
+        t(ctx.language, 'slotPickTime', { date: formatDateForPatient(date) }),
+        t(ctx.language, 'btnChooseTime'),
+        picked.rows,
+      ),
     ],
     // Times are stored as instants: re-deriving by index on the next turn would
     // silently shift if a slot were booked in between.
     data: {
       date: dateKey,
-      ...(period ? { period } : {}),
       offset,
-      times: page.map((s: Slot) => s.start.toISOString()),
-      hasMore,
+      times: picked.shown.map((s: Slot) => s.start.toISOString()),
+      hasMore: picked.hasMore,
     },
   };
+}
+
+/** The "more times" pages: straight down the day, still grouped. */
+function chronologicalPage(
+  slots: Slot[],
+  timezone: string,
+  language: Language,
+): { shown: Slot[]; rows: ListRow[]; hasMore: boolean } {
+  const shown = slots.slice(0, TIME_PAGE);
+  const hasMore = slots.length > TIME_PAGE;
+
+  const rows: ListRow[] = shown.map((slot, i) => ({
+    id: String(i + 1),
+    title: slotLabel(slot, timezone),
+    section: t(language, PERIOD_HEADING[periodOf(slot.start, timezone)]),
+  }));
+  if (hasMore) rows.push({ id: MORE, title: t(language, 'btnMoreTimes') });
+
+  return { shown, rows, hasMore };
 }
 
 async function handleTimeChoice(ctx: ConversationContext): Promise<StepResult> {
@@ -340,7 +346,7 @@ async function handleTimeChoice(ctx: ConversationContext): Promise<StepResult> {
   if (!data.date) return menuResult(ctx);
 
   if (input === MORE && ctx.data?.['hasMore']) {
-    return askForTime(ctx, data.date, data.period, (data.offset ?? 0) + TIME_PAGE);
+    return askForTime(ctx, data.date, (data.offset ?? 0) + TIME_PAGE);
   }
 
   const choice = numericChoice(ctx.input);
@@ -422,7 +428,7 @@ async function handleBookingConfirmation(ctx: ConversationContext): Promise<Step
       case 'TAKEN':
         // Somebody booked it mid-conversation. Expected, given availability is
         // derived live — re-offer the day rather than dead-ending.
-        return askForTime(ctx, data.date, data.period, 0, [
+        return askForTime(ctx, data.date, 0, [
           reply('slotTaken', t(ctx.language, 'slotTaken')),
         ]);
       case 'PATIENT_HAS_SLOT':
@@ -444,7 +450,7 @@ async function handleBookingConfirmation(ctx: ConversationContext): Promise<Step
       case 'NOT_A_SLOT':
       default:
         // The offered time expired or never existed — start the day again.
-        return askForTime(ctx, data.date, data.period, 0, [
+        return askForTime(ctx, data.date, 0, [
           reply('slotInvalidChoice', t(ctx.language, 'slotInvalidChoice')),
         ]);
     }
@@ -572,7 +578,7 @@ async function handleMoveConfirmation(ctx: ConversationContext): Promise<StepRes
     // Nothing was moved and the original is untouched, so re-offer the day.
     // moveSlot takes the new slot before releasing the old one precisely so
     // that this path leaves them still holding their appointment.
-    return askForTime(ctx, data.date!, data.period, 0, [
+    return askForTime(ctx, data.date!, 0, [
       reply('slotTaken', t(ctx.language, 'slotTaken')),
     ]);
   }
@@ -709,8 +715,6 @@ export const slotFlow: ConversationFlow = {
     switch (ctx.step) {
       case Steps.SLOT_AWAITING_DATE:
         return handleDateChoice(ctx);
-      case Steps.SLOT_AWAITING_PERIOD:
-        return handlePeriodChoice(ctx);
       case Steps.SLOT_AWAITING_TIME:
         return handleTimeChoice(ctx);
       case Steps.SLOT_CONFIRM_BOOKING:

@@ -19,6 +19,12 @@ export const Steps = {
   // SLOT mode
   SLOT_MENU: 'SLOT_MENU',
   SLOT_AWAITING_DATE: 'SLOT_AWAITING_DATE',
+  /**
+   * Retired when the time list gained Morning/Afternoon/Evening sections and the
+   * separate question became an extra tap for nothing. Kept so a session parked
+   * on it when the change deployed falls through to the flow's entry step rather
+   * than hitting an unknown value.
+   */
   SLOT_AWAITING_PERIOD: 'SLOT_AWAITING_PERIOD',
   SLOT_AWAITING_TIME: 'SLOT_AWAITING_TIME',
   SLOT_CONFIRM_BOOKING: 'SLOT_CONFIRM_BOOKING',

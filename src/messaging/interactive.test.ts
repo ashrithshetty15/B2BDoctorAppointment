@@ -162,3 +162,69 @@ describe('inbound: a tapped button is indistinguishable from typing', () => {
     expect(m?.text).toBe('1');
   });
 });
+
+/**
+ * Sections are what let the slot picker drop its Morning/Afternoon/Evening
+ * question: the ten-row cap is across all sections, so they buy no capacity —
+ * they buy legibility, and one message now does what two used to.
+ */
+describe('list sections', () => {
+  const rowsWithSections = [
+    { id: '1', title: '09:00 AM', section: 'Morning' },
+    { id: '2', title: '09:30 AM', section: 'Morning' },
+    { id: '3', title: '02:00 PM', section: 'Afternoon' },
+    { id: '4', title: '05:00 PM', section: 'Evening' },
+    { id: 'more', title: 'More times' },
+  ];
+
+  it('groups consecutive rows into titled sections, in order', async () => {
+    await whatsappCloudAdapter.sendText({
+      to: '919876543210',
+      text: 'Available times',
+      list: { buttonText: 'Choose a time', rows: rowsWithSections },
+    });
+
+    const sections = (sentBody as any).interactive.action.sections;
+    expect(sections.map((x: any) => x.title)).toEqual([
+      'Morning',
+      'Afternoon',
+      'Evening',
+      undefined,
+    ]);
+    expect(sections[0].rows.map((r: any) => r.id)).toEqual(['1', '2']);
+    expect(sections.at(-1).rows[0].id).toBe('more');
+  });
+
+  /** Lists that predate sections must render exactly as they always did. */
+  it('puts unsectioned rows in one unnamed section', async () => {
+    await whatsappCloudAdapter.sendText({
+      to: '919876543210',
+      text: 'Pick a day',
+      list: { buttonText: 'Choose a date', rows: [{ id: '1', title: 'Mon' }, { id: '2', title: 'Tue' }] },
+    });
+
+    const sections = (sentBody as any).interactive.action.sections;
+    expect(sections).toHaveLength(1);
+    expect(sections[0].title).toBeUndefined();
+    expect(sections[0].rows).toHaveLength(2);
+  });
+
+  /** The cap is across all sections, so sections cannot smuggle in extra rows. */
+  it('still never sends more than ten rows in total', async () => {
+    const many = Array.from({ length: 14 }, (_, i) => ({
+      id: String(i + 1),
+      title: `${i}:00`,
+      section: i < 7 ? 'Morning' : 'Evening',
+    }));
+
+    await whatsappCloudAdapter.sendText({
+      to: '919876543210',
+      text: 'Available times',
+      list: { buttonText: 'Choose a time', rows: many },
+    });
+
+    const sections = (sentBody as any).interactive.action.sections;
+    const total = sections.reduce((n: number, x: any) => n + x.rows.length, 0);
+    expect(total).toBe(10);
+  });
+});

@@ -59,6 +59,12 @@ export interface ListRow {
   title: string;
   /** Optional second line, ~72 characters. */
   description?: string;
+  /**
+   * Heading this row sits under, e.g. "Morning". Consecutive rows sharing a
+   * section are grouped into one; rows without one form an unnamed section, as
+   * every list did before sections existed.
+   */
+  section?: string;
 }
 
 /**

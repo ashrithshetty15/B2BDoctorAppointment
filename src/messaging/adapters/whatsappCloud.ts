@@ -8,6 +8,7 @@ import {
   MAX_LIST_ROWS,
   MAX_REPLY_BUTTONS,
   type InboundMessage,
+  type ListRow,
   type MessageStatus,
   type MessagingAdapter,
   type OutboundMessage,
@@ -338,19 +339,7 @@ function interactiveOrText(message: OutboundMessage): Record<string, unknown> {
         body: { text: message.text },
         action: {
           button: (message.list?.buttonText ?? 'Choose').slice(0, LIST_BUTTON_MAX),
-          // One unnamed section: the ten-row cap is across all sections anyway,
-          // so splitting them buys nothing here.
-          sections: [
-            {
-              rows: rows.map((r) => ({
-                id: r.id,
-                title: r.title.slice(0, LIST_TITLE_MAX),
-                ...(r.description
-                  ? { description: r.description.slice(0, LIST_DESC_MAX) }
-                  : {}),
-              })),
-            },
-          ],
+          sections: toSections(rows),
         },
       },
     };
@@ -393,4 +382,33 @@ function extractText(msg: CloudApiMessage): string | null {
 
 function normalisePhone(raw: string): string {
   return raw.replace(/\D/g, '');
+}
+
+/**
+ * Group rows into Meta's sections, preserving order.
+ *
+ * The ten-row cap is across all sections, so sections buy no capacity — they
+ * buy legibility. A day's times read as Morning / Afternoon / Evening in one
+ * message instead of an undifferentiated list, which is what let the slot
+ * picker drop a whole step.
+ *
+ * Rows without a section fall into one unnamed group, exactly as every list
+ * behaved before this existed.
+ */
+function toSections(rows: ListRow[]) {
+  const sections: Array<{ title?: string; rows: Array<Record<string, string>> }> = [];
+
+  for (const r of rows) {
+    const row = {
+      id: r.id,
+      title: r.title.slice(0, LIST_TITLE_MAX),
+      ...(r.description ? { description: r.description.slice(0, LIST_DESC_MAX) } : {}),
+    };
+
+    const last = sections.at(-1);
+    if (last && last.title === r.section) last.rows.push(row);
+    else sections.push({ ...(r.section ? { title: r.section.slice(0, LIST_TITLE_MAX) } : {}), rows: [row] });
+  }
+
+  return sections;
 }
