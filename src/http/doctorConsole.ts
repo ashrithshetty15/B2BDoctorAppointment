@@ -127,6 +127,7 @@ async function loadDay(doctorId: string, date: Date) {
         completedAt: a.completedAt,
         consultMins: a.consultMins,
         notes: a.notes,
+        source: a.source,
       };
 
       if (a.type !== 'TOKEN' || !ACTIVE.has(a.status)) return base;
@@ -138,15 +139,24 @@ async function loadDay(doctorId: string, date: Date) {
     }),
   );
 
+  // Counted off `rows` — the very list the page renders — rather than from a
+  // separate token-only query. They disagreed: a slot clinic's queue showed
+  // patients while the counters read zero waiting and zero issued, because the
+  // list was every appointment that day and the counters were TOKEN rows only.
+  const counted = rows.filter((r) => r.status !== 'CANCELLED');
+
   return {
     doctor,
     rows,
     queue: {
-      lastIssuedToken: queueState?.lastIssuedToken ?? 0,
+      // What the desk means by "issued today" is how many people are on today's
+      // list, whether they took a token or booked a time.
+      lastIssuedToken: counted.length,
       nowServingToken: queueState?.nowServingToken ?? null,
       delayMins: queueState?.delayMins ?? 0,
       isClosed: queueState?.isClosed ?? false,
-      waiting: activeTokens.filter((a) => a.status !== 'IN_PROGRESS').length,
+      waiting: counted.filter((r) => r.status === 'ARRIVED').length,
+      expected: counted.filter((r) => r.status === 'BOOKED').length,
     },
     onLeave: doctor.leaveDates.some((d) => formatDateOnly(d) === formatDateOnly(date)),
   };
@@ -164,7 +174,8 @@ async function waitingCount(doctorId: string, timezone: string): Promise<number>
     where: {
       doctorId,
       date: clinicToday(timezone),
-      type: 'TOKEN',
+      // Every booking source, not TOKEN alone. Filtering by type was why a slot
+      // clinic's badge read zero while its queue had patients in it.
       status: { in: ['BOOKED', 'ARRIVED'] },
     },
   });
@@ -557,6 +568,16 @@ doctorConsoleRouter.post(
     if (!patient.name) await setPatientName(patient.id, values.name.trim());
 
     const result = await issueToken(doctor, patient.id, clinicToday(doctor.timezone));
+
+    // Recorded rather than inferred. The queue used to read "a token with no
+    // slot time" as a walk-in, which is also what a token booked over WhatsApp
+    // looks like, so half the labels were wrong.
+    if (result.ok && !result.alreadyExisted) {
+      await prisma.appointment.update({
+        where: { id: result.appointment.id },
+        data: { source: 'WALK_IN' },
+      });
+    }
 
     if (!result.ok) {
       const message =

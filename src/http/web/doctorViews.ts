@@ -23,16 +23,22 @@ export interface QueueRow {
   consultMins: number | null;
   /** Staff-only remark; never shown to the patient. */
   notes: string | null;
+  /** WHATSAPP | WALK_IN — recorded at booking, never inferred. */
+  source: string;
   ahead?: number;
   etaMins?: number;
 }
 
 export interface QueueState {
+  /** People on today's list, whatever they booked through. */
   lastIssuedToken: number;
   nowServingToken: number | null;
   delayMins: number;
   isClosed: boolean;
+  /** ARRIVED — actually in the waiting room. */
   waiting: number;
+  /** BOOKED — due today but not here yet. */
+  expected: number;
 }
 
 /** Nav options for a doctor page; queueCount drives the live badge. */
@@ -55,7 +61,7 @@ function navFor(
   };
 }
 
-function statusPill(status: string): RawHtml {
+export function statusPill(status: string): RawHtml {
   return html`<span class="pill ${status.toLowerCase()}">${status.replace('_', ' ')}</span>`;
 }
 

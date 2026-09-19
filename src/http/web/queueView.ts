@@ -1,6 +1,14 @@
 import type { Doctor, Language } from '@prisma/client';
-import { type ConsoleStrings, c, elapsed } from '../../i18n/console';
-import type { QueueRow, QueueState } from './doctorViews';
+import { type ConsoleStrings, c, elapsed, formatMins } from '../../i18n/console';
+import type { AppointmentStatus } from '@prisma/client';
+import {
+  primaryAction,
+  secondaryActions,
+  sectionFor,
+  waitLevel,
+  waitedMins,
+} from '../../domain/queueLifecycle';
+import { statusPill, type QueueRow, type QueueState } from './doctorViews';
 import { type RawHtml, html, page, raw } from './layout';
 import { doctorBottomNav, doctorHeader } from './nav';
 import { bookingLink, qrSvg } from './qr';
@@ -27,13 +35,15 @@ function timeOnly(at: Date, timezone: string): string {
 }
 
 /** When a waiting patient's clock started: arrival if checked in, else booking. */
+/**
+ * Waiting is measured from arrival, never from booking.
+ *
+ * It used to fall back to the booking time, so a patient who booked at 07:13
+ * for a 10:00 appointment was shown as having waited nearly three hours while
+ * sitting at home.
+ */
 function waitingSince(row: QueueRow): Date | null {
-  return row.arrivedAt ?? row.bookedAt ?? null;
-}
-
-function waitedMins(row: QueueRow, now: Date): number {
-  const since = waitingSince(row);
-  return since ? Math.floor((now.getTime() - since.getTime()) / 60_000) : 0;
+  return row.arrivedAt;
 }
 
 // ---- hero ----
@@ -204,58 +214,6 @@ ${row.notes ?? ''}</textarea
  * concurrent call anyway, and offering a button that will be refused is worse
  * than not offering it.
  */
-function waitingRow(opts: {
-  row: QueueRow;
-  s: ConsoleStrings;
-  language: Language;
-  timezone: string;
-  csrfToken: string;
-  now: Date;
-  roomBusy: boolean;
-}): RawHtml {
-  const { row, s, language, timezone, csrfToken, now, roomBusy } = opts;
-  const mins = waitedMins(row, now);
-  const overdue = mins >= OVERDUE_MINS;
-  const since = waitingSince(row);
-
-  const act = (status: string, label: string, cls: string) => html`
-    <form method="post" action="/app/queue/${row.appointmentId}/status">
-      <input type="hidden" name="_csrf" value="${csrfToken}" />
-      <input type="hidden" name="status" value="${status}" />
-      <button class="${cls}" type="submit">${label}</button>
-    </form>
-  `;
-
-  return html`
-    <div class="qrow ${overdue ? 'overdue' : ''}">
-      <div class="tok">${row.tokenNumber}</div>
-      <div class="body">
-        <div class="nm">${personName(row.patient.name, language)}</div>
-        <div class="sub">
-          ${row.status === 'ARRIVED'
-            ? html`<span class="pill arrived">${s.arrived}</span>`
-            : ''}
-          ${since
-            ? html`<span class="waited ${overdue ? 'over' : ''}"
-                >${s.waitedFor(elapsed(since, language, now))}</span
-              >`
-            : ''}
-          ${row.bookedAt
-            ? html`<span>${s.bookedAt(timeOnly(row.bookedAt, timezone))}</span>`
-            : ''}
-          <span class="wa">${WA_ICON}${s.viaWhatsapp}</span>
-        </div>
-        ${noteBlock({ row, s, csrfToken, back: '/app/queue' })}
-      </div>
-      <div class="acts">
-        ${row.status === 'BOOKED' ? act('arrived', s.arrived, 'ghost') : ''}
-        ${roomBusy ? '' : act('in-progress', s.callIn, 'secondary')}
-        ${act('no-show', s.noShow, 'ghost')}
-      </div>
-    </div>
-  `;
-}
-
 function servingRow(opts: {
   row: QueueRow;
   s: ConsoleStrings;
@@ -286,6 +244,161 @@ function servingRow(opts: {
           <button class="secondary" type="submit">${s.done}</button>
         </form>
       </div>
+    </div>
+  `;
+}
+
+
+/** Status value the POST handler expects, e.g. IN_PROGRESS -> "in-progress". */
+function statusParam(status: AppointmentStatus): string {
+  return status.toLowerCase().replace(/_/g, '-');
+}
+
+function actionLabel(status: AppointmentStatus, s: ConsoleStrings): string {
+  switch (status) {
+    case 'ARRIVED':
+      return s.arrived;
+    case 'IN_PROGRESS':
+      return s.callIn;
+    case 'DONE':
+      return s.done;
+    case 'NO_SHOW':
+      return s.noShow;
+    default:
+      return status;
+  }
+}
+
+/**
+ * One card, offering exactly one primary action for the state it is in.
+ *
+ * Previously every waiting row rendered Arrived, Call in and No show side by
+ * side, so the desk had to read each card to find the one that applied. The
+ * state machine already knows which move comes next; everything else valid goes
+ * behind "More".
+ */
+function queueCard(opts: {
+  row: QueueRow;
+  s: ConsoleStrings;
+  language: Language;
+  timezone: string;
+  csrfToken: string;
+  now: Date;
+}): RawHtml {
+  const { row, s, language, timezone, csrfToken, now } = opts;
+  const status = row.status as AppointmentStatus;
+  const mins = waitedMins(row, now);
+  const level = waitLevel(mins);
+  const primary = primaryAction(status);
+
+  const act = (to: AppointmentStatus, cls: string) => html`
+    <form method="post" action="/app/queue/${row.appointmentId}/status">
+      <input type="hidden" name="_csrf" value="${csrfToken}" />
+      <input type="hidden" name="status" value="${statusParam(to)}" />
+      <button class="${cls}" type="submit">${actionLabel(to, s)}</button>
+    </form>
+  `;
+
+  const overflow = secondaryActions(status);
+
+  return html`
+    <div class="qrow ${level === 'urgent' ? 'overdue' : ''}">
+      <div class="tok">${badgeFor(row, timezone)}</div>
+      <div class="body">
+        <div class="nm">${personName(row.patient.name, language)}</div>
+        <div class="sub">
+          ${statusPill(row.status)} ${timingLabel({ row, s, timezone, now, language })}
+          <span class="mask">${maskPhone(row.patient.phone)}</span>
+          <span class="wa">${row.source === 'WALK_IN' ? s.viaWalkIn : s.viaWhatsapp}</span>
+        </div>
+        ${noteBlock({ row, s, csrfToken, back: '/app/queue' })}
+      </div>
+      <div class="acts">
+        ${primary ? act(primary as AppointmentStatus, 'secondary') : ''}
+        ${overflow.length > 0
+          ? html`<details class="overflow">
+              <summary>${s.moreActions}</summary>
+              <div class="menu-items">${overflow.map((to) => act(to, 'ghost'))}</div>
+            </details>`
+          : ''}
+      </div>
+    </div>
+  `;
+}
+
+/** Token number where there is one, appointment time where there is not. */
+function badgeFor(row: QueueRow, timezone: string): string {
+  if (row.tokenNumber !== null) return `#${row.tokenNumber}`;
+  return row.slotStart ? timeOnly(row.slotStart, timezone) : '—';
+}
+
+/** Last four digits only: the desk needs to confirm identity, not read it out. */
+function maskPhone(phone: string): string {
+  return phone.length <= 4 ? phone : `••••${phone.slice(-4)}`;
+}
+
+/**
+ * What the time column says, which depends entirely on whether they are here.
+ *
+ * A booked patient gets their expected time or how late they are; only someone
+ * who has actually arrived gets a waiting clock.
+ */
+function timingLabel(opts: {
+  row: QueueRow;
+  s: ConsoleStrings;
+  timezone: string;
+  now: Date;
+  language: Language;
+}): RawHtml {
+  const { row, s, timezone, now, language } = opts;
+  const mins = waitedMins(row, now);
+
+  if (mins !== null) {
+    const level = waitLevel(mins);
+    // The measured wait, not time-since-arrival: once they are called in the
+    // number must stop, or an in-room patient's wait climbs all afternoon.
+    return html`<span class="waited ${level === 'urgent' ? 'over' : level === 'warn' ? 'warn' : ''}"
+      >${s.waitedFor(formatMins(mins, language))}</span
+    >`;
+  }
+
+  if (!row.slotStart) return html``;
+
+  const late = row.slotStart.getTime() < now.getTime();
+  return late
+    ? html`<span class="waited warn">${s.lateBy(elapsed(row.slotStart, language, now))}</span>`
+    : html`<span>${s.expectedAt(timeOnly(row.slotStart, timezone))}</span>`;
+}
+
+/** One titled group of cards, or a line saying it is empty. */
+function section(opts: {
+  title: string;
+  rows: QueueRow[];
+  empty: string | null;
+  s: ConsoleStrings;
+  language: Language;
+  timezone: string;
+  csrfToken: string;
+  now: Date;
+}): RawHtml {
+  const { title, rows, empty } = opts;
+  if (rows.length === 0 && empty === null) return html``;
+
+  return html`
+    <h2 class="secl">${title}${rows.length > 0 ? html` · ${String(rows.length)}` : ''}</h2>
+    <div class="card flush">
+      ${rows.length > 0
+        ? rows.map((row) =>
+            queueCard({
+              row,
+              s: opts.s,
+              language: opts.language,
+              timezone: opts.timezone,
+              csrfToken: opts.csrfToken,
+              now: opts.now,
+            }),
+          )
+        : html`<div class="qrow"><div class="body muted">${empty ?? ''}</div></div>`}
     </div>
   `;
 }
@@ -348,50 +461,105 @@ export function queueBody(opts: {
   const serving = inProgress[0];
   const alsoInRoom = inProgress.slice(1);
 
+  // One grouping, shared with the counters, so the list and the numbers above
+  // it can never disagree again.
+  const inRoom = rows.filter((r) => sectionFor(r.status as AppointmentStatus) === 'IN_ROOM');
+
+  // Waiting runs by token — that is the order the desk calls people in.
   const waitingRows = rows
-    .filter((r) => r.status === 'BOOKED' || r.status === 'ARRIVED')
-    .sort((a, b) => (a.tokenNumber ?? 0) - (b.tokenNumber ?? 0));
+    .filter((r) => sectionFor(r.status as AppointmentStatus) === 'WAITING')
+    .sort((a, b) => (a.tokenNumber ?? Infinity) - (b.tokenNumber ?? Infinity));
+
+  // Expected runs by appointment time, which is the order they will show up.
+  const expectedRows = rows
+    .filter((r) => sectionFor(r.status as AppointmentStatus) === 'EXPECTED')
+    .sort(
+      (a, b) =>
+        (a.slotStart?.getTime() ?? a.tokenNumber ?? 0) -
+        (b.slotStart?.getTime() ?? b.tokenNumber ?? 0),
+    );
+
+  const closedRows = rows.filter(
+    (r) => sectionFor(r.status as AppointmentStatus) === 'CLOSED',
+  );
+
+  // Call next takes the first person actually in the room's waiting area.
   const next = waitingRows[0];
   const anyToday = rows.length > 0;
 
+  // Two columns on a desk screen: what you act on stays put on the left while
+  // the list scrolls on the right. One column below 1024px, where stacking is
+  // the only thing that fits.
   return html`
-    ${hero({ serving, s, language, now })}
-    ${primaryCta({ serving, next, s, language, csrfToken })}
-    ${stats({ queue, avgWaitMins, s, language })}
-    ${queue.delayMins > 0
-      ? html`<div class="caveat">${s.delayActive(queue.delayMins)}</div>`
-      : ''}
-    ${queue.isClosed ? html`<div class="caveat">${s.listClosed}</div>` : ''}
-    <div class="walkin-bar">
-      <a href="/app/queue/walk-in"
-        ><button class="secondary" type="button">+ ${s.addWalkIn}</button></a
-      >
-    </div>
+    <div class="queue-2col">
+      <div class="col-live">
+        ${hero({ serving, s, language, now })}
+        ${primaryCta({ serving, next, s, language, csrfToken })}
+        ${stats({ queue, avgWaitMins, s, language })}
+        ${queue.delayMins > 0
+          ? html`<div class="caveat">${s.delayActive(queue.delayMins)}</div>`
+          : ''}
+        ${queue.isClosed ? html`<div class="caveat">${s.listClosed}</div>` : ''}
+        <div class="walkin-bar">
+          <a href="/app/queue/walk-in"
+            ><button class="secondary" type="button">+ ${s.addWalkIn}</button></a
+          >
+        </div>
+      </div>
+      <div class="col-list">
     ${anyToday
       ? html`
-          <div class="card flush">
-            ${serving ? servingRow({ row: serving, s, language, csrfToken }) : ''}
-            ${alsoInRoom.map((row) => servingRow({ row, s, language, csrfToken }))}
-            ${waitingRows.map((row) =>
-              waitingRow({
-                row,
-                s,
-                language,
-                timezone: doctor.timezone,
-                csrfToken,
-                now,
-                roomBusy: serving !== undefined,
-              }),
-            )}
-            ${serving && waitingRows.length > 0
-              ? html`<div class="qrow"><div class="body hint">${s.oneAtATime}</div></div>`
-              : ''}
-            ${waitingRows.length === 0 && !serving
-              ? html`<div class="qrow"><div class="body muted">${s.nobodyWaiting}</div></div>`
-              : ''}
-          </div>
+          ${section({
+            title: s.sectionInRoom,
+            rows: inRoom,
+            empty: null,
+            s,
+            language,
+            timezone: doctor.timezone,
+            csrfToken,
+            now,
+          })}
+          ${section({
+            title: s.sectionWaiting,
+            rows: waitingRows,
+            empty: s.waitingNone,
+            s,
+            language,
+            timezone: doctor.timezone,
+            csrfToken,
+            now,
+          })}
+          ${section({
+            title: s.sectionExpected,
+            rows: expectedRows,
+            empty: s.expectedNone,
+            s,
+            language,
+            timezone: doctor.timezone,
+            csrfToken,
+            now,
+          })}
+          ${closedRows.length > 0
+            ? html`<details class="card closed-section">
+                <summary>${s.sectionClosed} (${String(closedRows.length)})</summary>
+                <div class="flush">
+                  ${closedRows.map((row) =>
+                    queueCard({
+                      row,
+                      s,
+                      language,
+                      timezone: doctor.timezone,
+                      csrfToken,
+                      now,
+                    }),
+                  )}
+                </div>
+              </details>`
+            : ''}
         `
       : html`<div class="card">${emptyState(opts.bookingNumber, s)}</div>`}
+      </div>
+    </div>
   `;
 }
 
@@ -740,7 +908,7 @@ export function queuePageV2(opts: {
     { title: s.queue, csrfToken: opts.csrfToken, bare: true },
     html`
       ${doctorHeader(navOpts)}
-      <main>
+      <main class="wide">
         ${opts.flash ? html`<div class="ok">${opts.flash}</div>` : ''}
         ${opts.onLeave ? html`<div class="caveat">${s.onLeave}</div>` : ''}
         ${/* Phrased as what it means for the doctor, not the provider's error

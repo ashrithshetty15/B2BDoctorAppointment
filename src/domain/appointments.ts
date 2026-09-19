@@ -1,5 +1,6 @@
 import type { Appointment, AppointmentStatus, Doctor } from '@prisma/client';
 import { prisma } from '../db/prisma';
+import { InvalidTransitionError, canTransition } from './queueLifecycle';
 import { markVisited } from './patients';
 import { recordConsultDone } from './tokenQueue';
 
@@ -52,6 +53,14 @@ export async function applyStatusChange(
   status: AppointmentStatus,
   at: Date = new Date(),
 ): Promise<StatusChangeResult> {
+  // Rejected here rather than in each console, because three of them plus the
+  // JSON API can all reach this. Previously any status could follow any other,
+  // so an appointment could reach IN_PROGRESS without an arrivedAt — which is
+  // what made the average wait meaningless.
+  if (appointment.status !== status && !canTransition(appointment.status, status)) {
+    throw new InvalidTransitionError(appointment.status, status);
+  }
+
   const data: Parameters<typeof prisma.appointment.update>[0]['data'] = { status };
 
   switch (status) {

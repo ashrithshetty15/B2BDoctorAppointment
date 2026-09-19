@@ -597,6 +597,60 @@ code{background:var(--surface-2);padding:2px 6px;border-radius:6px;font-size:var
   .split{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);
     gap:var(--s4);align-items:start}
 }
+
+/* ---- queue sections (added with the lifecycle rework) ---- */
+h2.secl{
+  font-size:var(--t-sm);font-weight:600;color:var(--ink-3);
+  letter-spacing:.04em;text-transform:uppercase;
+  margin:var(--s5) 0 var(--s2);
+}
+details.closed-section{padding:0}
+details.closed-section>summary{
+  padding:var(--s4);cursor:pointer;font-weight:600;color:var(--ink-2);
+  font-size:var(--t-sm);min-height:var(--tap);display:flex;align-items:center;
+}
+details.closed-section[open]>summary{border-bottom:1px solid var(--line)}
+
+/* The overflow keeps every other valid move one tap away without giving it the
+   same weight as the action the card is actually for. */
+details.overflow{position:relative}
+details.overflow>summary{
+  list-style:none;cursor:pointer;
+  min-width:var(--tap);min-height:var(--tap);
+  display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--line-2);border-radius:var(--r-sm);
+  font-size:var(--t-sm);color:var(--ink-2);padding:0 var(--s3);
+}
+details.overflow>summary::-webkit-details-marker{display:none}
+details.overflow .menu-items{
+  position:absolute;right:0;top:calc(100% + 4px);z-index:5;
+  background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r-md);box-shadow:var(--shadow-2);
+  padding:var(--s1);display:flex;flex-direction:column;gap:var(--s1);min-width:150px;
+}
+details.overflow .menu-items button{width:100%;text-align:left}
+
+/* Masked phone: enough to confirm who this is, not enough to read out loud. */
+.sub .mask{font-variant-numeric:tabular-nums;color:var(--ink-3)}
+
+/* Amber at 15 minutes, red past 30 — always beside the words, never instead. */
+.waited.warn{background:var(--warn-soft);color:var(--warn)}
+
+/* Desk screens: the thing you act on and the list you act from, side by side. */
+@media (min-width:1024px){
+  .queue-2col{
+    display:grid;grid-template-columns:minmax(280px,340px) minmax(0,1fr);
+    gap:var(--s5);align-items:start;
+  }
+  .queue-2col>.col-live{position:sticky;top:var(--s4)}
+  /* The first section heading would otherwise push the right column down past
+     the hero it sits beside. */
+  .queue-2col>.col-list>h2.secl:first-child{margin-top:0}
+  /* minmax(0,1fr) above lets the column shrink; without min-width:0 here the
+     grid refuses to and the name wraps one letter per line. */
+  .queue-2col>.col-list{min-width:0}
+  .queue-2col .qrow .body{min-width:0}
+}
 `;
 
 export interface NavLink {

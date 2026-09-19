@@ -248,6 +248,10 @@ model Appointment {
   /// Calendar date of the appointment, in the doctor's timezone.
   date DateTime @db.Date
 
+  /// Where the booking came from: WHATSAPP | WALK_IN. Plain text rather than an
+  /// enum so adding a channel later is not a migration on every row.
+  source String @default("WHATSAPP")
+
   type   AppointmentType
   status AppointmentStatus @default(BOOKED)
 

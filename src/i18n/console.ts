@@ -104,6 +104,18 @@ export interface ConsoleStrings {
   removePhoto: string;
   saveProfile: string;
   profileSaved: string;
+  /** Queue sections. */
+  sectionInRoom: string;
+  sectionWaiting: string;
+  sectionExpected: string;
+  sectionClosed: string;
+  /** Shown for a BOOKED patient instead of a waiting timer. */
+  expectedAt: (time: string) => string;
+  lateBy: (elapsed: string) => string;
+  viaWalkIn: string;
+  moreActions: string;
+  waitingNone: string;
+  expectedNone: string;
   waitingRoomBoard: string;
   waitingRoomBoardBody: string;
   openBoard: string;
@@ -309,6 +321,16 @@ const en: ConsoleStrings = {
   removePhoto: 'Remove photo',
   saveProfile: 'Save profile',
   profileSaved: 'Profile updated',
+  sectionInRoom: 'In room',
+  sectionWaiting: 'Waiting',
+  sectionExpected: 'Expected today',
+  sectionClosed: 'Done / No-show',
+  expectedAt: (time) => `Expected ${time}`,
+  lateBy: (elapsed) => `Late by ${elapsed}`,
+  viaWalkIn: 'Walk-in',
+  moreActions: 'More',
+  waitingNone: 'Nobody in the waiting room',
+  expectedNone: 'Nobody else expected today',
   waitingRoomBoard: 'Waiting-room screen',
   waitingRoomBoardBody:
     'Open this on a TV or a spare tablet in the waiting room. It shows the token being seen now — never a patient name. Anyone with the link can view it, so keep it off social media.',
@@ -515,6 +537,16 @@ const kn: ConsoleStrings = {
   removePhoto: 'ಫೋಟೋ ತೆಗೆಯಿರಿ',
   saveProfile: 'ಪ್ರೊಫೈಲ್ ಉಳಿಸಿ',
   profileSaved: 'ಪ್ರೊಫೈಲ್ ನವೀಕರಿಸಲಾಗಿದೆ',
+  sectionInRoom: 'ಕೊಠಡಿಯಲ್ಲಿ',
+  sectionWaiting: 'ಕಾಯುತ್ತಿದ್ದಾರೆ',
+  sectionExpected: 'ಇಂದು ಬರಬೇಕಾದವರು',
+  sectionClosed: 'ಮುಗಿದಿದೆ / ಬರಲಿಲ್ಲ',
+  expectedAt: (time) => `${time} ಕ್ಕೆ ನಿರೀಕ್ಷಿತ`,
+  lateBy: (elapsed) => `${elapsed} ತಡ`,
+  viaWalkIn: 'ನೇರ ಬಂದವರು',
+  moreActions: 'ಹೆಚ್ು',
+  waitingNone: 'ಕಾಯುವ ಕೋಣೆಯಲ್ಲಿ ಯಾರೂ ಇಲ್ಲ',
+  expectedNone: 'ಇಂದು ಬೇರೆ ಯಾರೂ ನಿರೀಕ್ಷಿತ ಇಲ್ಲ',
   waitingRoomBoard: 'ಕಾಯುವ ಕೋಣೆಯ ಪರಮೆ',
   waitingRoomBoardBody:
     'ಇದನ್ನು ಕಾಯುವ ಕೋಣೆಯ TV ಅಥವಾ ಟ್ಯಾಬ್ಲೆಟ್‌ನಲ್ಲಿ ತೆರೆಯಿರಿ. ಈಗ ನಡೆಯುತ್ತಿರುವ ಟೋಕನ್ ಮಾತ್ರ ತೋರಿಸುತ್ತದೆ — ರೋಗಿಯ ಹೆಸರನ್ನು ಅಲ್ಲ. ಲಿಂಕ್ ಇರುವ ಯಾರು ಬೇಕಾದರೂ ನೋಡಬಹುದು.',
@@ -635,7 +667,17 @@ export function c(language: Language): ConsoleStrings {
 
 /** Compact elapsed label: "4 min", "1 hr 20 min". Kept short for dense rows. */
 export function elapsed(from: Date, language: Language, now: Date = new Date()): string {
-  const mins = Math.max(0, Math.floor((now.getTime() - from.getTime()) / 60_000));
+  return formatMins(Math.max(0, Math.floor((now.getTime() - from.getTime()) / 60_000)), language);
+}
+
+/**
+ * A duration already measured, rather than one running against the clock.
+ *
+ * Needed because a patient in the room has *finished* waiting: rendering their
+ * wait as "time since arrival" kept it ticking up while they were with the
+ * doctor.
+ */
+export function formatMins(mins: number, language: Language): string {
   const isKn = language === 'KN';
   if (mins < 1) return isKn ? 'ಈಗಷ್ಟೇ' : 'just now';
   if (mins < 60) return `${mins} ${isKn ? 'ನಿಮಿಷ' : 'min'}`;
