@@ -218,7 +218,13 @@ function selectDoctor(input: {
   // One doctor, one answer — the question would be a step for nothing, and
   // there is nothing to switch to either.
   if (input.doctors.length === 1) {
-    return { pending: false, doctor: input.doctors[0]!, justChosen: true };
+    const only = input.doctors[0]!;
+    // "Just chosen" has to mean the doctor *changed* this turn, not merely that
+    // one was settled on. Reporting it every turn made the engine treat every
+    // message as a fresh arrival, blank the input and re-render the menu — a
+    // one-doctor clinic could tap "Book a token" forever and only get the menu
+    // back.
+    return { pending: false, doctor: only, justChosen: input.chosen?.id !== only.id };
   }
 
   // "doctor", "ಬೇರೆ ವೈದ್ಯ" — re-open the choice. Checked before the chosen

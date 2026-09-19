@@ -15,6 +15,7 @@ const saveSession = vi.fn();
 const loadSession = vi.fn();
 const resolveClinicForChannel = vi.fn();
 const enqueueOutboundBulk = vi.fn();
+const slotHandle = vi.fn();
 
 vi.mock('./session', () => ({
   loadSession: (...a: unknown[]) => loadSession(...a),
@@ -52,7 +53,7 @@ vi.mock('./flows/slot', () => ({
   slotFlow: {
     entryStep: 'SLOT_MENU',
     owns: (s: string) => s.startsWith('SLOT_'),
-    handle: async () => ({ nextStep: 'SLOT_MENU', replies: [], data: {} }),
+    handle: (...a: unknown[]) => slotHandle(...a),
   },
 }));
 vi.mock('./flows/token', () => ({
@@ -107,6 +108,47 @@ beforeEach(() => {
   loadSession.mockReset().mockResolvedValue(session());
   enqueueOutboundBulk.mockReset().mockResolvedValue(undefined);
   resolveClinicForChannel.mockReset().mockResolvedValue({ clinic, doctors: DOCTORS });
+  slotHandle.mockReset().mockResolvedValue({ nextStep: 'SLOT_MENU', replies: [], data: {} });
+});
+
+/**
+ * The engine blanks the patient's text when it decides this turn is a *fresh*
+ * arrival into the flow — otherwise the answer to a question nobody asked yet
+ * would be read as an answer. So "fresh" has to be rare and true.
+ *
+ * It once was neither. A clinic with one doctor reported "just chosen" on every
+ * single turn, which made every turn fresh, which blanked every message, which
+ * made the flow re-render its entry step forever: the patient tapped "Book a
+ * token" and got the main menu back, endlessly. Every solo clinic — which is
+ * most of them — was unusable.
+ */
+describe('passing the patient input through to the flow', () => {
+  const inputSeenByFlow = () => (slotHandle.mock.calls[0]?.[0] as { input: string } | undefined)?.input;
+
+  it('reaches the flow at a single-doctor clinic', async () => {
+    resolveClinicForChannel.mockResolvedValue({ clinic, doctors: [DOCTORS[0]] });
+
+    await handleInboundMessage(inbound('1'));
+
+    expect(inputSeenByFlow()).toBe('1');
+  });
+
+  it('reaches the flow at a multi-doctor clinic once the doctor is settled', async () => {
+    await handleInboundMessage(inbound('1'));
+
+    expect(inputSeenByFlow()).toBe('1');
+  });
+
+  /** Fresh is still fresh: the tap that picked the doctor is not a menu answer. */
+  it('is withheld on the turn the doctor is chosen', async () => {
+    loadSession.mockResolvedValue(
+      session({ step: Steps.SELECT_DOCTOR, doctorId: null, data: { doctorIds: ['d1', 'd2', 'd3'] } }),
+    );
+
+    await handleInboundMessage(inbound('3'));
+
+    expect(inputSeenByFlow()).toBe('');
+  });
 });
 
 describe('switching doctor', () => {
