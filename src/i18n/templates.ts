@@ -80,6 +80,11 @@ export type TemplateSet = {
   slotNothingAvailable: () => string;
   slotConfirmPrompt: (p: { doctorName: string; date: string; time: string }) => string;
   slotBooked: (p: { doctorName: string; clinicName: string; date: string; time: string }) => string;
+  /** Appended only when both reminders will really be sent. */
+  slotRemindBoth: () => string;
+  /** When the appointment is too soon for an evening-before reminder. */
+  slotRemindHour: () => string;
+  slotCancelNote: () => string;
   slotAlreadyBooked: (p: { date: string; time: string }) => string;
   slotMoveConfirm: (p: { doctorName: string; date: string; fromTime: string; toTime: string }) => string;
   slotMoved: (p: { doctorName: string; clinicName: string; date: string; time: string }) => string;
@@ -200,7 +205,10 @@ const en: TemplateSet = {
   slotConfirmPrompt: ({ doctorName, date, time }) =>
     `Confirm your appointment?\n\nDr. ${doctorName}\n*${date} at ${time}*`,
   slotBooked: ({ doctorName, clinicName, date, time }) =>
-    `Your appointment is confirmed.\n\nDr. ${doctorName} — ${clinicName}\n*${date} at ${time}*\n\nWe will remind you the evening before and again 1 hour ahead. Reply *cancel* if you cannot make it.`,
+    `Your appointment is confirmed.\n\nDr. ${doctorName} — ${clinicName}\n*${date} at ${time}*`,
+  slotRemindBoth: () => 'We will remind you the evening before and again 1 hour ahead.',
+  slotRemindHour: () => 'We will remind you 1 hour before.',
+  slotCancelNote: () => 'Reply *cancel* if you cannot make it.',
   slotAlreadyBooked: ({ date, time }) =>
     `You are already booked for *${date} at ${time}*.`,
   slotMoveConfirm: ({ doctorName, date, fromTime, toTime }) =>
@@ -323,7 +331,12 @@ const kn: TemplateSet = {
   slotConfirmPrompt: ({ doctorName, date, time }) =>
     `ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಖಚಿತಪಡಿಸಬೇಕೆ?\n\nಡಾ. ${doctorName}\n*${date}, ${time} ಗೆ*`,
   slotBooked: ({ doctorName, clinicName, date, time }) =>
-    `ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಖಚಿತವಾಗಿದೆ.\n\nಡಾ. ${doctorName} — ${clinicName}\n*${date}, ${time} ಗೆ*\n\nಹಿಂದಿನ ದಿನ ಸಂಜೆ ಮತ್ತು 1 ಗಂಟೆ ಮೊದಲು ನಿಮಗೆ ನೆನಪಿಸುತ್ತೇವೆ. ಬರಲು ಆಗದಿದ್ದರೆ *ರದ್ದು* ಎಂದು ಕಳುಹಿಸಿ.`,
+    `ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಖಚಿತವಾಗಿದೆ.\n\nಡಾ. ${doctorName} — ${clinicName}\n*${date}, ${time} ಗೆ*`,
+  slotRemindBoth: () =>
+    'ಹಿಂದಿನ ದಿನ ಸಂಜೆ ಮತ್ತು 1 ಗಂಟೆ ಮೊದಲು ನಿಮಗೆ ನೆನಪಿಸುತ್ತೇವೆ.',
+  slotRemindHour: () => '1 ಗಂಟೆ ಮೊದಲು ನಿಮಗೆ ನೆನಪಿಸುತ್ತೇವೆ.',
+  slotCancelNote: () => 'ಬರಲು ಆಗದಿದ್ದರೆ *ರದ್ದು* ಎಂದು ಕಳುಹಿಸಿ.',
+
   slotAlreadyBooked: ({ date, time }) =>
     `ನಿಮಗೆ ಈಗಾಗಲೇ *${date}, ${time} ಗೆ* ಬುಕ್ ಆಗಿದೆ.`,
   slotMoveConfirm: ({ doctorName, date, fromTime, toTime }) =>

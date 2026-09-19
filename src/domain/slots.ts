@@ -314,6 +314,31 @@ export async function getNextAvailableDates(
   return out;
 }
 
+/**
+ * Which of the two reminders can still usefully be sent.
+ *
+ * A reminder whose moment passed before the patient booked is not a reminder.
+ * Booking at 9:35 for 9:40 today, the "evening before" was yesterday and the
+ * "hour ahead" was an hour ago — yet the sweep fired the day-before one three
+ * minutes after booking, telling a patient their appointment was *tomorrow*
+ * when it was in five minutes.
+ *
+ * One predicate, used both to decide what to send and to word the confirmation,
+ * so the promise and the behaviour cannot disagree.
+ */
+export function plannedReminders(
+  date: Date,
+  slotStart: Date,
+  timezone: string,
+  bookedAt: Date,
+): { dayBefore: boolean; hourBefore: boolean } {
+  const day = dayBeforeReminderAt(date, timezone);
+  return {
+    dayBefore: day !== null && day.getTime() > bookedAt.getTime(),
+    hourBefore: hourBeforeReminderAt(slotStart).getTime() > bookedAt.getTime(),
+  };
+}
+
 /** 6 PM the evening before, in the doctor's timezone. */
 export function dayBeforeReminderAt(date: Date, timezone: string): Date | null {
   const dayBefore = DateTime.fromJSDate(date, { zone: 'utc' }).minus({ days: 1 }).toJSDate();

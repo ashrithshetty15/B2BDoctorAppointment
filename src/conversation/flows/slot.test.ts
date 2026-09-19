@@ -541,3 +541,49 @@ describe('moving an existing appointment', () => {
     expect(moveSlot).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * The confirmation may only promise reminders that will actually arrive.
+ * Booking at 09:35 for 09:40 used to say "the evening before and again 1 hour
+ * ahead" when both moments had already passed.
+ */
+describe('what the confirmation promises', () => {
+  const booked = (slotStartIso: string) =>
+    ({ id: 'a1', date: today, slotStart: new Date(slotStartIso) }) as unknown as Appointment;
+
+  const confirm = async (slotStartIso: string, receivedAt: string) => {
+    vi.mocked(bookSlot).mockResolvedValue({ ok: true, appointment: booked(slotStartIso) });
+    const base = ctx(Steps.SLOT_CONFIRM_BOOKING, '1', {
+      date: '2026-09-18',
+      slotStart: slotStartIso,
+    });
+    const r = await slotFlow.handle({ ...base, receivedAt: new Date(receivedAt) });
+    return r.replies[0]?.text ?? '';
+  };
+
+  it('promises both when the booking is made a day ahead', async () => {
+    const text = await confirm('2026-09-18T09:00:00.000Z', '2026-09-16T06:00:00.000Z');
+    expect(text).toMatch(/evening before and again 1 hour ahead/);
+  });
+
+  /** Booked after the evening-before moment: only the hour warning is real. */
+  it('promises only the hour when the evening has gone', async () => {
+    const text = await confirm('2026-09-18T09:00:00.000Z', '2026-09-17T16:00:00.000Z');
+    expect(text).toMatch(/remind you 1 hour before/);
+    expect(text).not.toMatch(/evening before/);
+  });
+
+  /** The reported case: minutes before the slot, neither can arrive. */
+  it('promises nothing when the appointment is minutes away', async () => {
+    const text = await confirm('2026-09-18T09:00:00.000Z', '2026-09-18T08:55:00.000Z');
+    expect(text).not.toMatch(/remind/i);
+    expect(text).toMatch(/confirmed/);
+  });
+
+  /** Cancelling is always possible, so that line is always there. */
+  it('always says how to cancel', async () => {
+    for (const at of ['2026-09-16T06:00:00.000Z', '2026-09-18T08:55:00.000Z']) {
+      expect(await confirm('2026-09-18T09:00:00.000Z', at)).toMatch(/\*cancel\*/);
+    }
+  });
+});

@@ -100,7 +100,9 @@ async function sweepDueReminders(): Promise<number> {
   const now = new Date();
   const inOneHour = new Date(now.getTime() + 60 * 60_000);
 
-  // 1-hour-before: slot starts within the next hour.
+  // 1-hour-before: slot starts within the next hour, and the patient booked
+  // early enough for an hour's warning to mean anything. Booking twenty minutes
+  // ahead should not produce "your appointment is in 1 hour".
   const hourCandidates = await prisma.appointment.findMany({
     where: {
       type: 'SLOT',
@@ -108,7 +110,7 @@ async function sweepDueReminders(): Promise<number> {
       hourBeforeReminderSentAt: null,
       slotStart: { gt: now, lte: inOneHour },
     },
-    select: { id: true },
+    select: { id: true, slotStart: true, createdAt: true },
     take: 500,
   });
 
@@ -127,12 +129,17 @@ async function sweepDueReminders(): Promise<number> {
   let sent = 0;
 
   for (const row of hourCandidates) {
+    if (hourBeforeReminderAt(row.slotStart!) <= row.createdAt) continue;
     if (await sendReminder(row.id, 'HOUR_BEFORE')) sent += 1;
   }
 
   for (const row of dayCandidates) {
     const dueAt = dayBeforeReminderAt(row.date, row.doctor.timezone);
-    if (dueAt && dueAt <= now) {
+    // Due, but also still meaningful. A 6 PM reminder for a booking made at
+    // 8 PM that same evening fires the instant it is seen and tells the patient
+    // their appointment is "tomorrow" minutes after they made it — which is how
+    // one went out three minutes after booking.
+    if (dueAt && dueAt <= now && dueAt > row.createdAt) {
       if (await sendReminder(row.id, 'DAY_BEFORE')) sent += 1;
     }
   }

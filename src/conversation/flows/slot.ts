@@ -5,6 +5,7 @@ import {
   getAvailableSlots,
   getNextAvailableDates,
   moveSlot,
+  plannedReminders,
   slotLabel,
   type Slot,
 } from '../../domain/slots';
@@ -469,19 +470,44 @@ async function handleBookingConfirmation(ctx: ConversationContext): Promise<Step
   return {
     nextStep: Steps.SLOT_MENU,
     replies: [
-      reply(
-        'slotBooked',
-        t(ctx.language, 'slotBooked', {
-          doctorName: ctx.doctor.name,
-          clinicName: ctx.doctor.clinicName,
-          date: formatDateForPatient(appointment.date),
-          time,
-        }),
-      ),
+      reply('slotBooked', confirmationText(ctx, appointment, time)),
     ],
     data: {},
     effects: [{ type: 'SCHEDULE_REMINDERS', appointmentId: appointment.id }],
   };
+}
+
+/**
+ * The confirmation, promising only the reminders that will actually arrive.
+ *
+ * Booking at 9:35 for 9:40 used to say "we will remind you the evening before
+ * and again 1 hour ahead" — both already past. Worse, the day-before sweep then
+ * fired anyway and told a patient their appointment was *tomorrow* minutes
+ * after they made it. Same predicate as the sweep, so the promise and the
+ * behaviour cannot drift.
+ */
+function confirmationText(
+  ctx: ConversationContext,
+  appointment: { date: Date; slotStart: Date | null },
+  time: string,
+): string {
+  const confirmation = t(ctx.language, 'slotBooked', {
+    doctorName: ctx.doctor.name,
+    clinicName: ctx.clinic.name,
+    date: formatDateForPatient(appointment.date),
+    time,
+  });
+
+  const planned = appointment.slotStart
+    ? plannedReminders(appointment.date, appointment.slotStart, ctx.doctor.timezone, ctx.receivedAt)
+    : { dayBefore: false, hourBefore: false };
+
+  const lines = [confirmation];
+  if (planned.dayBefore && planned.hourBefore) lines.push(t(ctx.language, 'slotRemindBoth'));
+  else if (planned.hourBefore) lines.push(t(ctx.language, 'slotRemindHour'));
+  lines.push(t(ctx.language, 'slotCancelNote'));
+
+  return lines.join('\n\n');
 }
 
 // ---- moving an existing appointment ----
