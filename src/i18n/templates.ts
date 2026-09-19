@@ -105,10 +105,15 @@ export type TemplateSet = {
 
   // ---- HYBRID mode ----
   /**
-   * Short labels for tappable reply buttons. Kept separate from the menu bodies
-   * because Meta clips a button title around 20 characters, while the numbered
-   * lines are written to be read ("Book a token for today" is 22). The numbered
-   * body is still sent alongside, so typing the number always works.
+   * Short labels for tappable reply buttons. Kept separate from the message
+   * bodies because Meta clips a button title around 20 characters, while a body
+   * line is written to be read.
+   *
+   * The bodies no longer spell the options out as a numbered list. The buttons
+   * already carry the same words, so the list was the message repeating itself
+   * and it made every menu several lines longer on a phone. Typed numbers still
+   * work — menuIntent never stopped reading them — they are simply not
+   * advertised.
    */
   btnEnglish: () => string;
   btnKannada: () => string;
@@ -127,14 +132,21 @@ export type TemplateSet = {
   btnEvening: () => string;
   btnYes: () => string;
   btnNo: () => string;
+  /**
+   * Cancelling asks its own question, so it needs its own answers. "Yes,
+   * confirm" on a cancel prompt reads as confirming the booking, which is the
+   * opposite of what the tap does.
+   */
+  btnYesCancel: () => string;
+  btnKeepIt: () => string;
 
   hybridModeChoice: (p: { doctorName: string }) => string;
 };
 
 const en: TemplateSet = {
   languagePrompt: () =>
-    'Welcome! Please choose your language:\n\n1. English\n2. ಕನ್ನಡ (Kannada)\n\nReply with 1 or 2.',
-  languageInvalid: () => 'Please reply with 1 for English or 2 for Kannada.',
+    'Welcome! Please choose your language.',
+  languageInvalid: () => 'Please choose English or ಕನ್ನಡ below.',
   askName: ({ clinicName }) =>
     `Welcome to ${clinicName}. What is your name? (Please type your full name)`,
   nameInvalid: () => 'Please type your name using at least 2 letters.',
@@ -155,11 +167,11 @@ const en: TemplateSet = {
 
   // ---- TOKEN mode ----
   tokenMainMenu: ({ doctorName, date }) =>
-    `Dr. ${doctorName} — ${date}\n\n1. Book a token for today\n2. Check my token status\n3. Cancel my token\n\nReply with 1, 2 or 3.`,
+    `Dr. ${doctorName} — ${date}\n\nHow can we help you today?`,
   tokenConfirmPrompt: ({ doctorName, date }) =>
-    `Book a token with Dr. ${doctorName} for ${date}?\n\n1. Yes, confirm\n2. No, go back`,
+    `Book a token with Dr. ${doctorName} for ${date}?`,
   tokenBooked: ({ tokenNumber, date, doctorName, nowServing, ahead, eta }) =>
-    `Your token is confirmed.\n\n*Token #${tokenNumber}*\nDr. ${doctorName} — ${date}\nNow serving: ${nowServing}\nPatients ahead of you: ${ahead}\nApprox. wait: ${eta}\n\nWe will message you as the queue moves. Reply 2 anytime to check your status.`,
+    `Your token is confirmed.\n\n*Token #${tokenNumber}*\nDr. ${doctorName} — ${date}\nNow serving: ${nowServing}\nPatients ahead of you: ${ahead}\nApprox. wait: ${eta}\n\nWe will message you as the queue moves. Reply *status* anytime to check yours.`,
   tokenAlreadyBooked: ({ tokenNumber, ahead, eta }) =>
     `You already have *token #${tokenNumber}* for today.\nPatients ahead of you: ${ahead}\nApprox. wait: ${eta}`,
   tokenQueueFull: ({ doctorName }) =>
@@ -174,18 +186,18 @@ const en: TemplateSet = {
   tokenYourTurn: ({ tokenNumber, doctorName }) =>
     `It's your turn now. *Token #${tokenNumber}* — please go in to see Dr. ${doctorName}.`,
   tokenCancelConfirm: ({ tokenNumber, date }) =>
-    `Cancel *token #${tokenNumber}* for ${date}?\n\n1. Yes, cancel it\n2. No, keep it`,
+    `Cancel *token #${tokenNumber}* for ${date}?`,
   tokenCancelled: ({ tokenNumber }) =>
     `Token #${tokenNumber} has been cancelled. Message us anytime to book again.`,
   tokenCancelAborted: () => 'Your token has been kept. Nothing was cancelled.',
   tokenNoActiveBooking: () =>
-    'You do not have an active token for today. Reply 1 to book one.',
+    'You do not have an active token for today. Reply *book* to take one.',
   tokenDelayBroadcast: ({ doctorName, delayMins, eta }) =>
     `Update: Dr. ${doctorName} is running about ${delayMins} mins late today. Sorry for the inconvenience.\nYour new approx. wait: ${eta}`,
   tokenVisitDone: ({ doctorName }) =>
     `Thank you for visiting Dr. ${doctorName}. Wishing you a speedy recovery. Message us anytime to book again.`,
   tokenNoShow: ({ tokenNumber }) =>
-    `Token #${tokenNumber} was called but you were not present, so it has been marked as missed. Reply 1 to book a fresh token.`,
+    `Token #${tokenNumber} was called but you were not present, so it has been marked as missed. Reply *book* to take a fresh token.`,
   tokenBookingCancelledByClinic: ({ tokenNumber, date }) =>
     `Sorry — your *token #${tokenNumber}* for ${date} has been cancelled as the doctor is unavailable. Please book again for another day.`,
 
@@ -228,7 +240,7 @@ Reply *cancel* if you cannot make it.`,
   slotStatus: ({ doctorName, date, time }) =>
     `Your appointment:\nDr. ${doctorName}\n*${date} at ${time}*`,
   slotCancelConfirm: ({ date, time }) =>
-    `Cancel your appointment on ${date} at ${time}?\n\n1. Yes, cancel it\n2. No, keep it`,
+    `Cancel your appointment on ${date} at ${time}?`,
   slotCancelled: ({ date, time }) =>
     `Your appointment on ${date} at ${time} has been cancelled. Message us anytime to book again.`,
   slotReminderDayBefore: ({ doctorName, clinicName, date, time }) =>
@@ -237,7 +249,7 @@ Reply *cancel* if you cannot make it.`,
     `Reminder: your appointment with Dr. ${doctorName} is at *${time}* — about 1 hour from now. Please start for the clinic.`,
   slotDelayBroadcast: ({ doctorName, delayMins }) =>
     `Update: Dr. ${doctorName} is running about ${delayMins} mins late today. Please plan your arrival accordingly. Sorry for the inconvenience.`,
-  slotInvalidChoice: () => 'Please reply with one of the numbers from the list above.',
+  slotInvalidChoice: () => 'Please pick one of the options above.',
 
   // ---- HYBRID mode ----
   btnEnglish: () => 'English',
@@ -257,15 +269,17 @@ Reply *cancel* if you cannot make it.`,
   btnEvening: () => 'Evening',
   btnYes: () => 'Yes, confirm',
   btnNo: () => 'No, go back',
+  btnYesCancel: () => 'Yes, cancel it',
+  btnKeepIt: () => 'No, keep it',
 
   hybridModeChoice: ({ doctorName }) =>
-    `How would you like to see Dr. ${doctorName}?\n\n1. Book a fixed appointment time\n2. Take a token and come today\n\nReply with 1 or 2.`,
+    `How would you like to see Dr. ${doctorName}?`,
 };
 
 const kn: TemplateSet = {
   languagePrompt: () =>
-    'ಸ್ವಾಗತ! ನಿಮ್ಮ ಭಾಷೆ ಆಯ್ಕೆ ಮಾಡಿ:\n\n1. English\n2. ಕನ್ನಡ (Kannada)\n\n1 ಅಥವಾ 2 ಒತ್ತಿ.',
-  languageInvalid: () => 'ದಯವಿಟ್ಟು English ಗೆ 1, ಕನ್ನಡಕ್ಕೆ 2 ಒತ್ತಿ.',
+    'ಸ್ವಾಗತ! ನಿಮ್ಮ ಭಾಷೆ ಆಯ್ಕೆ ಮಾಡಿ.',
+  languageInvalid: () => 'ದಯವಿಟ್ಟು ಕೆಳಗೆ English ಅಥವಾ ಕನ್ನಡ ಆಯ್ಕೆ ಮಾಡಿ.',
   askName: ({ clinicName }) => `${clinicName} ಗೆ ಸ್ವಾಗತ. ನಿಮ್ಮ ಹೆಸರು ಏನು? (ಪೂರ್ಣ ಹೆಸರು ಬರೆಯಿರಿ)`,
   nameInvalid: () => 'ದಯವಿಟ್ಟು ನಿಮ್ಮ ಹೆಸರನ್ನು ಕನಿಷ್ಠ 2 ಅಕ್ಷರಗಳಲ್ಲಿ ಬರೆಯಿರಿ.',
   welcomeBack: ({ patientName, clinicName }) => `ಮತ್ತೆ ಸ್ವಾಗತ, ${patientName}! — ${clinicName}`,
@@ -286,11 +300,11 @@ const kn: TemplateSet = {
 
   // ---- TOKEN mode ----
   tokenMainMenu: ({ doctorName, date }) =>
-    `ಡಾ. ${doctorName} — ${date}\n\n1. ಇವತ್ತಿನ ಟೋಕನ್ ಬುಕ್ ಮಾಡಿ\n2. ನನ್ನ ಟೋಕನ್ ಸ್ಥಿತಿ ನೋಡಿ\n3. ನನ್ನ ಟೋಕನ್ ರದ್ದು ಮಾಡಿ\n\n1, 2 ಅಥವಾ 3 ಒತ್ತಿ.`,
+    `ಡಾ. ${doctorName} — ${date}\n\nಇಂದು ನಾವು ಹೇಗೆ ಸಹಾಯ ಮಾಡಬಹುದು?`,
   tokenConfirmPrompt: ({ doctorName, date }) =>
-    `ಡಾ. ${doctorName} ಅವರ ಜೊತೆ ${date} ಗೆ ಟೋಕನ್ ಬುಕ್ ಮಾಡಬೇಕೆ?\n\n1. ಹೌದು, ಖಚಿತಪಡಿಸಿ\n2. ಇಲ್ಲ, ಹಿಂದೆ ಹೋಗಿ`,
+    `ಡಾ. ${doctorName} ಅವರ ಜೊತೆ ${date} ಗೆ ಟೋಕನ್ ಬುಕ್ ಮಾಡಬೇಕೆ?`,
   tokenBooked: ({ tokenNumber, date, doctorName, nowServing, ahead, eta }) =>
-    `ನಿಮ್ಮ ಟೋಕನ್ ಖಚಿತವಾಗಿದೆ.\n\n*ಟೋಕನ್ #${tokenNumber}*\nಡಾ. ${doctorName} — ${date}\nಈಗ ನಡೆಯುತ್ತಿರುವ ಟೋಕನ್: ${nowServing}\nನಿಮ್ಮ ಮುಂದೆ ಇರುವ ರೋಗಿಗಳು: ${ahead}\nಅಂದಾಜು ಕಾಯುವ ಸಮಯ: ${eta}\n\nಸರದಿ ಮುಂದೆ ಹೋದಾಗ ನಿಮಗೆ ಸಂದೇಶ ಕಳುಹಿಸುತ್ತೇವೆ. ಸ್ಥಿತಿ ನೋಡಲು ಯಾವಾಗಲಾದರೂ 2 ಒತ್ತಿ.`,
+    `ನಿಮ್ಮ ಟೋಕನ್ ಖಚಿತವಾಗಿದೆ.\n\n*ಟೋಕನ್ #${tokenNumber}*\nಡಾ. ${doctorName} — ${date}\nಈಗ ನಡೆಯುತ್ತಿರುವ ಟೋಕನ್: ${nowServing}\nನಿಮ್ಮ ಮುಂದೆ ಇರುವ ರೋಗಿಗಳು: ${ahead}\nಅಂದಾಜು ಕಾಯುವ ಸಮಯ: ${eta}\n\nಸರದಿ ಮುಂದೆ ಹೋದಾಗ ನಿಮಗೆ ಸಂದೇಶ ಕಳುಹಿಸುತ್ತೇವೆ. ಸ್ಥಿತಿ ನೋಡಲು ಯಾವಾಗಲಾದರೂ *ಸ್ಥಿತಿ* ಎಂದು ಕಳುಹಿಸಿ.`,
   tokenAlreadyBooked: ({ tokenNumber, ahead, eta }) =>
     `ನಿಮಗೆ ಇವತ್ತಿಗೆ ಈಗಾಗಲೇ *ಟೋಕನ್ #${tokenNumber}* ಇದೆ.\nನಿಮ್ಮ ಮುಂದೆ ಇರುವ ರೋಗಿಗಳು: ${ahead}\nಅಂದಾಜು ಕಾಯುವ ಸಮಯ: ${eta}`,
   tokenQueueFull: ({ doctorName }) =>
@@ -305,17 +319,18 @@ const kn: TemplateSet = {
   tokenYourTurn: ({ tokenNumber, doctorName }) =>
     `ಈಗ ನಿಮ್ಮ ಸರದಿ. *ಟೋಕನ್ #${tokenNumber}* — ದಯವಿಟ್ಟು ಡಾ. ${doctorName} ಅವರನ್ನು ನೋಡಲು ಒಳಗೆ ಹೋಗಿ.`,
   tokenCancelConfirm: ({ tokenNumber, date }) =>
-    `${date} ಗೆ ಇರುವ *ಟೋಕನ್ #${tokenNumber}* ರದ್ದು ಮಾಡಬೇಕೆ?\n\n1. ಹೌದು, ರದ್ದು ಮಾಡಿ\n2. ಇಲ್ಲ, ಹಾಗೇ ಇರಲಿ`,
+    `${date} ಗೆ ಇರುವ *ಟೋಕನ್ #${tokenNumber}* ರದ್ದು ಮಾಡಬೇಕೆ?`,
   tokenCancelled: ({ tokenNumber }) =>
     `ಟೋಕನ್ #${tokenNumber} ರದ್ದಾಗಿದೆ. ಮತ್ತೆ ಬುಕ್ ಮಾಡಲು ಯಾವಾಗಲಾದರೂ ಸಂದೇಶ ಕಳುಹಿಸಿ.`,
   tokenCancelAborted: () => 'ನಿಮ್ಮ ಟೋಕನ್ ಹಾಗೇ ಇದೆ. ಏನೂ ರದ್ದಾಗಿಲ್ಲ.',
-  tokenNoActiveBooking: () => 'ಇವತ್ತಿಗೆ ನಿಮಗೆ ಯಾವ ಟೋಕನ್ ಕೂಡ ಇಲ್ಲ. ಒಂದು ಬುಕ್ ಮಾಡಲು 1 ಒತ್ತಿ.',
+  tokenNoActiveBooking: () =>
+    'ಇವತ್ತಿಗೆ ನಿಮಗೆ ಯಾವ ಟೋಕನ್ ಕೂಡ ಇಲ್ಲ. ಬುಕ್ ಮಾಡಲು *ಬುಕ್* ಎಂದು ಕಳುಹಿಸಿ.',
   tokenDelayBroadcast: ({ doctorName, delayMins, eta }) =>
     `ಸೂಚನೆ: ಡಾ. ${doctorName} ಇವತ್ತು ಸುಮಾರು ${delayMins} ನಿಮಿಷ ತಡವಾಗಿ ನಡೆಯುತ್ತಿದ್ದಾರೆ. ಅನಾನುಕೂಲಕ್ಕೆ ಕ್ಷಮಿಸಿ.\nನಿಮ್ಮ ಹೊಸ ಅಂದಾಜು ಕಾಯುವ ಸಮಯ: ${eta}`,
   tokenVisitDone: ({ doctorName }) =>
     `ಡಾ. ${doctorName} ಅವರನ್ನು ಭೇಟಿ ಮಾಡಿದ್ದಕ್ಕೆ ಧನ್ಯವಾದ. ಬೇಗ ಗುಣವಾಗಲಿ. ಮತ್ತೆ ಬುಕ್ ಮಾಡಲು ಯಾವಾಗಲಾದರೂ ಸಂದೇಶ ಕಳುಹಿಸಿ.`,
   tokenNoShow: ({ tokenNumber }) =>
-    `ಟೋಕನ್ #${tokenNumber} ಕರೆಯಲಾಯಿತು, ಆದರೆ ನೀವು ಇಲ್ಲದ ಕಾರಣ ಅದನ್ನು ತಪ್ಪಿಸಲಾಗಿದೆ ಎಂದು ಗುರುತಿಸಲಾಗಿದೆ. ಹೊಸ ಟೋಕನ್ ಬುಕ್ ಮಾಡಲು 1 ಒತ್ತಿ.`,
+    `ಟೋಕನ್ #${tokenNumber} ಕರೆಯಲಾಯಿತು, ಆದರೆ ನೀವು ಇಲ್ಲದ ಕಾರಣ ಅದನ್ನು ತಪ್ಪಿಸಲಾಗಿದೆ ಎಂದು ಗುರುತಿಸಲಾಗಿದೆ. ಹೊಸ ಟೋಕನ್ ಬುಕ್ ಮಾಡಲು *ಬುಕ್* ಎಂದು ಕಳುಹಿಸಿ.`,
   tokenBookingCancelledByClinic: ({ tokenNumber, date }) =>
     `ಕ್ಷಮಿಸಿ — ಡಾಕ್ಟರ್ ಲಭ್ಯವಿಲ್ಲದ ಕಾರಣ ${date} ಗೆ ಇರುವ ನಿಮ್ಮ *ಟೋಕನ್ #${tokenNumber}* ರದ್ದು ಮಾಡಲಾಗಿದೆ. ದಯವಿಟ್ಟು ಬೇರೆ ದಿನಕ್ಕೆ ಮತ್ತೆ ಬುಕ್ ಮಾಡಿ.`,
 
@@ -356,7 +371,7 @@ const kn: TemplateSet = {
   slotStatus: ({ doctorName, date, time }) =>
     `ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್:\nಡಾ. ${doctorName}\n*${date}, ${time} ಗೆ*`,
   slotCancelConfirm: ({ date, time }) =>
-    `${date}, ${time} ಗೆ ಇರುವ ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ರದ್ದು ಮಾಡಬೇಕೆ?\n\n1. ಹೌದು, ರದ್ದು ಮಾಡಿ\n2. ಇಲ್ಲ, ಹಾಗೇ ಇರಲಿ`,
+    `${date}, ${time} ಗೆ ಇರುವ ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ರದ್ದು ಮಾಡಬೇಕೆ?`,
   slotCancelled: ({ date, time }) =>
     `${date}, ${time} ಗೆ ಇರುವ ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ರದ್ದಾಗಿದೆ. ಮತ್ತೆ ಬುಕ್ ಮಾಡಲು ಯಾವಾಗಲಾದರೂ ಸಂದೇಶ ಕಳುಹಿಸಿ.`,
   slotReminderDayBefore: ({ doctorName, clinicName, date, time }) =>
@@ -365,7 +380,7 @@ const kn: TemplateSet = {
     `ನೆನಪು: ಡಾ. ${doctorName} ಅವರ ಜೊತೆ ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ *${time} ಗೆ* — ಸುಮಾರು 1 ಗಂಟೆ ನಂತರ. ದಯವಿಟ್ಟು ಕ್ಲಿನಿಕ್ ಕಡೆ ಹೊರಡಿ.`,
   slotDelayBroadcast: ({ doctorName, delayMins }) =>
     `ಸೂಚನೆ: ಡಾ. ${doctorName} ಇವತ್ತು ಸುಮಾರು ${delayMins} ನಿಮಿಷ ತಡವಾಗಿ ನಡೆಯುತ್ತಿದ್ದಾರೆ. ಅದಕ್ಕೆ ಅನುಸಾರವಾಗಿ ಬನ್ನಿ. ಅನಾನುಕೂಲಕ್ಕೆ ಕ್ಷಮಿಸಿ.`,
-  slotInvalidChoice: () => 'ದಯವಿಟ್ಟು ಮೇಲೆ ಇರುವ ಪಟ್ಟಿಯಿಂದ ಒಂದು ಸಂಖ್ಯೆ ಒತ್ತಿ.',
+  slotInvalidChoice: () => 'ದಯವಿಟ್ಟು ಮೇಲೆ ಇರುವ ಆಯ್ಕೆಗಳಲ್ಲಿ ಒಂದನ್ನು ಆರಿಸಿ.',
 
   // ---- HYBRID mode ----
   btnEnglish: () => 'English',
@@ -385,9 +400,11 @@ const kn: TemplateSet = {
   btnEvening: () => 'ಸಂಜೆ',
   btnYes: () => 'ಹೌದು, ಖಚಿತ',
   btnNo: () => 'ಇಲ್ಲ, ಹಿಂದೆ',
+  btnYesCancel: () => 'ಹೌದು, ರದ್ದು ಮಾಡಿ',
+  btnKeepIt: () => 'ಇಲ್ಲ, ಹಾಗೇ ಇರಲಿ',
 
   hybridModeChoice: ({ doctorName }) =>
-    `ಡಾ. ${doctorName} ಅವರನ್ನು ಹೇಗೆ ನೋಡಲು ಇಷ್ಟ?\n\n1. ನಿರ್ದಿಷ್ಟ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಸಮಯ ಬುಕ್ ಮಾಡಿ\n2. ಟೋಕನ್ ತೆಗೆದುಕೊಂಡು ಇವತ್ತು ಬನ್ನಿ\n\n1 ಅಥವಾ 2 ಒತ್ತಿ.`,
+    `ಡಾ. ${doctorName} ಅವರನ್ನು ಹೇಗೆ ನೋಡಲು ಇಷ್ಟ?`,
 };
 
 export const templates: Record<Language, TemplateSet> = { EN: en, KN: kn };

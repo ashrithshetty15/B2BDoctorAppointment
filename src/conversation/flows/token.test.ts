@@ -252,6 +252,39 @@ describe('language', () => {
     const result = await tokenFlow.handle({ ...ctx(Steps.TOKEN_MENU, ''), language: 'KN' });
 
     expect(result.replies[0]!.templateName).toBe('tokenMainMenu');
-    expect(result.replies[0]!.text).toContain('ಟೋಕನ್ ಬುಕ್ ಮಾಡಿ');
+    // The body is the question; the options are the buttons. Asserting on the
+    // button titles is what actually proves the menu is in Kannada — the body
+    // alone would pass on a doctor's name and a date.
+    expect(result.replies[0]!.text).toContain('ಇಂದು ನಾವು ಹೇಗೆ ಸಹಾಯ ಮಾಡಬಹುದು?');
+    expect(result.replies[0]!.buttons?.map((b) => b.title)).toEqual([
+      'ಟೋಕನ್ ಬುಕ್ ಮಾಡಿ',
+      'ಟೋಕನ್ ಸ್ಥಿತಿ',
+      'ಟೋಕನ್ ರದ್ದು ಮಾಡಿ',
+    ]);
+  });
+});
+
+/**
+ * The numbered menus are gone — the buttons carry the options — but the numbers
+ * were also the only way to answer on a client that renders nothing tappable,
+ * so what replaced them has to work as typed input.
+ */
+describe('answering without tapping', () => {
+  it.each(['book', 'status', 'cancel'])('accepts the typed word %s', async (word) => {
+    const result = await tokenFlow.handle(ctx(Steps.TOKEN_MENU, word));
+
+    expect(result.replies[0]!.templateName).not.toBe('unknownInput');
+  });
+
+  it('still accepts the numbers it no longer prints', async () => {
+    const result = await tokenFlow.handle(ctx(Steps.TOKEN_MENU, '1'));
+
+    expect(result.nextStep).toBe(Steps.TOKEN_CONFIRM_BOOKING);
+  });
+
+  it('offers every menu option as a button, so nothing is reachable by number alone', async () => {
+    const result = await tokenFlow.handle(ctx(Steps.TOKEN_MENU, ''));
+
+    expect(result.replies[0]!.buttons).toHaveLength(3);
   });
 });

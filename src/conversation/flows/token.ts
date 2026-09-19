@@ -58,8 +58,10 @@ export const tokenFlow: ConversationFlow = {
 /**
  * Button ids are the same tokens the typed flow accepts ("1", "2", "3"), so a
  * tap and a typed number are indistinguishable to every step below — an inbound
- * tap arrives as its id (extractText in the WhatsApp adapter). The numbered body
- * is still sent, so typing keeps working on clients that do not render buttons.
+ * tap arrives as its id (extractText in the WhatsApp adapter). The body no
+ * longer lists those numbers; menuIntent still reads them, and it reads the
+ * words on the buttons too, so a client that renders nothing tappable is
+ * answered by typing "book", "status" or "cancel".
  */
 function menuButtons(language: Language): ReplyButton[] {
   return [
@@ -73,6 +75,17 @@ function confirmButtons(language: Language): ReplyButton[] {
   return [
     { id: '1', title: t(language, 'btnYes') },
     { id: '2', title: t(language, 'btnNo') },
+  ];
+}
+
+/**
+ * Cancelling asks the opposite question, so it needs its own words: "Yes,
+ * confirm" under "Cancel token #7?" reads as confirming the token.
+ */
+function cancelButtons(language: Language): ReplyButton[] {
+  return [
+    { id: '1', title: t(language, 'btnYesCancel') },
+    { id: '2', title: t(language, 'btnKeepIt') },
   ];
 }
 
@@ -297,6 +310,7 @@ async function startCancel(ctx: ConversationContext): Promise<StepResult> {
           tokenNumber: existing.tokenNumber ?? 0,
           date: formatDateForPatient(ctx.today),
         }),
+        cancelButtons(ctx.language),
       ),
     ],
   };
@@ -319,6 +333,7 @@ async function handleCancelConfirmation(ctx: ConversationContext): Promise<StepR
             tokenNumber,
             date: formatDateForPatient(ctx.today),
           }),
+          cancelButtons(ctx.language),
         ),
       ],
     };

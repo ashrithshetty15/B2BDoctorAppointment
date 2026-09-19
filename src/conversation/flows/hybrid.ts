@@ -2,6 +2,8 @@ import { t } from '../../i18n/templates';
 import { numericChoice } from '../intent';
 import { Steps } from '../steps';
 import { reply, type ConversationFlow, type ConversationContext } from '../types';
+import type { Language } from '@prisma/client';
+import type { ReplyButton } from '../../messaging/types';
 import { slotFlow } from './slot';
 import { tokenFlow } from './token';
 
@@ -32,6 +34,20 @@ export const hybridFlow: ConversationFlow = {
   },
 };
 
+/**
+ * The two kinds of visit, as taps.
+ *
+ * Ids match the numbers numericChoice reads, so typing still works; without
+ * these the question was the one prompt in the product with no buttons at all,
+ * which is also why its body had to spell the options out.
+ */
+function modeButtons(language: Language): ReplyButton[] {
+  return [
+    { id: '1', title: t(language, 'btnBookSlot') },
+    { id: '2', title: t(language, 'btnBookToken') },
+  ];
+}
+
 async function askOrRoute(ctx: ConversationContext) {
   const choice = numericChoice(ctx.input);
 
@@ -54,6 +70,7 @@ async function askOrRoute(ctx: ConversationContext) {
       reply(
         'hybridModeChoice',
         t(ctx.language, 'hybridModeChoice', { doctorName: ctx.doctor.name }),
+        modeButtons(ctx.language),
       ),
     ],
     data: {},

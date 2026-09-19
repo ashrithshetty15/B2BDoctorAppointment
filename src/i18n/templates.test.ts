@@ -49,9 +49,12 @@ describe('templates', () => {
    * over, but three templates went on telling patients to "Reply 3" — naming a
    * number nothing on screen shows. This catches the next one.
    *
-   * TOKEN mode still prints its numbered list, so it is deliberately exempt.
+   * No longer scoped to SLOT. TOKEN mode kept its numbered lists for a while
+   * after SLOT dropped them, which is how a clinic ended up looking at a menu
+   * reading "1. Book a token for today" under three buttons that said the same
+   * thing. Every mode is held to it now, including the mode-choice question.
    */
-  it('never tells a SLOT-mode patient to reply with a number', () => {
+  it('never tells a patient to reply with a number', () => {
     const params = {
       clinicName: 'Sunrise Clinic',
       doctorName: 'Ramesh',
@@ -70,10 +73,11 @@ describe('templates', () => {
 
     for (const lang of languages) {
       for (const [name, render] of Object.entries(templates[lang])) {
-        if (!name.startsWith('slot')) continue;
         const text = (render as (p: typeof params) => string)(params);
-        expect(text, `${lang}.${name}`).not.toMatch(/reply\s+\d/i);
+        expect(text, `${lang}.${name}`).not.toMatch(/reply\s+(with\s+)?\d/i);
         expect(text, `${lang}.${name}`).not.toMatch(/\d\s*ಒತ್ತಿ/);
+        // A numbered option line: "1. Book a token", "2. ನನ್ನ ಟೋಕನ್ ಸ್ಥಿತಿ".
+        expect(text, `${lang}.${name}`).not.toMatch(/^\s*\d\.\s+\S/m);
       }
     }
   });

@@ -94,6 +94,14 @@ function confirmButtons(language: Language): ReplyButton[] {
   ];
 }
 
+/** As above, but for the question whose "yes" destroys the booking. */
+function cancelButtons(language: Language): ReplyButton[] {
+  return [
+    { id: '1', title: t(language, 'btnYesCancel') },
+    { id: '2', title: t(language, 'btnKeepIt') },
+  ];
+}
+
 // ---- menu ----
 
 /**
@@ -646,7 +654,7 @@ async function askCancelConfirmation(ctx: ConversationContext): Promise<StepResu
           date: formatDateForPatient(existing.date),
           time: existing.slotStart ? timeLabel(existing.slotStart, ctx.doctor) : '-',
         }),
-        confirmButtons(ctx.language),
+        cancelButtons(ctx.language),
       ),
     ],
     data: { appointmentId: existing.id },
