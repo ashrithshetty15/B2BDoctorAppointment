@@ -258,6 +258,37 @@ export class WhatsAppCloudAdapter implements MessagingAdapter {
     }
 
     const url = `https://graph.facebook.com/${env.WHATSAPP_API_VERSION}/${phoneNumberId}/messages`;
+
+    /**
+     * Template variables and buttons both travel in `components`.
+     *
+     * This used to put the variables under a `template.body` key, which is not
+     * a field the Cloud API defines — so the values were dropped and a template
+     * with variables in it was rejected for having none supplied. It went
+     * unnoticed because the only template in use, clinic_welcome, has no
+     * variables, and nothing sent here was covered by a test.
+     *
+     * The button component gives the quick-reply its payload, which is how a
+     * tap on a follow-up reminder can say which follow-up it answers. index is
+     * the button's position in the approved template, so a template whose first
+     * button is not the booking one needs this revisited.
+     */
+    const components: Record<string, unknown>[] = [];
+    if (message.params && message.params.length > 0) {
+      components.push({
+        type: 'body',
+        parameters: message.params.map((v) => ({ type: 'text', text: v })),
+      });
+    }
+    if (message.buttonPayload) {
+      components.push({
+        type: 'button',
+        sub_type: 'quick_reply',
+        index: '0',
+        parameters: [{ type: 'payload', payload: message.buttonPayload }],
+      });
+    }
+
     const res = await fetch(url, {
       method: 'POST',
       headers: {
@@ -271,13 +302,7 @@ export class WhatsAppCloudAdapter implements MessagingAdapter {
         template: {
           name: message.templateName,
           language: { code: message.languageCode ?? 'en_US' },
-          ...(message.params && message.params.length > 0
-            ? {
-                body: {
-                  parameters: message.params.map((v) => ({ type: 'text', text: v })),
-                },
-              }
-            : {}),
+          ...(components.length > 0 ? { components } : {}),
         },
       }),
     });

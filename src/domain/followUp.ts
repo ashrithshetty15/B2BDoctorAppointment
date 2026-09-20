@@ -18,6 +18,56 @@ import { formatDateOnly } from '../utils/time';
  * Nothing is attempted and silently dropped.
  */
 
+/**
+ * The payload carried by the reminder's "Book appointment" button.
+ *
+ * A template's quick-reply button sends back whatever payload was supplied at
+ * send time, so the tap can say *which* follow-up it answers. That is what
+ * makes it one tap at a clinic with more than one doctor: without it the bot
+ * would reply "which doctor would you like to see?" to a message the patient
+ * received from a named doctor, and could book them with the wrong one.
+ */
+const PAYLOAD_PREFIX = 'FU:';
+
+export function followUpPayload(appointmentId: string): string {
+  return `${PAYLOAD_PREFIX}${appointmentId}`;
+}
+
+/** The appointment id inside a tap, or null if this is ordinary text. */
+export function parseFollowUpPayload(input: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed.startsWith(PAYLOAD_PREFIX)) return null;
+  const id = trimmed.slice(PAYLOAD_PREFIX.length).trim();
+  return id.length > 0 ? id : null;
+}
+
+/**
+ * The doctor a follow-up tap should book with.
+ *
+ * Scoped by patient, which is the whole security story: the payload reaches us
+ * as inbound text and a patient can type anything, so a guessed or copied
+ * appointment id must not select someone else's doctor or leak that the
+ * appointment exists. Narrowing the query by patientId makes a wrong id
+ * indistinguishable from a missing one — it simply returns null and the
+ * message is handled as ordinary text.
+ */
+export async function doctorForFollowUpTap(
+  appointmentId: string,
+  patientId: string,
+  doctors: { id: string }[],
+): Promise<string | null> {
+  const appointment = await prisma.appointment.findFirst({
+    where: { id: appointmentId, patientId },
+    select: { doctorId: true },
+  });
+  if (!appointment) return null;
+
+  // Still has to be a doctor the clinic offers today. One who has left is not
+  // bookable, and silently honouring the tap would park the patient on a flow
+  // with nobody behind it.
+  return doctors.some((d) => d.id === appointment.doctorId) ? appointment.doctorId : null;
+}
+
 /** Offsets offered as one-tap chips; anything else uses the date field. */
 export const FOLLOW_UP_PRESETS = [
   { key: '1w', days: 7 },

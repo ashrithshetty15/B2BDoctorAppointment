@@ -461,6 +461,31 @@ export async function tokenQueueModule() {
   };
 }
 
+/**
+ * Follow-ups, minus the database.
+ *
+ * `doctorForFollowUpTap` is the security boundary — the payload arrives as
+ * patient-typed text — so it is reimplemented here rather than stubbed to
+ * true, and the journeys can drive a tap with somebody else's id.
+ */
+export async function followUpModule() {
+  const actual = await import('../../domain/followUp');
+  return {
+    ...actual,
+    doctorForFollowUpTap: async (
+      appointmentId: string,
+      patientId: string,
+      doctors: { id: string }[],
+    ) => {
+      const appointment = world.appointments.find(
+        (a) => a.id === appointmentId && a.patientId === patientId,
+      );
+      if (!appointment) return null;
+      return doctors.some((d) => d.id === appointment.doctorId) ? appointment.doctorId : null;
+    },
+  };
+}
+
 export function appointmentsModule() {
   return {
     cancelAppointment: async (appointmentId: string) => {

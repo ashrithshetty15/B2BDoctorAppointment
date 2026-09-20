@@ -4,6 +4,7 @@ import { prisma } from '../../db/prisma';
 import { getMessagingAdapter } from '../../messaging';
 import { sweepChannelHealth } from '../../domain/channelHealth';
 import { outboundChannelFor } from '../../domain/doctors';
+import { followUpPayload } from '../../domain/followUp';
 import { dayBeforeReminderAt, hourBeforeReminderAt } from '../../domain/slots';
 import { t } from '../../i18n/templates';
 import { logger } from '../../utils/logger';
@@ -196,6 +197,9 @@ async function sweepDueFollowUps(): Promise<number> {
         // must be approved in this language or Meta refuses it.
         languageCode: appointment.patient.language === 'KN' ? 'kn' : 'en_US',
         params: [appointment.patient.name ?? '', appointment.doctor.name],
+        // What makes it one tap: the button comes back naming this visit, so
+        // the bot opens booking with this doctor instead of asking which.
+        buttonPayload: followUpPayload(appointment.id),
         ...(channel ? { channelAddress: channel } : {}),
       });
       await prisma.appointment.update({

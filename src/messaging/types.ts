@@ -115,6 +115,14 @@ export interface TemplateMessage {
    * auto-reply relied on before this was configurable.
    */
   languageCode?: string;
+  /**
+   * Payload the template's first quick-reply button sends back when tapped.
+   *
+   * Set per send, so one approved template can carry a different meaning each
+   * time — which is what lets a follow-up reminder's button say which visit it
+   * is following up. Arrives back as the inbound message text.
+   */
+  buttonPayload?: string;
 }
 
 /** Result of a provider webhook GET verification handshake. */

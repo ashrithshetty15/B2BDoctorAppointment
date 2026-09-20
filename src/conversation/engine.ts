@@ -2,6 +2,7 @@ import type { BookingMode, Clinic, Doctor, Language, Patient } from '@prisma/cli
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db/prisma';
 import { outboundChannelForClinic, resolveClinicForChannel } from '../domain/clinics';
+import { doctorForFollowUpTap, parseFollowUpPayload } from '../domain/followUp';
 import { findOrCreatePatient } from '../domain/patients';
 import { t } from '../i18n/templates';
 import type { InboundMessage } from '../messaging/types';
@@ -127,6 +128,17 @@ async function runTurn(
 
   const onboarding = await runOnboarding(baseCtx);
 
+  /**
+   * A tap on a follow-up reminder's button, which is not ordinary input.
+   *
+   * It names the doctor who asked them back, so it settles the choice instead
+   * of asking — the tap has to *be* the whole interaction, or the reminder is
+   * not one tap and the patient can be booked with the wrong doctor at a
+   * practice with several. It then enters the flow already asking to book,
+   * which both TOKEN and SLOT understand.
+   */
+  const followUpTap = await readFollowUpTap(inbound.text, patient.id, doctors);
+
   let result: StepResult;
   const prefix: Reply[] = [];
 
@@ -142,10 +154,10 @@ async function runTurn(
     // Which doctor, before any flow runs — a flow's every branch assumes one.
     const selection = selectDoctor({
       doctors,
-      chosen: doctor,
-      step: session.step,
+      chosen: followUpTap?.doctor ?? doctor,
+      step: followUpTap ? Steps.ENTRY : session.step,
       data: session.data,
-      input: onboarding.enterFlowFresh ? '' : inbound.text,
+      input: onboarding.enterFlowFresh || followUpTap ? '' : inbound.text,
       language,
     });
 
@@ -162,7 +174,14 @@ async function runTurn(
       // Park the patient on a step this flow understands. A doctor switching
       // booking_mode mid-session lands here too, as does a patient arriving
       // from the doctor picker.
-      const ownedStep = flow.owns(session.step) ? session.step : flow.entryStep;
+      // A follow-up tap starts its own conversation: whatever the patient was
+      // last parked on is weeks stale and has nothing to do with the reminder
+      // they just answered.
+      const ownedStep = followUpTap
+        ? flow.entryStep
+        : flow.owns(session.step)
+          ? session.step
+          : flow.entryStep;
       const fresh =
         onboarding.enterFlowFresh || selection.justChosen || ownedStep !== session.step;
 
@@ -172,7 +191,9 @@ async function runTurn(
         patient,
         language,
         step: ownedStep,
-        input: fresh ? '' : inbound.text,
+        // BOOK is what the tap means. Sent as the intent word rather than a
+        // menu number so it survives the menus being renumbered or reordered.
+        input: followUpTap ? 'book' : fresh ? '' : inbound.text,
       });
     }
   }
@@ -194,6 +215,33 @@ async function runTurn(
   await runEffects(result.effects ?? []);
 
   return replies;
+}
+
+/**
+ * Recognise a tap on a follow-up reminder, and say who it is with.
+ *
+ * Returns null for everything else, including a payload that does not resolve
+ * — a stale appointment, a doctor who has since left, or an id a patient made
+ * up. In every one of those cases the message falls through and is handled as
+ * ordinary text, which is the same thing the patient would have got had they
+ * typed "book" themselves.
+ */
+async function readFollowUpTap(
+  text: string,
+  patientId: string,
+  doctors: Doctor[],
+): Promise<{ doctor: Doctor } | null> {
+  const appointmentId = parseFollowUpPayload(text);
+  if (!appointmentId) return null;
+
+  const doctorId = await doctorForFollowUpTap(appointmentId, patientId, doctors);
+  if (!doctorId) {
+    logger.info({ appointmentId }, 'Follow-up tap did not resolve; treating as ordinary input');
+    return null;
+  }
+
+  const doctor = doctors.find((d) => d.id === doctorId);
+  return doctor ? { doctor } : null;
 }
 
 type Selection =
