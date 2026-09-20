@@ -18,7 +18,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "seed": "tsx prisma/seed.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:journeys": "vitest run src/conversation/journeys"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
