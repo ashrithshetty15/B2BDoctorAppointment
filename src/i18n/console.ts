@@ -14,7 +14,12 @@ export interface ConsoleStrings {
   noOneInRoom: string;
   inRoomFor: (mins: string) => string;
   callNext: string;
-  callNextWith: (token: number, name: string) => string;
+  /**
+   * `label` is already "#7" or "03:00 PM" — whichever identifies this patient
+   * at this clinic. It used to take a bare number and prefix "Token", which
+   * read as "Token 0" at every SLOT clinic, where there are no tokens.
+   */
+  callNextWith: (label: string, name: string) => string;
   nobodyWaiting: string;
   waiting: string;
   issuedToday: string;
@@ -243,7 +248,7 @@ const en: ConsoleStrings = {
   noOneInRoom: 'No one in the room',
   inRoomFor: (m) => `In the room ${m}`,
   callNext: 'Call next patient',
-  callNextWith: (t, n) => `Token ${t} · ${n}`,
+  callNextWith: (label, n) => `${label} · ${n}`,
   nobodyWaiting: 'Nobody is waiting',
   waiting: 'Waiting',
   issuedToday: 'Issued today',
@@ -470,7 +475,7 @@ const kn: ConsoleStrings = {
   noOneInRoom: 'ಕೊಠಡಿಯಲ್ಲಿ ಯಾರೂ ಇಲ್ಲ',
   inRoomFor: (m) => `ಕೊಠಡಿಯಲ್ಲಿ ${m}`,
   callNext: 'ಮುಂದಿನ ರೋಗಿಯನ್ನು ಕರೆಯಿರಿ',
-  callNextWith: (t, n) => `ಟೋಕನ್ ${t} · ${n}`,
+  callNextWith: (label, n) => `${label} · ${n}`,
   nobodyWaiting: 'ಯಾರೂ ಕಾಯುತ್ತಿಲ್ಲ',
   waiting: 'ಕಾಯುತ್ತಿದ್ದಾರೆ',
   issuedToday: 'ಇವತ್ತು ನೀಡಿದ್ದು',

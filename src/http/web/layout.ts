@@ -246,6 +246,7 @@ p.sub{color:var(--ink-3);margin:0 0 var(--s4);font-size:var(--t-sm)}
   font-size:var(--t-hero);line-height:.92;font-weight:700;letter-spacing:-.04em;
   font-variant-numeric:tabular-nums;color:var(--ink);
 }
+.hero .token.time{font-size:52px;line-height:1.08;letter-spacing:-.025em}
 .hero .token .hash{font-size:.42em;color:var(--ink-3);font-weight:650;vertical-align:.28em;margin-right:.06em}
 .hero .who{font-size:var(--t-xl);font-weight:600;margin-top:var(--s2);
   overflow-wrap:anywhere}

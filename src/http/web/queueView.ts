@@ -53,8 +53,9 @@ function hero(opts: {
   s: ConsoleStrings;
   language: Language;
   now: Date;
+  timezone: string;
 }): RawHtml {
-  const { serving, s, language, now } = opts;
+  const { serving, s, language, now, timezone } = opts;
 
   if (!serving) {
     return html`
@@ -69,7 +70,14 @@ function hero(opts: {
   return html`
     <section class="hero" aria-live="polite">
       <div class="eyebrow">${s.nowServing}</div>
-      <div class="token"><span class="hash">#</span>${serving.tokenNumber}</div>
+      ${/* A SLOT clinic has no token numbers, and this used to render a bare
+             "#" followed by nothing. What identifies the patient in the room
+             there is their appointment time. */ ''}
+      ${serving.tokenNumber !== null
+        ? html`<div class="token"><span class="hash">#</span>${serving.tokenNumber}</div>`
+        : html`<div class="token time">
+            ${serving.slotStart ? timeOnly(serving.slotStart, timezone) : '—'}
+          </div>`}
       <div class="who">${personName(serving.patient.name, language)}</div>
       ${since ? html`<div class="meta">${s.inRoomFor(elapsed(since, language, now))}</div>` : ''}
     </section>
@@ -94,8 +102,9 @@ function primaryCta(opts: {
   s: ConsoleStrings;
   language: Language;
   csrfToken: string;
+  timezone: string;
 }): RawHtml {
-  const { serving, next, s, language, csrfToken } = opts;
+  const { serving, next, s, language, csrfToken, timezone } = opts;
 
   if (serving) {
     return html`
@@ -106,7 +115,7 @@ function primaryCta(opts: {
           <span>
             <span class="lead">${s.finishCurrent}</span>
             <span class="next"
-              >${s.callNextWith(serving.tokenNumber ?? 0, personName(serving.patient.name, language))}</span
+              >${s.callNextWith(badgeFor(serving, timezone), personName(serving.patient.name, language))}</span
             >
           </span>
           <span class="chev" aria-hidden="true">✓</span>
@@ -133,7 +142,7 @@ function primaryCta(opts: {
       <button class="cta" type="submit">
         <span>
           <span class="lead">${s.callNext}</span>
-          <span class="next">${s.callNextWith(next.tokenNumber ?? 0, personName(next.patient.name, language))}</span>
+          <span class="next">${s.callNextWith(badgeFor(next, timezone), personName(next.patient.name, language))}</span>
         </span>
         <span class="chev" aria-hidden="true">→</span>
       </button>
@@ -493,8 +502,8 @@ export function queueBody(opts: {
   return html`
     <div class="queue-2col">
       <div class="col-live">
-        ${hero({ serving, s, language, now })}
-        ${primaryCta({ serving, next, s, language, csrfToken })}
+        ${hero({ serving, s, language, now, timezone: doctor.timezone })}
+        ${primaryCta({ serving, next, s, language, csrfToken, timezone: doctor.timezone })}
         ${stats({ queue, avgWaitMins, s, language })}
         ${queue.delayMins > 0
           ? html`<div class="caveat">${s.delayActive(queue.delayMins)}</div>`
