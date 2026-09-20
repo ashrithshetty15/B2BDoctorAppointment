@@ -385,7 +385,7 @@ const en: ConsoleStrings = {
   followUpFeeLabel: 'Your consult fee',
   followUpWorth: (amount) => `About ${amount} of return visits`,
   followUpWorthNote:
-    'Counts a patient who tapped the reminder and then booked, not counting cancellations. Someone who phoned instead is not counted, so the real figure is a little higher.',
+    'Counts a patient who tapped the reminder and booked within 30 days, not counting cancellations. Someone who phoned instead is not counted, so the real figure is a little higher.',
   followUpNotSending: 'Follow-up reminders cannot send yet: WhatsApp needs an approved template for messages sent more than 24 hours after a patient last wrote to you. Until then, please call these patients.',
   followUpDueOn: (date) => `Due ${date}`,
   followUpVisited: (date) => `Seen ${date}`,
@@ -612,7 +612,7 @@ const kn: ConsoleStrings = {
   followUpFeeLabel: 'ನಿಮ್ಮ ಸಲಹಾ ಶುಲ್ಕ',
   followUpWorth: (amount) => `ಸುಮಾರು ${amount} ಮೌಲ್ಯದ ಮರು ಭೇಟಿಗಳು`,
   followUpWorthNote:
-    'ನೆನಪು ಒತ್ತಿ ನಂತರ ಬುಕ್ ಮಾಡಿದವರನ್ನು ಮಾತ್ರ ಎಣಿಸಲಾಗಿದೆ; ರದ್ದಾದವನ್ನು ಬಿಡಲಾಗಿದೆ. ಬದಲಿಗೆ ಫೋನ್ ಮಾಡಿದವರು ಇದರಲ್ಲಿ ಇಲ್ಲ, ಹಾಗಾಗಿ ನಿಜವಾದ ಸಂಖ್ಯೆ ಸ್ವಲ್ಪ ಹೆಚ್ಚು.',
+    'ನೆನಪು ಒತ್ತಿ 30 ದಿನಗಳ ಒಳಗೆ ಬುಕ್ ಮಾಡಿದವರನ್ನು ಮಾತ್ರ ಎಣಿಸಲಾಗಿದೆ; ರದ್ದಾದವನ್ನು ಬಿಡಲಾಗಿದೆ. ಬದಲಿಗೆ ಫೋನ್ ಮಾಡಿದವರು ಇದರಲ್ಲಿ ಇಲ್ಲ, ಹಾಗಾಗಿ ನಿಜವಾದ ಸಂಖ್ಯೆ ಸ್ವಲ್ಪ ಹೆಚ್ಚು.',
   followUpNotSending: 'ಮರು ಭೇಟಿಯ ನೆನಪು ಇನ್ನೂ ಕಳುಹಿಸಲು ಆಗುವುದಿಲ್ಲ: ರೋಗಿ ಕೊನೆಯ ಬಾರಿ ಬರೆದು 24 ಗಂಟೆ ಕಳೆದ ಮೇಲೆ ಸಂದೇಶ ಕಳುಹಿಸಲು ವಾಟ್ಸಾಪ್‌ಗೆ ಅನುಮೋದಿತ ಟೆಂಪ್ಲೇಟ್ ಬೇಕು. ಅಲ್ಲಿಯವರೆಗೆ ಈ ರೋಗಿಗಳಿಗೆ ಫೋನ್ ಮಾಡಿ.',
   followUpDueOn: (date) => `${date} ಕ್ಕೆ ಬರಬೇಕು`,
   followUpVisited: (date) => `${date} ರಂದು ನೋಡಿದ್ದು`,

@@ -159,6 +159,24 @@ async function sweepDueReminders(): Promise<number> {
 }
 
 /**
+ * How overdue a follow-up may be and still be worth messaging about.
+ *
+ * There was no floor at all, which meant a follow-up set eight months ago and
+ * never sent — because no template was configured, which is how this feature
+ * sat for weeks — counted as due today. The day a template is approved, every
+ * one of those would go out at 200 a sweep.
+ *
+ * The console worklist deliberately keeps no such floor: the desk should still
+ * see an old follow-up and be able to phone. It is the surprise *message* about
+ * a visit from last winter that we are preventing, not the record of it.
+ */
+const FOLLOW_UP_STALE_DAYS = 30;
+
+function staleFollowUpFloor(today: Date): Date {
+  return new Date(today.getTime() - FOLLOW_UP_STALE_DAYS * 86_400_000);
+}
+
+/**
  * Send follow-up reminders that have come due.
  *
  * Rides the existing 10-minute sweep rather than scheduling delayed jobs: a
@@ -172,7 +190,7 @@ async function sweepDueReminders(): Promise<number> {
  * retry five times, drop it, and mark nothing: the clinic would believe patients
  * had been reminded when none had.
  */
-async function sweepDueFollowUps(): Promise<number> {
+export async function sweepDueFollowUps(): Promise<number> {
   const templateName = env.WHATSAPP_FOLLOWUP_TEMPLATE;
   if (!templateName) return 0;
 
@@ -181,8 +199,18 @@ async function sweepDueFollowUps(): Promise<number> {
 
   const today = new Date();
   const due = await prisma.appointment.findMany({
-    where: { followUpOn: { lte: today }, followUpSentAt: null },
+    where: {
+      followUpOn: { lte: today, gte: staleFollowUpFloor(today) },
+      followUpSentAt: null,
+      // The visit has to have actually happened. Without this a patient who
+      // cancelled, or never turned up, was still messaged by name about a
+      // follow-up to a consultation they never had.
+      status: { notIn: ['CANCELLED', 'NO_SHOW'] },
+    },
     include: { patient: true, doctor: { include: { clinic: true } } },
+    // Oldest first, and deterministic. With no ordering and 200 rows a sweep,
+    // one clinic's backlog could take every sweep and starve the rest.
+    orderBy: { followUpOn: 'asc' },
     take: 200,
   });
 

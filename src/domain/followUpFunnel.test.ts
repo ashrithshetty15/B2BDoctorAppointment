@@ -105,6 +105,50 @@ describe('the follow-up funnel', () => {
     expect((await followUpFunnel('doc-1', SINCE)).booked).toBe(0);
   });
 
+  /**
+   * Unbounded, a tap in September and a booking in December counted — which is
+   * not a claim that survives a doctor asking how we know the reminder did it.
+   */
+  it('counts a booking made just inside the 30-day window', async () => {
+    const justInside = new Date(TAP.getTime() + 29 * 86_400_000);
+    whenPrismaReturns(
+      [{ id: 'visit-1', patientId: 'pat-1', followUpTappedAt: TAP }],
+      [{ id: 'new-1', patientId: 'pat-1', createdAt: justInside }],
+    );
+
+    expect((await followUpFunnel('doc-1', SINCE)).booked).toBe(1);
+  });
+
+  it('does not count a booking made just outside it', async () => {
+    const justOutside = new Date(TAP.getTime() + 31 * 86_400_000);
+    whenPrismaReturns(
+      [{ id: 'visit-1', patientId: 'pat-1', followUpTappedAt: TAP }],
+      [{ id: 'new-1', patientId: 'pat-1', createdAt: justOutside }],
+    );
+
+    const funnel = await followUpFunnel('doc-1', SINCE);
+    expect(funnel.tapped).toBe(1);
+    expect(funnel.booked).toBe(0);
+  });
+
+  /** The window is per tap, not measured from the earliest one in the batch. */
+  it('measures the window from each patient s own tap', async () => {
+    const earlyTap = new Date('2026-07-01T00:00:00Z');
+    whenPrismaReturns(
+      [
+        { id: 'v1', patientId: 'pat-1', followUpTappedAt: earlyTap },
+        { id: 'v2', patientId: 'pat-2', followUpTappedAt: TAP },
+      ],
+      [
+        // Inside pat-2's window, but months after pat-1's.
+        { id: 'n1', patientId: 'pat-1', createdAt: new Date(TAP.getTime() + 86_400_000) },
+        { id: 'n2', patientId: 'pat-2', createdAt: new Date(TAP.getTime() + 86_400_000) },
+      ],
+    );
+
+    expect((await followUpFunnel('doc-1', SINCE)).booked).toBe(1);
+  });
+
   it('does not credit one patient with another patient s booking', async () => {
     whenPrismaReturns(
       [{ id: 'visit-1', patientId: 'pat-1', followUpTappedAt: TAP }],

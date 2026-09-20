@@ -257,7 +257,12 @@ export interface FollowUpFunnel {
  *   finds it modest rather than inflated.
  * - Cancelled bookings are excluded, because this figure gets multiplied by a
  *   consult fee and a cancelled visit earns nothing.
+ * - And the booking has to follow the tap reasonably closely. Unbounded, a tap
+ *   in September and a booking in December counted as a conversion, which is
+ *   not a claim that survives a doctor asking how we know.
  */
+const ATTRIBUTION_DAYS = 30;
+const ATTRIBUTION_MS = ATTRIBUTION_DAYS * 86_400_000;
 export async function followUpFunnel(doctorId: string, since: Date): Promise<FollowUpFunnel> {
   const sentRows = await prisma.appointment.findMany({
     where: { doctorId, followUpSentAt: { gte: since } },
@@ -278,24 +283,33 @@ export async function followUpFunnel(doctorId: string, since: Date): Promise<Fol
     tappedRows[0]!.followUpTappedAt,
   );
 
+  const latestTap = tappedRows.reduce(
+    (max, r) => (r.followUpTappedAt > max ? r.followUpTappedAt : max),
+    tappedRows[0]!.followUpTappedAt,
+  );
+
   const candidates = await prisma.appointment.findMany({
     where: {
       doctorId,
       patientId: { in: [...new Set(tappedRows.map((r) => r.patientId))] },
-      createdAt: { gte: earliestTap },
+      // Bounded at both ends, so the database returns only rows that could
+      // possibly attribute to some tap rather than every booking since.
+      createdAt: { gte: earliestTap, lte: new Date(latestTap.getTime() + ATTRIBUTION_MS) },
       status: { notIn: ['CANCELLED'] },
     },
     select: { id: true, patientId: true, createdAt: true },
   });
 
-  const booked = tappedRows.filter((r) =>
-    candidates.some(
+  const booked = tappedRows.filter((r) => {
+    const tappedAt = r.followUpTappedAt.getTime();
+    return candidates.some(
       (c) =>
         c.patientId === r.patientId &&
         c.id !== r.id &&
-        c.createdAt.getTime() >= r.followUpTappedAt.getTime(),
-    ),
-  ).length;
+        c.createdAt.getTime() >= tappedAt &&
+        c.createdAt.getTime() <= tappedAt + ATTRIBUTION_MS,
+    );
+  }).length;
 
   return { sent: sentRows.length, tapped: tappedRows.length, booked, since };
 }
