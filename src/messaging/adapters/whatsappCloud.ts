@@ -435,5 +435,31 @@ function toSections(rows: ListRow[]) {
     else sections.push({ ...(r.section ? { title: r.section.slice(0, LIST_TITLE_MAX) } : {}), rows: [row] });
   }
 
+  /**
+   * Meta requires a title on every section once there is more than one, and
+   * rejects the whole message otherwise — so a single untitled section among
+   * titled ones costs the patient the entire reply, not just its heading.
+   *
+   * That is exactly what happened: the time picker sectioned its times by
+   * Morning/Afternoon/Evening but appended "More times" with no section, and
+   * every patient who chose a day got silence. The date list was unaffected
+   * because a lone untitled section is legal.
+   *
+   * Rather than invent a heading the caller never wrote — in a file that has no
+   * language to write it in — untitled rows join the section above them. The
+   * row's own title still says what it is.
+   */
+  if (sections.length > 1) {
+    for (let i = sections.length - 1; i >= 0; i -= 1) {
+      if (sections[i]!.title !== undefined) continue;
+      // Fold into the previous section, or the next one when it leads.
+      const host = sections[i - 1] ?? sections[i + 1];
+      if (!host) continue;
+      if (sections[i - 1]) host.rows.push(...sections[i]!.rows);
+      else host.rows.unshift(...sections[i]!.rows);
+      sections.splice(i, 1);
+    }
+  }
+
   return sections;
 }

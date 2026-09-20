@@ -13,6 +13,7 @@ vi.mock('../utils/logger', () => ({
 }));
 
 import { WhatsAppCloudAdapter } from './adapters/whatsappCloud';
+import type { ListRow } from './types';
 
 const whatsappCloudAdapter = new WhatsAppCloudAdapter();
 
@@ -185,14 +186,57 @@ describe('list sections', () => {
     });
 
     const sections = (sentBody as any).interactive.action.sections;
-    expect(sections.map((x: any) => x.title)).toEqual([
-      'Morning',
-      'Afternoon',
-      'Evening',
-      undefined,
-    ]);
+    expect(sections.map((x: any) => x.title)).toEqual(['Morning', 'Afternoon', 'Evening']);
     expect(sections[0].rows.map((r: any) => r.id)).toEqual(['1', '2']);
-    expect(sections.at(-1).rows[0].id).toBe('more');
+    // The unsectioned "More times" row joins the section above it rather than
+    // forming a fourth, untitled one.
+    expect(sections.at(-1).rows.map((r: any) => r.id)).toEqual(['4', 'more']);
+  });
+
+  /**
+   * THE ONE THAT MUST NOT ROT.
+   *
+   * Meta rejects the entire message if any section lacks a title once there is
+   * more than one, so this is not a cosmetic rule: the patient gets nothing at
+   * all. A clinic reported exactly that — pick a day, and the time list never
+   * arrives — and the test that should have caught it instead asserted the
+   * fourth section's title was `undefined`, pinning the bug in place. It was
+   * checking the payload matched our own implementation, not that Meta would
+   * accept it.
+   */
+  it('never emits an untitled section alongside titled ones', async () => {
+    const cases: ListRow[][] = [
+      rowsWithSections,
+      // Untitled row leading, which has no section above it to join.
+      [
+        { id: 'a', title: 'Any time' },
+        { id: 'b', title: '09:00 AM', section: 'Morning' },
+      ],
+      // Untitled rows on both ends.
+      [
+        { id: 'a', title: 'Any time' },
+        { id: 'b', title: '09:00 AM', section: 'Morning' },
+        { id: 'c', title: 'More times' },
+      ],
+    ];
+
+    for (const rows of cases) {
+      await whatsappCloudAdapter.sendText({
+        to: '919876543210',
+        text: 'Available times',
+        list: { buttonText: 'Choose a time', rows },
+      });
+
+      const sections = (sentBody as any).interactive.action.sections;
+      if (sections.length > 1) {
+        expect(sections.every((x: any) => typeof x.title === 'string' && x.title.length > 0)).toBe(
+          true,
+        );
+      }
+      // And nothing may be dropped on the way.
+      const kept = sections.flatMap((x: any) => x.rows.map((r: any) => r.id));
+      expect(kept.sort()).toEqual(rows.map((r) => r.id).sort());
+    }
   });
 
   /** Lists that predate sections must render exactly as they always did. */
