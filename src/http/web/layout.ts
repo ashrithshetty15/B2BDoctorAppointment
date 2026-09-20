@@ -667,6 +667,35 @@ details.overflow .menu-items button{width:100%;text-align:left}
 }
 .sheet-current::before{content:"✓";margin-right:var(--s2)}
 .sheet-rule{border-top:1px solid var(--line);margin:var(--s2) 0}
+
+/* Follow-up results: sent -> tapped -> came back, and what that is worth. */
+.funnel .fsteps{display:flex;gap:var(--s2);margin:var(--s3) 0;flex-wrap:wrap}
+.funnel .fstep{
+  flex:1 1 92px;min-width:92px;padding:var(--s2);border-radius:var(--r-md);
+  background:var(--bg);display:flex;flex-direction:column;gap:2px;
+}
+.funnel .fstep.win{background:var(--ok-soft)}
+.funnel .fnum{
+  font-size:var(--t-xl);font-weight:650;line-height:1.1;font-variant-numeric:tabular-nums;
+}
+.funnel .fstep.win .fnum{color:var(--ok)}
+.funnel .flabel{font-size:var(--t-xs);color:var(--muted)}
+.funnel .fworth{
+  border-top:1px solid var(--line);padding-top:var(--s3);
+  display:flex;align-items:center;gap:var(--s2);flex-wrap:wrap;
+}
+.funnel .fworth label{font-size:var(--t-sm);color:var(--muted)}
+.funnel .feewrap{
+  display:inline-flex;align-items:center;gap:4px;background:var(--surface);
+  border:1px solid var(--line);border-radius:var(--r-sm);padding:0 var(--s2);
+}
+.funnel .feewrap input{
+  width:5.5em;border:0;padding:10px 0;font:inherit;background:transparent;color:inherit;
+}
+.funnel .feewrap input:focus{outline:none}
+.funnel .feewrap:focus-within{outline:2px solid var(--accent);outline-offset:1px}
+.funnel .fvalue{flex:1 1 100%;margin:0;font-size:var(--t-lg);font-weight:600;color:var(--ok)}
+.funnel .fnote{margin:var(--s2) 0 0;font-size:var(--t-xs);color:var(--muted)}
 `;
 
 export interface NavLink {

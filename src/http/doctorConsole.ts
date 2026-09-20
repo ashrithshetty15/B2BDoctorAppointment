@@ -29,6 +29,7 @@ import {
   clearFollowUp,
   dueFollowUps,
   followUpCounts,
+  followUpFunnel,
   presetDays,
   setFollowUp,
   upcomingFollowUps,
@@ -1153,10 +1154,16 @@ doctorConsoleRouter.post(
 doctorConsoleRouter.get('/app/followups', requireDoctorAuth, async (req, res) => {
   const doctor = req.doctor!;
   const today = clinicToday(doctor.timezone);
-  const [due, upcoming, queueCount] = await Promise.all([
+  // Long enough that a clinic sending a handful a week has something to look
+  // at, short enough that the figure describes how the clinic works now.
+  const FUNNEL_DAYS = 90;
+  const since = new Date(Date.now() - FUNNEL_DAYS * 86_400_000);
+
+  const [due, upcoming, queueCount, funnel] = await Promise.all([
     dueFollowUps(doctor.id, today),
     upcomingFollowUps(doctor.id, today),
     waitingCount(doctor.id, doctor.timezone),
+    followUpFunnel(doctor.id, since),
   ]);
 
   const s = c(doctor.defaultLanguage);
@@ -1174,6 +1181,8 @@ doctorConsoleRouter.get('/app/followups', requireDoctorAuth, async (req, res) =>
       // Follow-ups fall due long after the 24-hour free-form window, so they can
       // only ever go as an approved template.
       canSend: Boolean(env.WHATSAPP_FOLLOWUP_TEMPLATE),
+      funnel,
+      funnelDays: FUNNEL_DAYS,
       queueCount,
       csrfToken: req.csrfToken ?? '',
       ...(typeof req.query['flash'] === 'string' ? { flash: req.query['flash'] } : {}),

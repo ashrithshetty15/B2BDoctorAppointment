@@ -55,6 +55,9 @@ function pastVisitWith(doctorIndex: number) {
     slotStart: new Date('2026-09-07T04:00:00Z'),
     tokenNumber: null,
     cancelledAt: null,
+    followUpOn: new Date('2026-09-21T00:00:00Z'),
+    followUpSentAt: new Date('2026-09-21T03:00:00Z'),
+    followUpTappedAt: null,
   } as unknown as (typeof world.appointments)[number];
   world.appointments.push(appointment);
   return appointment;
@@ -77,6 +80,20 @@ describe('answering a follow-up reminder', () => {
     expect(tapped.replies[0]).toContain('Which day would you like to come in?');
     // Never asked. That is the feature.
     expect(tapped.replies.join()).not.toContain('Which doctor');
+  });
+
+  /** The conversion funnel has to be able to see the tap that happened. */
+  it('records the tap, once, however many times they press it', async () => {
+    await arrive();
+    await say('1');
+    const visit = pastVisitWith(1);
+
+    await say(followUpPayload(visit.id));
+    const first = visit.followUpTappedAt;
+    await say(followUpPayload(visit.id));
+
+    expect(first).toBeInstanceOf(Date);
+    expect(visit.followUpTappedAt).toEqual(first);
   });
 
   it('books with that doctor, not the one they last spoke to', async () => {

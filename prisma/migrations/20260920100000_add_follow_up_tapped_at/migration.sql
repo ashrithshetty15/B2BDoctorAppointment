@@ -1,0 +1,16 @@
+-- When the patient tapped "Book appointment" on their follow-up reminder.
+--
+-- The missing half of the funnel. followUpSentAt says a reminder went out;
+-- nothing said whether it worked, so a clinic being asked to pay for this had
+-- to take the value on faith.
+--
+-- A tap is the honest unit of attribution: it names the exact visit that caused
+-- it, which no other signal here does. A booking is then counted when it is
+-- made after the tap by the same patient with the same doctor — under-claiming
+-- rather than over-claiming, which is the right bias for a number a doctor is
+-- shown as revenue.
+--
+-- Additive and nullable, so the running container ignores the column until the
+-- deploy that reads it. NULL means "not tapped", which is true of every row
+-- that pre-dates this.
+ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "follow_up_tapped_at" TIMESTAMP(3);

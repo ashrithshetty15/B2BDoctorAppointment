@@ -2,7 +2,7 @@ import type { BookingMode, Clinic, Doctor, Language, Patient } from '@prisma/cli
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db/prisma';
 import { outboundChannelForClinic, resolveClinicForChannel } from '../domain/clinics';
-import { doctorForFollowUpTap, parseFollowUpPayload } from '../domain/followUp';
+import { doctorForFollowUpTap, markFollowUpTapped, parseFollowUpPayload } from '../domain/followUp';
 import { findOrCreatePatient } from '../domain/patients';
 import { t } from '../i18n/templates';
 import type { InboundMessage } from '../messaging/types';
@@ -137,7 +137,12 @@ async function runTurn(
    * practice with several. It then enters the flow already asking to book,
    * which both TOKEN and SLOT understand.
    */
-  const followUpTap = await readFollowUpTap(inbound.text, patient.id, doctors);
+  const followUpTap = await readFollowUpTap(
+    inbound.text,
+    patient.id,
+    doctors,
+    inbound.receivedAt,
+  );
 
   let result: StepResult;
   const prefix: Reply[] = [];
@@ -230,6 +235,7 @@ async function readFollowUpTap(
   text: string,
   patientId: string,
   doctors: Doctor[],
+  at: Date,
 ): Promise<{ doctor: Doctor } | null> {
   const appointmentId = parseFollowUpPayload(text);
   if (!appointmentId) return null;
@@ -241,7 +247,15 @@ async function readFollowUpTap(
   }
 
   const doctor = doctors.find((d) => d.id === doctorId);
-  return doctor ? { doctor } : null;
+  if (!doctor) return null;
+
+  // Recorded here rather than after the booking, because the tap is the thing
+  // that happened: a patient who taps and then changes their mind still
+  // answered the reminder, and a funnel that only counted completed bookings
+  // could never show the clinic where it was losing them.
+  await markFollowUpTapped(appointmentId, at);
+
+  return { doctor };
 }
 
 type Selection =

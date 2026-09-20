@@ -1,7 +1,12 @@
 import type { Doctor } from '@prisma/client';
 import { c } from '../../i18n/console';
-import { FOLLOW_UP_PRESETS, type FollowUpRow, presetLabel } from '../../domain/followUp';
-import { type RawHtml, html, page } from './layout';
+import {
+  FOLLOW_UP_PRESETS,
+  type FollowUpFunnel,
+  type FollowUpRow,
+  presetLabel,
+} from '../../domain/followUp';
+import { raw, type RawHtml, html, page } from './layout';
 import { doctorBottomNav, doctorHeader } from './nav';
 
 /**
@@ -126,12 +131,99 @@ function followUpRow(row: FollowUpRow, dueLabel: string, seenLabel: string): Raw
   `;
 }
 
+/**
+ * Did the reminders work?
+ *
+ * Three numbers narrowing to one, because the argument for this feature is a
+ * sentence — we sent 40, 18 people tapped, 14 came back — and a clinic owner
+ * can check the last of those against their own day.
+ *
+ * The fee is a field rather than a stored setting. It is the doctor's own
+ * number, it differs by consult type, and asking them to type it once is
+ * cheaper than a settings row, a migration and a form. It multiplies in the
+ * browser, so the figure moves as they type — which is what makes it land in a
+ * demo.
+ */
+function funnelPanel(
+  funnel: FollowUpFunnel,
+  days: number,
+  s: ReturnType<typeof c>,
+): RawHtml {
+  if (funnel.sent === 0) {
+    return html`
+      <div class="card">
+        <h3>${s.followUpResults}</h3>
+        <p class="sub">${s.followUpNoneYet}</p>
+      </div>
+    `;
+  }
+
+  return html`
+    <div class="card funnel">
+      <h3>${s.followUpResults}</h3>
+      <p class="sub">${s.followUpResultsSub(days)}</p>
+
+      <div class="fsteps">
+        <div class="fstep">
+          <span class="fnum">${String(funnel.sent)}</span>
+          <span class="flabel">${s.followUpSent}</span>
+        </div>
+        <div class="fstep">
+          <span class="fnum">${String(funnel.tapped)}</span>
+          <span class="flabel">${s.followUpTapped}</span>
+        </div>
+        <div class="fstep win">
+          <span class="fnum">${String(funnel.booked)}</span>
+          <span class="flabel">${s.followUpBooked}</span>
+        </div>
+      </div>
+
+      <div class="fworth">
+        <label for="fee">${s.followUpFeeLabel}</label>
+        <span class="feewrap">
+          <span aria-hidden="true">₹</span>
+          <input id="fee" type="number" min="0" step="50" value="300" inputmode="numeric" />
+        </span>
+        <p
+          class="fvalue"
+          id="worth"
+          data-booked="${String(funnel.booked)}"
+          data-template="${s.followUpWorth('{}')}"
+        ></p>
+      </div>
+
+      <p class="fnote">${s.followUpWorthNote}</p>
+    </div>
+  `;
+}
+
+/** Formats as Indian rupees: 1,20,000 rather than 120,000. */
+const FUNNEL_SCRIPT = `
+(function () {
+  var fee = document.getElementById('fee');
+  var out = document.getElementById('worth');
+  if (!fee || !out) return;
+  var booked = Number(out.getAttribute('data-booked')) || 0;
+  var template = out.getAttribute('data-template') || '';
+  function render() {
+    var amount = booked * (Number(fee.value) || 0);
+    var money = '\\u20B9' + amount.toLocaleString('en-IN');
+    out.textContent = template.replace('{}', money);
+  }
+  fee.addEventListener('input', render);
+  render();
+})();
+`;
+
 export function followUpsPage(opts: {
   doctor: Doctor;
   due: (FollowUpRow & { dueLabel: string; seenLabel: string })[];
   upcoming: (FollowUpRow & { dueLabel: string; seenLabel: string })[];
   /** False until an approved WhatsApp template is configured. */
   canSend: boolean;
+  /** Sent, tapped, booked — over the window below. */
+  funnel: FollowUpFunnel;
+  funnelDays: number;
   queueCount: number;
   csrfToken: string;
   flash?: string;
@@ -145,6 +237,8 @@ export function followUpsPage(opts: {
       ${doctorHeader(nav)}
       <main>
         ${opts.flash ? html`<div class="ok">${opts.flash}</div>` : ''}
+
+        ${funnelPanel(opts.funnel, opts.funnelDays, s)}
 
         ${opts.canSend
           ? ''
@@ -184,5 +278,8 @@ export function followUpsPage(opts: {
       </main>
       ${doctorBottomNav(nav)}
     `,
+    html`<script>
+      ${raw(FUNNEL_SCRIPT)}
+    </script>`,
   );
 }

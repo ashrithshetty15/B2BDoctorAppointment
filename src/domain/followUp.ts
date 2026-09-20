@@ -214,6 +214,92 @@ export function isDue(dueOn: Date, today: Date): boolean {
   return formatDateOnly(dueOn) <= formatDateOnly(today);
 }
 
+/**
+ * Record that the patient tapped the reminder's button.
+ *
+ * Stamped once. A patient who taps the same reminder twice — easy to do, the
+ * message stays in their chat forever — is one person answering one reminder,
+ * and counting it twice would inflate the only number a doctor is asked to
+ * trust.
+ */
+export async function markFollowUpTapped(appointmentId: string, at: Date): Promise<void> {
+  await prisma.appointment.updateMany({
+    where: { id: appointmentId, followUpTappedAt: null },
+    data: { followUpTappedAt: at },
+  });
+}
+
+export interface FollowUpFunnel {
+  /** Reminders actually delivered to a patient in the window. */
+  sent: number;
+  /** Of those, the ones whose button was tapped. */
+  tapped: number;
+  /** Of those, the ones that became a booking that still stands. */
+  booked: number;
+  since: Date;
+}
+
+/**
+ * Did the reminders work?
+ *
+ * Three numbers, narrowing: sent, tapped, booked. The clinic is being asked to
+ * believe that a follow-up reminder brings patients back, and until now nothing
+ * here could tell them whether it had.
+ *
+ * A booking counts when the same patient books with the same doctor *after*
+ * tapping, and that booking has not been cancelled. Two deliberate choices in
+ * that sentence:
+ *
+ * - The tap is what attribution hangs on, because it names the visit that
+ *   caused it. A patient who gets the reminder and telephones instead is not
+ *   counted, and that is the right way to be wrong: the number under-claims
+ *   rather than over-claims, so a doctor checking it against their own day
+ *   finds it modest rather than inflated.
+ * - Cancelled bookings are excluded, because this figure gets multiplied by a
+ *   consult fee and a cancelled visit earns nothing.
+ */
+export async function followUpFunnel(doctorId: string, since: Date): Promise<FollowUpFunnel> {
+  const sentRows = await prisma.appointment.findMany({
+    where: { doctorId, followUpSentAt: { gte: since } },
+    select: { id: true, patientId: true, followUpTappedAt: true },
+  });
+
+  const tappedRows = sentRows.filter(
+    (r): r is typeof r & { followUpTappedAt: Date } => r.followUpTappedAt !== null,
+  );
+
+  if (tappedRows.length === 0) {
+    return { sent: sentRows.length, tapped: 0, booked: 0, since };
+  }
+
+  // One query for every candidate booking, rather than one per follow-up.
+  const earliestTap = tappedRows.reduce(
+    (min, r) => (r.followUpTappedAt < min ? r.followUpTappedAt : min),
+    tappedRows[0]!.followUpTappedAt,
+  );
+
+  const candidates = await prisma.appointment.findMany({
+    where: {
+      doctorId,
+      patientId: { in: [...new Set(tappedRows.map((r) => r.patientId))] },
+      createdAt: { gte: earliestTap },
+      status: { notIn: ['CANCELLED'] },
+    },
+    select: { id: true, patientId: true, createdAt: true },
+  });
+
+  const booked = tappedRows.filter((r) =>
+    candidates.some(
+      (c) =>
+        c.patientId === r.patientId &&
+        c.id !== r.id &&
+        c.createdAt.getTime() >= r.followUpTappedAt.getTime(),
+    ),
+  ).length;
+
+  return { sent: sentRows.length, tapped: tappedRows.length, booked, since };
+}
+
 /** Counts for the console badge, in one round trip. */
 export async function followUpCounts(
   doctor: Doctor,

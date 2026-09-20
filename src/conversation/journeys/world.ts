@@ -483,6 +483,12 @@ export async function followUpModule() {
       if (!appointment) return null;
       return doctors.some((d) => d.id === appointment.doctorId) ? appointment.doctorId : null;
     },
+    // Stamped once: tapping the same reminder twice is one person answering
+    // one reminder, and counting it twice would inflate the conversion figure.
+    markFollowUpTapped: async (appointmentId: string, at: Date) => {
+      const appointment = world.appointments.find((a) => a.id === appointmentId);
+      if (appointment && !appointment.followUpTappedAt) appointment.followUpTappedAt = at;
+    },
   };
 }
 

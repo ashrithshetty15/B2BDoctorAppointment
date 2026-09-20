@@ -298,6 +298,9 @@ model Appointment {
   /// configured, these stay pending and visible in the console so the desk can
   /// phone instead; nothing is silently dropped.
   followUpSentAt DateTime? @map("follow_up_sent_at")
+  /// When the patient tapped "Book appointment" on that reminder. The half of
+  /// the funnel that says whether the reminder actually worked.
+  followUpTappedAt DateTime? @map("follow_up_tapped_at")
 
   /// Last queue position pushed to this patient — used to suppress no-op updates.
   lastNotifiedPosition Int? @map("last_notified_position")

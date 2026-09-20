@@ -153,6 +153,16 @@ export interface ConsoleStrings {
   followUpPending: string;
   followUpSentOn: (date: string) => string;
   followUpNotSending: string;
+  /** Did the reminders work? Three numbers, narrowing. */
+  followUpResults: string;
+  followUpResultsSub: (days: number) => string;
+  followUpSent: string;
+  followUpTapped: string;
+  followUpBooked: string;
+  followUpNoneYet: string;
+  followUpFeeLabel: string;
+  followUpWorth: (amount: string) => string;
+  followUpWorthNote: string;
   followUpDueOn: (date: string) => string;
   followUpVisited: (date: string) => string;
   orPickDate: string;
@@ -366,6 +376,16 @@ const en: ConsoleStrings = {
   noFollowUps: 'No follow-ups yet. Set one while you are with a patient.',
   followUpPending: 'Not sent yet',
   followUpSentOn: (date) => `Reminded ${date}`,
+  followUpResults: 'Did the reminders work?',
+  followUpResultsSub: (days) => `Last ${days} days`,
+  followUpSent: 'Reminders sent',
+  followUpTapped: 'Tapped to book',
+  followUpBooked: 'Came back',
+  followUpNoneYet: 'Nothing to show yet — this fills in once reminders start going out.',
+  followUpFeeLabel: 'Your consult fee',
+  followUpWorth: (amount) => `About ${amount} of return visits`,
+  followUpWorthNote:
+    'Counts a patient who tapped the reminder and then booked, not counting cancellations. Someone who phoned instead is not counted, so the real figure is a little higher.',
   followUpNotSending: 'Follow-up reminders cannot send yet: WhatsApp needs an approved template for messages sent more than 24 hours after a patient last wrote to you. Until then, please call these patients.',
   followUpDueOn: (date) => `Due ${date}`,
   followUpVisited: (date) => `Seen ${date}`,
@@ -583,6 +603,16 @@ const kn: ConsoleStrings = {
   noFollowUps: 'ಇನ್ನೂ ಯಾವುದೇ ಮರು ಭೇಟಿ ಇಲ್ಲ. ರೋಗಿಯ ಜೊತೆ ಇರುವಾಗಲೇ ಗೊತ್ತುಮಾಡಿ.',
   followUpPending: 'ಇನ್ನೂ ಕಳುಹಿಸಿಲ್ಲ',
   followUpSentOn: (date) => `${date} ರಂದು ನೆನಪಿಸಲಾಗಿದೆ`,
+  followUpResults: 'ನೆನಪುಗಳು ಕೆಲಸ ಮಾಡಿದವೇ?',
+  followUpResultsSub: (days) => `ಕಳೆದ ${days} ದಿನಗಳು`,
+  followUpSent: 'ಕಳುಹಿಸಿದ ನೆನಪುಗಳು',
+  followUpTapped: 'ಬುಕ್ ಮಾಡಲು ಒತ್ತಿದವರು',
+  followUpBooked: 'ಮತ್ತೆ ಬಂದವರು',
+  followUpNoneYet: 'ಇನ್ನೂ ತೋರಿಸಲು ಏನೂ ಇಲ್ಲ — ನೆನಪುಗಳು ಹೋಗಲು ಶುರುವಾದ ಮೇಲೆ ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ.',
+  followUpFeeLabel: 'ನಿಮ್ಮ ಸಲಹಾ ಶುಲ್ಕ',
+  followUpWorth: (amount) => `ಸುಮಾರು ${amount} ಮೌಲ್ಯದ ಮರು ಭೇಟಿಗಳು`,
+  followUpWorthNote:
+    'ನೆನಪು ಒತ್ತಿ ನಂತರ ಬುಕ್ ಮಾಡಿದವರನ್ನು ಮಾತ್ರ ಎಣಿಸಲಾಗಿದೆ; ರದ್ದಾದವನ್ನು ಬಿಡಲಾಗಿದೆ. ಬದಲಿಗೆ ಫೋನ್ ಮಾಡಿದವರು ಇದರಲ್ಲಿ ಇಲ್ಲ, ಹಾಗಾಗಿ ನಿಜವಾದ ಸಂಖ್ಯೆ ಸ್ವಲ್ಪ ಹೆಚ್ಚು.',
   followUpNotSending: 'ಮರು ಭೇಟಿಯ ನೆನಪು ಇನ್ನೂ ಕಳುಹಿಸಲು ಆಗುವುದಿಲ್ಲ: ರೋಗಿ ಕೊನೆಯ ಬಾರಿ ಬರೆದು 24 ಗಂಟೆ ಕಳೆದ ಮೇಲೆ ಸಂದೇಶ ಕಳುಹಿಸಲು ವಾಟ್ಸಾಪ್‌ಗೆ ಅನುಮೋದಿತ ಟೆಂಪ್ಲೇಟ್ ಬೇಕು. ಅಲ್ಲಿಯವರೆಗೆ ಈ ರೋಗಿಗಳಿಗೆ ಫೋನ್ ಮಾಡಿ.',
   followUpDueOn: (date) => `${date} ಕ್ಕೆ ಬರಬೇಕು`,
   followUpVisited: (date) => `${date} ರಂದು ನೋಡಿದ್ದು`,
