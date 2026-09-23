@@ -225,6 +225,90 @@ describe('one doctor, slot mode', () => {
     expect(world.appointments[0]!.status).toBe('BOOKED');
   });
 
+  /**
+   * The clash rule is per DAY, so a patient may hold one on Monday and another
+   * on Tuesday. The bot used to ask for that with a findFirst and therefore
+   * showed only the earliest — the Tuesday one existed, was invisible, and
+   * could not be cancelled, because cancelling acted on the Monday one.
+   */
+  describe('holding more than one appointment', () => {
+    const bookSecondDay = async () => {
+      await say('1'); // Book appointment
+      await say('2'); // Tue, the next day
+      await say('1'); // first free time
+      await say('1'); // Yes, confirm
+    };
+
+    it('lets them book a second one on a different day', async () => {
+      await bookFirst();
+      await bookSecondDay();
+
+      expect(world.appointments.filter((a) => a.status === 'BOOKED')).toHaveLength(2);
+    });
+
+    it('names every appointment they hold, not just the next one', async () => {
+      await bookFirst();
+      await bookSecondDay();
+
+      const status = await say('2'); // My appointment
+
+      expect(status.replies[0]).toContain('Mon, 21 Sep');
+      expect(status.replies[0]).toContain('Tue, 22 Sep');
+    });
+
+    it('asks which one to cancel', async () => {
+      await bookFirst();
+      await bookSecondDay();
+
+      const asked = await say('cancel');
+
+      expect(asked.step).toBe('SLOT_AWAITING_CANCEL_CHOICE');
+      expect(asked.replies[0]).toContain('Which appointment would you like to cancel?');
+      expect(optionsOf().map((o) => o.title)).toEqual([
+        'Mon, 21 Sep · 09:15 AM',
+        'Tue, 22 Sep · 09:00 AM',
+      ]);
+    });
+
+    /** The bug, stated as a test: cancelling the later one must spare the earlier. */
+    it('cancels the one they picked, not the soonest', async () => {
+      await bookFirst();
+      await bookSecondDay();
+      const monday = world.appointments.find((a) => a.date.getUTCDate() === 21)!;
+      const tuesday = world.appointments.find((a) => a.date.getUTCDate() === 22)!;
+
+      await say('cancel');
+      const confirm = await say('2'); // the Tuesday one
+      expect(confirm.step).toBe('SLOT_CONFIRM_CANCEL');
+      expect(confirm.replies[0]).toContain('Tue, 22 Sep');
+
+      await say('1'); // Yes, cancel it
+
+      expect(tuesday.status).toBe('CANCELLED');
+      expect(monday.status).toBe('BOOKED');
+    });
+
+    it('re-asks rather than guessing when the choice makes no sense', async () => {
+      await bookFirst();
+      await bookSecondDay();
+      await say('cancel');
+
+      const again = await say('9');
+
+      expect(again.step).toBe('SLOT_AWAITING_CANCEL_CHOICE');
+      expect(world.appointments.filter((a) => a.status === 'BOOKED')).toHaveLength(2);
+    });
+
+    /** One appointment must still go straight to the confirmation. */
+    it('does not ask which when there is only one', async () => {
+      await bookFirst();
+
+      const asked = await say('cancel');
+
+      expect(asked.step).toBe('SLOT_CONFIRM_CANCEL');
+    });
+  });
+
   it('shows the appointment they hold', async () => {
     await bookFirst();
 

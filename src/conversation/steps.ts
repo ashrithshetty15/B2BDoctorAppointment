@@ -31,6 +31,13 @@ export const Steps = {
   /// Confirming a move of the appointment they already hold that day.
   SLOT_CONFIRM_MOVE: 'SLOT_CONFIRM_MOVE',
   SLOT_CONFIRM_CANCEL: 'SLOT_CONFIRM_CANCEL',
+  /**
+   * Which of several upcoming appointments they want to cancel. Only reached
+   * when a patient holds more than one — holding exactly one still goes
+   * straight to the confirmation, because asking "which?" about a list of one
+   * is a tap for nothing.
+   */
+  SLOT_AWAITING_CANCEL_CHOICE: 'SLOT_AWAITING_CANCEL_CHOICE',
 
   // HYBRID mode
   HYBRID_AWAITING_MODE: 'HYBRID_AWAITING_MODE',

@@ -91,6 +91,18 @@ export type TemplateSet = {
   slotMoveKept: (p: { date: string; time: string }) => string;
   slotTaken: () => string;
   slotStatus: (p: { doctorName: string; date: string; time: string }) => string;
+  /**
+   * More than one upcoming appointment. `lines` is pre-formatted by the flow,
+   * because each line's date and time are already localised there.
+   */
+  slotStatusMany: (p: { doctorName: string; lines: string }) => string;
+  /** Asked before cancelling, when they hold more than one. */
+  slotPickCancel: () => string;
+  /**
+   * SLOT mode used to borrow tokenNoActiveBooking here, which told a patient at
+   * an appointment clinic they had no *token* — a word that clinic never uses.
+   */
+  slotNoBooking: () => string;
   slotCancelConfirm: (p: { date: string; time: string }) => string;
   slotCancelled: (p: { date: string; time: string }) => string;
   slotReminderDayBefore: (p: {
@@ -126,6 +138,7 @@ export type TemplateSet = {
   btnChangeDoctor: () => string;
   btnChooseDate: () => string;
   btnChooseTime: () => string;
+  btnChooseAppointment: () => string;
   btnMoreTimes: () => string;
   btnMorning: () => string;
   btnAfternoon: () => string;
@@ -239,6 +252,10 @@ Reply *cancel* if you cannot make it.`,
   slotTaken: () => 'Sorry, that time was just taken. Please pick another one.',
   slotStatus: ({ doctorName, date, time }) =>
     `Your appointment:\nDr. ${doctorName}\n*${date} at ${time}*`,
+  slotStatusMany: ({ doctorName, lines }) =>
+    `Your appointments with Dr. ${doctorName}:\n${lines}`,
+  slotPickCancel: () => 'Which appointment would you like to cancel?',
+  slotNoBooking: () => 'You have no upcoming appointments. Reply *book* to make one.',
   slotCancelConfirm: ({ date, time }) =>
     `Cancel your appointment on ${date} at ${time}?`,
   slotCancelled: ({ date, time }) =>
@@ -263,6 +280,7 @@ Reply *cancel* if you cannot make it.`,
   btnChangeDoctor: () => 'Change doctor',
   btnChooseDate: () => 'Choose a date',
   btnChooseTime: () => 'Choose a time',
+  btnChooseAppointment: () => 'Choose one',
   btnMoreTimes: () => 'More times',
   btnMorning: () => 'Morning',
   btnAfternoon: () => 'Afternoon',
@@ -370,6 +388,11 @@ const kn: TemplateSet = {
   slotTaken: () => 'ಕ್ಷಮಿಸಿ, ಆ ಸಮಯ ಈಗ ತಾನೇ ಬುಕ್ ಆಯಿತು. ದಯವಿಟ್ಟು ಬೇರೆ ಒಂದು ಆಯ್ಕೆ ಮಾಡಿ.',
   slotStatus: ({ doctorName, date, time }) =>
     `ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್:\nಡಾ. ${doctorName}\n*${date}, ${time} ಗೆ*`,
+  slotStatusMany: ({ doctorName, lines }) =>
+    `ಡಾ. ${doctorName} ಅವರ ಜೊತೆ ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್‌ಗಳು:\n${lines}`,
+  slotPickCancel: () => 'ಯಾವ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ರದ್ದು ಮಾಡಬೇಕು?',
+  slotNoBooking: () =>
+    'ನಿಮಗೆ ಮುಂದೆ ಯಾವ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಕೂಡ ಇಲ್ಲ. ಬುಕ್ ಮಾಡಲು *ಬುಕ್* ಎಂದು ಕಳುಹಿಸಿ.',
   slotCancelConfirm: ({ date, time }) =>
     `${date}, ${time} ಗೆ ಇರುವ ನಿಮ್ಮ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ರದ್ದು ಮಾಡಬೇಕೆ?`,
   slotCancelled: ({ date, time }) =>
@@ -394,6 +417,7 @@ const kn: TemplateSet = {
   btnChangeDoctor: () => 'ವೈದ್ಯರನ್ನು ಬದಲಿಸಿ',
   btnChooseDate: () => 'ದಿನ ಆಯ್ಕೆಮಾಡಿ',
   btnChooseTime: () => 'ಸಮಯ ಆಯ್ಕೆಮಾಡಿ',
+  btnChooseAppointment: () => 'ಒಂದನ್ನು ಆರಿಸಿ',
   btnMoreTimes: () => 'ಇನ್ನಷ್ಟು ಸಮಯ',
   btnMorning: () => 'ಬೆಳಿಗ್ಗೆ',
   btnAfternoon: () => 'ಮಧ್ಯಾಹ್ನ',

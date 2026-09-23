@@ -7,6 +7,7 @@ import {
   moveSlot,
   plannedReminders,
   slotLabel,
+  upcomingSlotsForPatient,
   type Slot,
 } from '../../domain/slots';
 import { PERIODS, periodOf, splitByPeriod, type Period } from '../../domain/dayPeriods';
@@ -618,47 +619,84 @@ async function handleMoveConfirmation(ctx: ConversationContext): Promise<StepRes
 // ---- status and cancellation ----
 
 async function showStatus(ctx: ConversationContext): Promise<StepResult> {
-  const existing = await findActiveSlot(ctx);
-  if (!existing) {
+  const held = await upcoming(ctx);
+
+  if (held.length === 0) {
+    return menuResult(ctx, [reply('slotNoBooking', t(ctx.language, 'slotNoBooking'))]);
+  }
+
+  if (held.length === 1) {
+    const only = held[0]!;
     return menuResult(ctx, [
-      reply('tokenNoActiveBooking', t(ctx.language, 'tokenNoActiveBooking')),
+      reply(
+        'slotStatus',
+        t(ctx.language, 'slotStatus', {
+          doctorName: ctx.doctor.name,
+          date: formatDateForPatient(only.date),
+          time: only.slotStart ? timeLabel(only.slotStart, ctx.doctor) : '-',
+        }),
+      ),
     ]);
   }
 
   return menuResult(ctx, [
     reply(
-      'slotStatus',
-      t(ctx.language, 'slotStatus', {
+      'slotStatusMany',
+      t(ctx.language, 'slotStatusMany', {
         doctorName: ctx.doctor.name,
-        date: formatDateForPatient(existing.date),
-        time: existing.slotStart ? timeLabel(existing.slotStart, ctx.doctor) : '-',
+        lines: held.map((a) => `• *${appointmentLabel(a, ctx.doctor)}*`).join('\n'),
       }),
     ),
   ]);
 }
 
 async function askCancelConfirmation(ctx: ConversationContext): Promise<StepResult> {
-  const existing = await findActiveSlot(ctx);
-  if (!existing) {
-    return menuResult(ctx, [
-      reply('tokenNoActiveBooking', t(ctx.language, 'tokenNoActiveBooking')),
-    ]);
+  const held = await upcoming(ctx);
+
+  if (held.length === 0) {
+    return menuResult(ctx, [reply('slotNoBooking', t(ctx.language, 'slotNoBooking'))]);
   }
 
+  // Holding exactly one still goes straight to the confirmation: asking "which
+  // one?" about a list of one is a tap that answers itself.
+  if (held.length === 1) return confirmCancelOf(ctx, held[0]!);
+
   return {
-    nextStep: Steps.SLOT_CONFIRM_CANCEL,
+    nextStep: Steps.SLOT_AWAITING_CANCEL_CHOICE,
     replies: [
-      reply(
-        'slotCancelConfirm',
-        t(ctx.language, 'slotCancelConfirm', {
-          date: formatDateForPatient(existing.date),
-          time: existing.slotStart ? timeLabel(existing.slotStart, ctx.doctor) : '-',
-        }),
-        cancelButtons(ctx.language),
+      replyWithList(
+        'slotPickCancel',
+        t(ctx.language, 'slotPickCancel'),
+        t(ctx.language, 'btnChooseAppointment'),
+        held.map((a, i) => ({ id: String(i + 1), title: appointmentLabel(a, ctx.doctor) })),
       ),
     ],
-    data: { appointmentId: existing.id },
+    // Ids, not positions: the list is re-read on the next turn and the order
+    // could have changed under us.
+    data: { cancelIds: held.map((a) => a.id) },
   };
+}
+
+async function handleCancelChoice(ctx: ConversationContext): Promise<StepResult> {
+  const offered = (ctx.data?.['cancelIds'] as string[] | undefined) ?? [];
+  const choice = numericChoice(ctx.input);
+
+  if (choice === null || choice < 1 || choice > offered.length) {
+    return {
+      nextStep: Steps.SLOT_AWAITING_CANCEL_CHOICE,
+      replies: [reply('slotInvalidChoice', t(ctx.language, 'slotInvalidChoice'))],
+      data: ctx.data,
+    };
+  }
+
+  const chosenId = offered[choice - 1]!;
+  const chosen = (await upcoming(ctx)).find((a) => a.id === chosenId);
+  if (!chosen) {
+    // Cancelled from the console, or already past, between the two turns.
+    return menuResult(ctx, [reply('slotNoBooking', t(ctx.language, 'slotNoBooking'))]);
+  }
+
+  return confirmCancelOf(ctx, chosen);
 }
 
 async function handleCancelConfirmation(ctx: ConversationContext): Promise<StepResult> {
@@ -668,10 +706,19 @@ async function handleCancelConfirmation(ctx: ConversationContext): Promise<StepR
     ]);
   }
 
-  const appointmentId = ctx.data?.['appointmentId'] as string | undefined;
-  if (!appointmentId) return menuResult(ctx);
+  const appointmentId = ctx.data?.['appointmentId'];
+  if (typeof appointmentId !== 'string') return menuResult(ctx);
 
-  const cancelled = await cancelAppointment(appointmentId);
+  // cancelAppointment updates by id alone — unlike moveSlot, which scopes its
+  // write and says why. The id here comes from session data that can be two
+  // hours old, so confirm it is still one of this patient's own appointments
+  // before cancelling anything.
+  const stillTheirs = (await upcoming(ctx)).some((a) => a.id === appointmentId);
+  if (!stillTheirs) {
+    return menuResult(ctx, [reply('slotNoBooking', t(ctx.language, 'slotNoBooking'))]);
+  }
+
+  const cancelled = await cancelAppointment(appointmentId, ctx.receivedAt);
 
   return {
     nextStep: Steps.SLOT_MENU,
@@ -690,18 +737,50 @@ async function handleCancelConfirmation(ctx: ConversationContext): Promise<StepR
   };
 }
 
-async function findActiveSlot(ctx: ConversationContext) {
-  const { prisma } = await import('../../db/prisma');
-  return prisma.appointment.findFirst({
-    where: {
-      doctorId: ctx.doctor.id,
-      patientId: ctx.patient.id,
-      type: 'SLOT',
-      status: { in: ['BOOKED', 'ARRIVED', 'IN_PROGRESS'] },
-      date: { gte: ctx.today },
-    },
-    orderBy: { slotStart: 'asc' },
-  });
+/**
+ * Everything the patient still holds with this doctor, soonest first.
+ *
+ * This used to be a findFirst here in the flow, reaching straight past the
+ * domain layer into Prisma, and it returned only the earliest — so a patient
+ * with two appointments was shown one and could only ever cancel that one.
+ */
+async function upcoming(ctx: ConversationContext) {
+  return upcomingSlotsForPatient(ctx.doctor.id, ctx.patient.id, ctx.today);
+}
+
+/**
+ * "Mon, 21 Sep · 03:00 PM" — one appointment, short enough for a list row.
+ *
+ * Separated by a middle dot rather than a word, because a connective like "at"
+ * would be English sitting inside a Kannada message.
+ */
+function appointmentLabel(
+  appointment: { date: Date; slotStart: Date | null },
+  doctor: Doctor,
+): string {
+  const time = appointment.slotStart ? timeLabel(appointment.slotStart, doctor) : '-';
+  return `${formatDateForPatient(appointment.date)} · ${time}`;
+}
+
+/** The confirmation question, for one specific appointment. */
+function confirmCancelOf(
+  ctx: ConversationContext,
+  appointment: { id: string; date: Date; slotStart: Date | null },
+): StepResult {
+  return {
+    nextStep: Steps.SLOT_CONFIRM_CANCEL,
+    replies: [
+      reply(
+        'slotCancelConfirm',
+        t(ctx.language, 'slotCancelConfirm', {
+          date: formatDateForPatient(appointment.date),
+          time: appointment.slotStart ? timeLabel(appointment.slotStart, ctx.doctor) : '-',
+        }),
+        cancelButtons(ctx.language),
+      ),
+    ],
+    data: { appointmentId: appointment.id },
+  };
 }
 
 // ---- flow ----
@@ -729,6 +808,8 @@ export const slotFlow: ConversationFlow = {
         return handleBookingConfirmation(ctx);
       case Steps.SLOT_CONFIRM_MOVE:
         return handleMoveConfirmation(ctx);
+      case Steps.SLOT_AWAITING_CANCEL_CHOICE:
+        return handleCancelChoice(ctx);
       case Steps.SLOT_CONFIRM_CANCEL:
         return handleCancelConfirmation(ctx);
 

@@ -20,6 +20,7 @@ vi.mock('../../domain/slots', async (importOriginal) => {
     getNextAvailableDates: vi.fn(),
     bookSlot: vi.fn(),
     moveSlot: vi.fn(),
+    upcomingSlotsForPatient: vi.fn().mockResolvedValue([]),
   };
 });
 

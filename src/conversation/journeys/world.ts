@@ -206,36 +206,6 @@ export function prismaModule() {
         },
       },
       messagingWindow: { upsert: async () => ({}) },
-      /**
-       * slot.ts reaches past the domain layer for the appointment a patient
-       * currently holds (findActiveSlot), so the journeys need this one query
-       * shape. Narrow on purpose: it answers the query the flow actually makes
-       * rather than pretending to be Prisma.
-       */
-      appointment: {
-        findFirst: async ({
-          where,
-        }: {
-          where: {
-            doctorId: string;
-            patientId: string;
-            type: string;
-            status: { in: string[] };
-            date?: { gte: Date };
-          };
-        }) =>
-          world.appointments
-            .filter(
-              (a) =>
-                a.doctorId === where.doctorId &&
-                a.patientId === where.patientId &&
-                a.type === where.type &&
-                where.status.in.includes(a.status) &&
-                (!where.date?.gte || a.date.getTime() >= where.date.gte.getTime()),
-            )
-            .sort((a, b) => (a.slotStart?.getTime() ?? 0) - (b.slotStart?.getTime() ?? 0))[0] ??
-          null,
-      },
     },
   };
 }
@@ -353,6 +323,22 @@ export async function slotsModule() {
 
   return {
     ...actual,
+    /** What the patient still holds — soonest first, same order as the real one. */
+    upcomingSlotsForPatient: async (doctorId: string, patientId: string, from: Date) =>
+      world.appointments
+        .filter(
+          (a) =>
+            a.doctorId === doctorId &&
+            a.patientId === patientId &&
+            a.type === 'SLOT' &&
+            ACTIVE.includes(a.status) &&
+            a.date.getTime() >= from.getTime(),
+        )
+        .sort(
+          (a, b) =>
+            a.date.getTime() - b.date.getTime() ||
+            (a.slotStart?.getTime() ?? 0) - (b.slotStart?.getTime() ?? 0),
+        ),
     getAvailableSlots,
     getNextAvailableDates: async (doctor: Doctor, from: Date, count = 5, lookAhead = 21) => {
       const out: Date[] = [];

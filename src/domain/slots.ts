@@ -260,6 +260,39 @@ export async function moveSlot(
 }
 
 /** Every slot for a day with who holds it — the calendar's data. */
+/**
+ * Every appointment a patient still holds with this doctor, soonest first.
+ *
+ * The clash rule in bookSlot is per calendar *day*, so a patient can legitimately
+ * hold several — one on Monday and one on Tuesday is two visits, not a mistake.
+ * The conversation flow asked for this with `findFirst` and therefore only ever
+ * saw the earliest: "My appointment" showed one booking and hid the rest, and
+ * cancelling hit that same earliest one, so the later appointment could not be
+ * reached from WhatsApp at all.
+ *
+ * Capped, because it feeds a WhatsApp list and Meta allows ten rows. A patient
+ * with more upcoming visits than that sees the nearest ones, which are the ones
+ * they are deciding about.
+ */
+export async function upcomingSlotsForPatient(
+  doctorId: string,
+  patientId: string,
+  from: Date,
+  limit = 10,
+): Promise<Appointment[]> {
+  return prisma.appointment.findMany({
+    where: {
+      doctorId,
+      patientId,
+      type: 'SLOT',
+      status: { in: ['BOOKED', 'ARRIVED', 'IN_PROGRESS'] },
+      date: { gte: from },
+    },
+    orderBy: [{ date: 'asc' }, { slotStart: 'asc' }],
+    take: limit,
+  });
+}
+
 export interface CalendarSlot {
   start: Date;
   end: Date;

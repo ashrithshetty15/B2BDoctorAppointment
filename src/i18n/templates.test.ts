@@ -31,6 +31,8 @@ describe('templates', () => {
       options: '1. 10:00 AM\n2. 10:30 AM',
       fromTime: '12:15 PM',
       toTime: '02:30 PM',
+      // slotStatusMany renders a pre-built list of the appointments they hold.
+      lines: '• *Fri, 11 Sep · 10:30 AM*',
     };
 
     for (const lang of languages) {
@@ -69,6 +71,8 @@ describe('templates', () => {
       eta: '32 mins',
       delayMins: 20,
       options: '',
+      // slotStatusMany renders a pre-built list of appointments.
+      lines: '• *Fri, 11 Sep · 10:30 AM*',
     };
 
     for (const lang of languages) {
