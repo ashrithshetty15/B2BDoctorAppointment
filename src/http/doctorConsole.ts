@@ -67,6 +67,7 @@ import {
   reportsPage,
 } from './web/doctorViews';
 import { calendarPage, slotBookPage } from './web/calendarView';
+import { clashingAppointments, syncBusyFeed } from '../domain/externalBusy';
 import { followUpsPage, setFollowUpPage } from './web/followUpView';
 import {
   type CallListEntry,
@@ -520,6 +521,7 @@ doctorConsoleRouter.post(
         IN_PAST: s.slotInPast,
         ON_LEAVE: s.onLeaveShort,
         PATIENT_HAS_SLOT: s.patientHasSlot,
+        BLOCKED: s.slotBlockedByCalendar,
       }[result.reason];
       await reject(message);
       return;
@@ -1436,9 +1438,109 @@ async function settingsContext(doctor: DoctorWithChannel, csrfToken: string) {
       label: formatDateForPatient(d),
     })),
     today: formatDateOnly(today),
+    calendar: await calendarPanel(doctor, today),
     s,
   };
 }
+
+/**
+ * What the settings page shows about the connected calendar.
+ *
+ * The URL never comes back out. It is the credential for these feeds — anyone
+ * holding it can read the doctor's calendar — so the page shows only the host
+ * it points at, which is enough to recognise "that's my Practo one" without
+ * putting the secret back on screen where it can be shoulder-read or copied
+ * out of a shared browser.
+ */
+async function calendarPanel(doctor: DoctorWithChannel, today: Date) {
+  const s = c(doctor.defaultLanguage);
+  const connected = Boolean(doctor.busyFeedUrl);
+
+  let host: string | null = null;
+  if (doctor.busyFeedUrl) {
+    try {
+      host = new URL(doctor.busyFeedUrl).host;
+    } catch {
+      host = null;
+    }
+  }
+
+  const clashes = connected
+    ? (await clashingAppointments(doctor.id, today)).map((a) =>
+        [
+          a.patient.name ?? '—',
+          a.slotStart ? formatDateForPatient(a.slotStart) : '',
+          a.slotStart ? formatTimeForPatient(a.slotStart, doctor.timezone) : '',
+          `+${a.patient.phone}`,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+      )
+    : [];
+
+  return {
+    connected,
+    host,
+    syncedAt: doctor.busyFeedSyncedAt
+      ? formatTimeForPatient(doctor.busyFeedSyncedAt, doctor.timezone)
+      : null,
+    error: doctor.busyFeedError,
+    clashes,
+    s,
+  };
+}
+
+/**
+ * Connect or disconnect a calendar feed.
+ *
+ * Syncs once immediately rather than leaving the doctor to wonder for ten
+ * minutes whether the URL they pasted was right — a wrong link is the commonest
+ * outcome, and finding out now is the difference between a working feature and
+ * one they assume is broken.
+ */
+doctorConsoleRouter.post(
+  '/app/settings/calendar',
+  requireDoctorAuth,
+  requireFormCsrf,
+  async (req, res) => {
+    const doctor = req.doctor!;
+    const s = c(doctor.defaultLanguage);
+    const raw = typeof req.body?.url === 'string' ? req.body.url.trim() : '';
+
+    const back = (flash: string) =>
+      res.redirect(302, `/app/settings?flash=${encodeURIComponent(flash)}`);
+
+    if (!raw) {
+      await prisma.doctor.update({
+        where: { id: doctor.id },
+        data: { busyFeedUrl: null, busyFeedSyncedAt: null, busyFeedError: null },
+      });
+      await prisma.externalBusy.deleteMany({ where: { doctorId: doctor.id, source: 'ICAL' } });
+      back(s.calendarRemoved);
+      return;
+    }
+
+    // webcal:// is what Apple and Practo hand out; it is http(s) underneath.
+    const url = raw.replace(/^webcal:\/\//i, 'https://');
+    if (!/^https?:\/\//i.test(url)) {
+      back(s.calendarInvalidUrl);
+      return;
+    }
+
+    await prisma.doctor.update({
+      where: { id: doctor.id },
+      data: { busyFeedUrl: url, busyFeedError: null, busyFeedSyncedAt: null },
+    });
+
+    const result = await syncBusyFeed({
+      id: doctor.id,
+      busyFeedUrl: url,
+      timezone: doctor.timezone,
+    });
+
+    back(result.ok ? s.calendarSaved : (result.error ?? s.calendarInvalidUrl));
+  },
+);
 
 doctorConsoleRouter.get('/app/settings', requireDoctorAuth, async (req, res) => {
   const doctor = req.doctor!;

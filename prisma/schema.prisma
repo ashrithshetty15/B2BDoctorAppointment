@@ -100,8 +100,8 @@ model Clinic {
 }
 
 model Doctor {
-  id       String @id @default(uuid())
-  name     String
+  id         String @id @default(uuid())
+  name       String
   /// Clinic / practice display name used in patient messages.
   ///
   /// Superseded by the Clinic relation below and kept only so code mid-deploy
@@ -180,6 +180,21 @@ model Doctor {
 
   status DoctorStatus @default(ACTIVE)
 
+  // ---- external calendar (Practo Ray, Google, Outlook) ----
+  /// An iCal/ICS feed URL the doctor pasted in, whose events block slots here.
+  ///
+  /// The URL *is* the credential — these feeds are secret-by-URL, which is why
+  /// this is never logged and is masked once saved. Deliberately a plain feed
+  /// rather than OAuth: a refresh token per doctor would be the first
+  /// per-tenant secret this system has ever stored, sitting next to patient
+  /// data, and a pasted URL buys the same outcome without it.
+  busyFeedUrl      String?   @map("busy_feed_url")
+  /// When the feed was last fetched successfully. Shown beside the status,
+  /// because a stale sync presented as current is worse than none.
+  busyFeedSyncedAt DateTime? @map("busy_feed_synced_at")
+  /// Why the last fetch failed, for the console. Null when the last one worked.
+  busyFeedError    String?   @map("busy_feed_error")
+
   // ---- WhatsApp channel health ----
   /// Whether this clinic's number can currently deliver messages, as last
   /// reported by the provider. AVAILABLE | LIMITED | BLOCKED | UNKNOWN.
@@ -211,13 +226,48 @@ model Doctor {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  appointments Appointment[]
-  queueStates  QueueState[]
-  sessions     ConversationSession[]
-  documents    Document[]
+  appointments     Appointment[]
+  queueStates      QueueState[]
+  sessions         ConversationSession[]
+  documents        Document[]
   messagingWindows MessagingWindow[]
+  busyBlocks       ExternalBusy[]
 
   @@map("doctors")
+}
+
+/// A block of time the doctor is unavailable, imported from their own calendar.
+///
+/// Exists because there was no way to block part of a day: leaveDates is
+/// @db.Date and takes the whole day, and an Appointment cannot stand in for a
+/// block because patientId is required — a "busy" row would have needed a fake
+/// patient.
+///
+/// Holds intervals and nothing else. The source feed may well carry event
+/// titles naming other patients; importing those would pull another clinic
+/// system's patient data into this one for no benefit, so only the start and
+/// end are kept. externalUid is stored to recognise the same event across
+/// syncs, never to display.
+model ExternalBusy {
+  id       String @id @default(uuid())
+  doctorId String @map("doctor_id")
+  doctor   Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  startsAt DateTime @map("starts_at")
+  endsAt   DateTime @map("ends_at")
+
+  /// Which feed it came from, e.g. "ICAL". Plain text for the same reason
+  /// Appointment.source is: adding a second importer must not be a migration.
+  source      String  @default("ICAL")
+  /// The event's UID in the source calendar. Opaque; used only for diffing.
+  externalUid String? @map("external_uid")
+
+  syncedAt  DateTime @default(now()) @map("synced_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  /// The overlap query: everything for one doctor that ends after a moment.
+  @@index([doctorId, startsAt, endsAt])
+  @@map("external_busy")
 }
 
 model Patient {
@@ -232,8 +282,8 @@ model Patient {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  appointments Appointment[]
-  sessions     ConversationSession[]
+  appointments     Appointment[]
+  sessions         ConversationSession[]
   messagingWindows MessagingWindow[]
 
   @@map("patients")
@@ -297,7 +347,7 @@ model Appointment {
   /// here it can only ever be delivered as an approved template. Until one is
   /// configured, these stay pending and visible in the console so the desk can
   /// phone instead; nothing is silently dropped.
-  followUpSentAt DateTime? @map("follow_up_sent_at")
+  followUpSentAt   DateTime? @map("follow_up_sent_at")
   /// When the patient tapped "Book appointment" on that reminder. The half of
   /// the funnel that says whether the reminder actually worked.
   followUpTappedAt DateTime? @map("follow_up_tapped_at")
@@ -413,7 +463,7 @@ model ConversationSession {
   /// Current step name, e.g. "TOKEN_MAIN_MENU". Owned by the state machine layer.
   step String
   /// Arbitrary per-step scratch data (pending appointment id, retry counts, ...).
-  data Json @default("{}")
+  data Json   @default("{}")
 
   patientId String?  @map("patient_id")
   language  Language @default(EN)
@@ -436,7 +486,6 @@ model ConversationSession {
   @@index([expiresAt])
   @@map("conversation_sessions")
 }
-
 
 /// When a patient last messaged one particular clinic.
 ///

@@ -80,6 +80,23 @@ export interface ConsoleStrings {
   noSlotsTitle: string;
   noSlotsBody: string;
   slotTaken: string;
+  /** The doctor's own calendar has that time, as opposed to another patient. */
+  slotBlockedByCalendar: string;
+  // ---- imported calendar ----
+  calendarSync: string;
+  calendarSyncBody: string;
+  calendarUrlLabel: string;
+  calendarConnected: string;
+  calendarNotConnected: string;
+  calendarSyncedAt: (when: string) => string;
+  calendarNeverSynced: string;
+  calendarSaved: string;
+  calendarRemoved: string;
+  calendarInvalidUrl: string;
+  calendarRemove: string;
+  calendarSave: string;
+  calendarClashes: string;
+  calendarClashesBody: string;
   slotNotValid: string;
   slotInPast: string;
   patientHasSlot: string;
@@ -308,6 +325,23 @@ const en: ConsoleStrings = {
   noSlotsTitle: 'No appointment times this day',
   noSlotsBody: 'Working hours for this day are empty, or the clinic is closed. Set your hours in Settings.',
   slotTaken: 'That time was just taken. Pick another.',
+  slotBlockedByCalendar: 'That time is blocked in the connected calendar.',
+  calendarSync: 'Connected calendar',
+  calendarSyncBody:
+    'Paste the calendar link from Practo Ray, Google Calendar or Outlook. Anything booked there stops being offered here. Nothing is sent the other way, and no patient names are imported.',
+  calendarUrlLabel: 'Calendar link (ICS)',
+  calendarConnected: 'Connected',
+  calendarNotConnected: 'Not connected',
+  calendarSyncedAt: (when) => `Last checked ${when}`,
+  calendarNeverSynced: 'Not checked yet — the first sync runs within 10 minutes.',
+  calendarSaved: 'Calendar connected.',
+  calendarRemoved: 'Calendar disconnected.',
+  calendarInvalidUrl: 'That does not look like a calendar link. It should start with https:// or webcal://',
+  calendarRemove: 'Disconnect',
+  calendarSave: 'Connect',
+  calendarClashes: 'Clashes with the connected calendar',
+  calendarClashesBody:
+    'These are already booked with you, and your other calendar now says you are busy. Nothing has been changed — call the patient or move one of them.',
   slotNotValid: 'That is not an appointment time for this day.',
   slotInPast: 'That time has already passed.',
   patientHasSlot: 'That patient already has an appointment that day',
@@ -535,6 +569,23 @@ const kn: ConsoleStrings = {
   noSlotsTitle: 'ಈ ದಿನ ಯಾವ ಸಮಯವೂ ಇಲ್ಲ',
   noSlotsBody: 'ಈ ದಿನಕ್ಕೆ ಕೆಲಸದ ಸಮಯ ಇಲ್ಲ, ಅಥವಾ ಕ್ಲಿನಿಕ್ ಮುಚ್ಚಿದೆ.',
   slotTaken: 'ಆ ಸಮಯ ಈಗ ತಾನೇ ಬುಕ್ ಆಯಿತು. ಬೇರೆ ಆಯ್ಕೆ ಮಾಡಿ.',
+  slotBlockedByCalendar: 'ಆ ಸಮಯ ಜೋಡಿಸಿದ ಕ್ಯಾಲೆಂಡರ್‌ನಲ್ಲಿ ಬ್ಲಾಕ್ ಆಗಿದೆ.',
+  calendarSync: 'ಜೋಡಿಸಿದ ಕ್ಯಾಲೆಂಡರ್',
+  calendarSyncBody:
+    'Practo Ray, Google Calendar ಅಥವಾ Outlook ನಿಂದ ಕ್ಯಾಲೆಂಡರ್ ಲಿಂಕ್ ಅನ್ನು ಅಂಟಿಸಿ. ಅಲ್ಲಿ ಬುಕ್ ಆಗಿರುವ ಸಮಯ ಇಲ್ಲಿ ತೋರಿಸುವುದಿಲ್ಲ. ಇಲ್ಲಿಂದ ಅಲ್ಲಿಗೆ ಏನೂ ಹೋಗುವುದಿಲ್ಲ, ರೋಗಿಗಳ ಹೆಸರುಗಳನ್ನೂ ತರುವುದಿಲ್ಲ.',
+  calendarUrlLabel: 'ಕ್ಯಾಲೆಂಡರ್ ಲಿಂಕ್ (ICS)',
+  calendarConnected: 'ಜೋಡಿಸಲಾಗಿದೆ',
+  calendarNotConnected: 'ಜೋಡಿಸಿಲ್ಲ',
+  calendarSyncedAt: (when) => `ಕೊನೆಯ ಪರಿಶೀಲನೆ ${when}`,
+  calendarNeverSynced: 'ಇನ್ನೂ ಪರಿಶೀಲಿಸಿಲ್ಲ — ಮೊದಲ ಸಿಂಕ್ 10 ನಿಮಿಷಗಳಲ್ಲಿ ನಡೆಯುತ್ತದೆ.',
+  calendarSaved: 'ಕ್ಯಾಲೆಂಡರ್ ಜೋಡಿಸಲಾಗಿದೆ.',
+  calendarRemoved: 'ಕ್ಯಾಲೆಂಡರ್ ಬೇರ್ಪಡಿಸಲಾಗಿದೆ.',
+  calendarInvalidUrl: 'ಅದು ಕ್ಯಾಲೆಂಡರ್ ಲಿಂಕ್ ಆಗಿ ಕಾಣುತ್ತಿಲ್ಲ. ಅದು https:// ಅಥವಾ webcal:// ನಿಂದ ಶುರುವಾಗಬೇಕು',
+  calendarRemove: 'ಬೇರ್ಪಡಿಸಿ',
+  calendarSave: 'ಜೋಡಿಸಿ',
+  calendarClashes: 'ಜೋಡಿಸಿದ ಕ್ಯಾಲೆಂಡರ್ ಜೊತೆ ಘರ್ಷಣೆ',
+  calendarClashesBody:
+    'ಇವರು ನಿಮ್ಮ ಜೊತೆ ಈಗಾಗಲೇ ಬುಕ್ ಆಗಿದ್ದಾರೆ, ಆದರೆ ನಿಮ್ಮ ಬೇರೆ ಕ್ಯಾಲೆಂಡರ್ ಆ ಸಮಯದಲ್ಲಿ ನೀವು ಬ್ಯುಸಿ ಎಂದು ಹೇಳುತ್ತದೆ. ಏನೂ ಬದಲಾಗಿಲ್ಲ — ರೋಗಿಗೆ ಫೋನ್ ಮಾಡಿ ಅಥವಾ ಒಂದನ್ನು ಬದಲಾಯಿಸಿ.',
   slotNotValid: 'ಅದು ಈ ದಿನದ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಸಮಯ ಅಲ್ಲ.',
   slotInPast: 'ಆ ಸಮಯ ಈಗಾಗಲೇ ಕಳೆದಿದೆ.',
   patientHasSlot: 'ಆ ರೋಗಿಗೆ ಆ ದಿನ ಈಗಾಗಲೇ ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಇದೆ',

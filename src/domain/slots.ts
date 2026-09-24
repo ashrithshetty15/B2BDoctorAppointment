@@ -2,6 +2,7 @@ import { type Appointment, type Doctor, Prisma } from '@prisma/client';
 import { DateTime } from 'luxon';
 import { prisma } from '../db/prisma';
 import { atLocalTime, formatDateOnly } from '../utils/time';
+import { busyForDoctor, isBlocked, type BusyInterval } from './externalBusy';
 import { isOnLeave } from './tokenQueue';
 
 /**
@@ -84,6 +85,19 @@ export function generateSlots(doctor: Doctor, date: Date): Slot[] {
   return slots.sort((a, b) => a.start.getTime() - b.start.getTime());
 }
 
+/**
+ * The imported blocks touching one calendar day.
+ *
+ * A day is read as a generous window rather than midnight-to-midnight: slots
+ * are built in the doctor's timezone, so a day's last slot can end after UTC
+ * midnight, and an all-day block starts before it.
+ */
+async function busyForDay(doctorId: string, date: Date): Promise<BusyInterval[]> {
+  const from = new Date(date.getTime() - 86_400_000);
+  const to = new Date(date.getTime() + 2 * 86_400_000);
+  return busyForDoctor(doctorId, from, to);
+}
+
 /** Slots a patient can actually pick right now. */
 export async function getAvailableSlots(
   doctor: Doctor,
@@ -106,12 +120,28 @@ export async function getAvailableSlots(
 
   const takenMs = new Set(booked.map((b) => b.slotStart!.getTime()));
 
-  return candidates.filter((s) => !takenMs.has(s.start.getTime()) && s.start.getTime() > now.getTime());
+  // Time the doctor's own calendar says is gone. Read from rows the sweep wrote,
+  // never fetched here: getNextAvailableDates loops this over 21 days on the
+  // patient's booking path, and a slow calendar provider must not make the
+  // clinic unbookable.
+  const blocks = await busyForDay(doctor.id, date);
+
+  return candidates.filter(
+    (s) =>
+      !takenMs.has(s.start.getTime()) &&
+      s.start.getTime() > now.getTime() &&
+      !isBlocked(s, blocks),
+  );
 }
 
 export type BookSlotResult =
   | { ok: true; appointment: Appointment; alreadyExisted?: boolean }
-  | { ok: false; reason: 'ON_LEAVE' | 'NOT_A_SLOT' | 'IN_PAST' | 'TAKEN' }
+  /**
+   * BLOCKED is time the doctor's own calendar has spoken for. Distinct from
+   * TAKEN, which is another patient — the desk can resolve one and not the
+   * other.
+   */
+  | { ok: false; reason: 'ON_LEAVE' | 'NOT_A_SLOT' | 'IN_PAST' | 'TAKEN' | 'BLOCKED' }
   /**
    * They hold an appointment that day already, and asked for a *different*
    * time. Carries the existing one so the caller can offer to move it rather
@@ -146,6 +176,13 @@ export async function bookSlot(
   );
   if (!slot) return { ok: false, reason: 'NOT_A_SLOT' };
   if (slot.start.getTime() <= now.getTime()) return { ok: false, reason: 'IN_PAST' };
+
+  // Checked on the write path, not only where slots are listed. bookSlot
+  // re-derives the grid from generateSlots, so a check that lived solely in
+  // getAvailableSlots could be walked straight past by posting a time.
+  if (isBlocked(slot, await busyForDay(doctor.id, date))) {
+    return { ok: false, reason: 'BLOCKED' };
+  }
 
   // One appointment per patient per day, matching the token rule. Which of the
   // two things it is depends on the time they asked for, and they want opposite
@@ -220,6 +257,9 @@ export async function moveSlot(
   );
   if (!slot) return { ok: false, reason: 'NOT_A_SLOT' };
   if (slot.start.getTime() <= now.getTime()) return { ok: false, reason: 'IN_PAST' };
+  if (isBlocked(slot, await busyForDay(doctor.id, date))) {
+    return { ok: false, reason: 'BLOCKED' };
+  }
 
   try {
     const appointment = await prisma.$transaction(async (tx) => {
@@ -298,6 +338,9 @@ export interface CalendarSlot {
   end: Date;
   appointment: (Appointment & { patient: { id: string; name: string | null; phone: string } }) | null;
   isPast: boolean;
+  /** Covered by the doctor's own calendar. Shown, not hidden — the desk needs
+   *  to see why a time is unavailable rather than find it missing. */
+  isBlocked?: boolean;
 }
 
 export async function getDaySchedule(
@@ -319,11 +362,14 @@ export async function getDaySchedule(
     byStart.set(a.slotStart!.getTime(), a);
   }
 
+  const blocks = await busyForDay(doctor.id, date);
+
   return slots.map((s) => ({
     start: s.start,
     end: s.end,
     appointment: byStart.get(s.start.getTime()) ?? null,
     isPast: s.start.getTime() <= now.getTime(),
+    isBlocked: isBlocked(s, blocks),
   }));
 }
 

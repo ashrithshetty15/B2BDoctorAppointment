@@ -4,6 +4,7 @@ import { prisma } from '../../db/prisma';
 import { getMessagingAdapter } from '../../messaging';
 import { sweepChannelHealth } from '../../domain/channelHealth';
 import { outboundChannelFor } from '../../domain/doctors';
+import { doctorsWithBusyFeed, syncBusyFeed } from '../../domain/externalBusy';
 import { followUpPayload } from '../../domain/followUp';
 import { dayBeforeReminderAt, hourBeforeReminderAt } from '../../domain/slots';
 import { t } from '../../i18n/templates';
@@ -155,6 +156,17 @@ async function sweepDueReminders(): Promise<number> {
   });
   if (checked > 0) logger.debug({ checked }, 'Channel health refreshed');
 
+  // Imported calendars ride the same sweep, for the same reason: a feed is a
+  // state we poll, not an event anyone pushes to us. Deliberately here and not
+  // on the booking path — getNextAvailableDates loops availability over 21 days
+  // while a patient waits, and a slow calendar provider must not be able to
+  // make the clinic unbookable.
+  const synced = await sweepBusyFeeds().catch((err) => {
+    logger.warn({ err }, 'Calendar feed sweep failed');
+    return 0;
+  });
+  if (synced > 0) logger.debug({ synced }, 'Calendar feeds refreshed');
+
   return sent;
 }
 
@@ -243,4 +255,23 @@ export async function sweepDueFollowUps(): Promise<number> {
   }
 
   return sent;
+}
+
+/**
+ * Refresh every configured calendar feed.
+ *
+ * One doctor's broken feed must not stop the others, and a failure leaves the
+ * previous blocks in place rather than emptying a day — syncBusyFeed never
+ * throws and records the reason on the doctor for the console to show.
+ */
+async function sweepBusyFeeds(): Promise<number> {
+  const doctors = await doctorsWithBusyFeed();
+  let ok = 0;
+
+  for (const doctor of doctors) {
+    const result = await syncBusyFeed(doctor);
+    if (result.ok) ok += 1;
+  }
+
+  return ok;
 }

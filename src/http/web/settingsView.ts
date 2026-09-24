@@ -100,6 +100,18 @@ export function settingsPage(opts: {
   hoursError?: string;
   /** Bookings that the submitted hours would strand, already formatted. */
   hoursClash?: string[];
+  /**
+   * The connected calendar feed, masked. The raw URL is the credential for
+   * these feeds, so it is never rendered back into the page.
+   */
+  calendar: {
+    connected: boolean;
+    host: string | null;
+    syncedAt: string | null;
+    error: string | null;
+    /** Already-formatted lines: who is booked, when, and their number. */
+    clashes: string[];
+  };
 }): string {
   const { doctor } = opts;
   const s = c(doctor.defaultLanguage);
@@ -309,6 +321,59 @@ export function settingsPage(opts: {
             <button class="secondary" type="submit">${s.closeDay}</button>
           </form>
         </div>
+
+        <div class="card">
+          <h2>${s.calendarSync}</h2>
+          <p class="sub">${s.calendarSyncBody}</p>
+
+          ${opts.calendar.connected
+            ? html`
+                <div class="ok">
+                  ${s.calendarConnected}${opts.calendar.host ? ` · ${opts.calendar.host}` : ''}
+                </div>
+                <p class="sub">
+                  ${opts.calendar.syncedAt
+                    ? s.calendarSyncedAt(opts.calendar.syncedAt)
+                    : s.calendarNeverSynced}
+                </p>
+                ${opts.calendar.error
+                  ? html`<div class="caveat">${opts.calendar.error}</div>`
+                  : ''}
+                <form method="post" action="/app/settings/calendar">
+                  <input type="hidden" name="_csrf" value="${opts.csrfToken}" />
+                  <input type="hidden" name="url" value="" />
+                  <button class="ghost" type="submit">${s.calendarRemove}</button>
+                </form>
+              `
+            : html`
+                <div class="sub">${s.calendarNotConnected}</div>
+                <form method="post" action="/app/settings/calendar">
+                  <input type="hidden" name="_csrf" value="${opts.csrfToken}" />
+                  <label for="calUrl">${s.calendarUrlLabel}</label>
+                  <input
+                    id="calUrl"
+                    name="url"
+                    type="url"
+                    inputmode="url"
+                    placeholder="https://..."
+                    autocomplete="off"
+                  />
+                  <button class="secondary" type="submit">${s.calendarSave}</button>
+                </form>
+              `}
+        </div>
+
+        ${opts.calendar.clashes.length > 0
+          ? html`
+              <div class="card">
+                <h2>${s.calendarClashes}</h2>
+                <p class="sub">${s.calendarClashesBody}</p>
+                <ul class="plainlist">
+                  ${opts.calendar.clashes.map((line) => html`<li>${line}</li>`)}
+                </ul>
+              </div>
+            `
+          : ''}
 
         <div class="card">
           <h2>${s.waitingRoomBoard}</h2>
