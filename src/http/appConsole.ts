@@ -41,6 +41,16 @@ import {
  * without JavaScript; requireFormCsrf carries the token in a hidden field since
  * a form cannot set the X-CSRF-Token header the JSON API uses.
  */
+/**
+ * Stored digits-only, because the missed-call webhook strips every non-digit
+ * from Exotel's CallTo before matching. A number saved as "+91 8130 819820"
+ * could never match "918130819820", and the failure is silent — the call comes
+ * in and nothing happens.
+ */
+function digitsOnly(value: string): string {
+  return value.replace(/\D/g, '');
+}
+
 export const appConsoleRouter = Router();
 
 /**
@@ -359,7 +369,9 @@ appConsoleRouter.post(
             ? { whatsappPhoneNumberId: values.whatsappPhoneNumberId }
             : {}),
           ...(whatsappNumber ? { whatsappNumber } : {}),
-          ...(values.missedCallNumber ? { missedCallNumber: values.missedCallNumber } : {}),
+          ...(values.missedCallNumber
+            ? { missedCallNumber: digitsOnly(values.missedCallNumber) }
+            : {}),
           apiKey: `dk_${crypto.randomBytes(24).toString('hex')}`,
         },
       });
@@ -513,7 +525,7 @@ appConsoleRouter.post(
           workingHours: workingHours as object,
           whatsappPhoneNumberId: values.whatsappPhoneNumberId || null,
           whatsappNumber,
-          missedCallNumber: values.missedCallNumber || null,
+          missedCallNumber: values.missedCallNumber ? digitsOnly(values.missedCallNumber) : null,
         },
       });
       res.redirect(302, `/app/doctors/${id}?flash=Changes+saved`);

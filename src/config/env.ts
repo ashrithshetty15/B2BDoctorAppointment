@@ -46,6 +46,19 @@ const schema = z.object({
   SESSION_TTL_MINUTES: z.coerce.number().int().positive().default(120),
   ADMIN_API_KEY: z.string().default('change-me'),
 
+  /**
+   * Shared secret the Exotel Passthru carries in its URL.
+   *
+   * The missed-call endpoint had no authentication at all, and it can make the
+   * system send WhatsApp templates to any number a caller supplies. Optional
+   * here rather than required at boot only because a deployment with no Exotel
+   * number configured has nothing to protect — the route itself refuses every
+   * request while this is unset, rather than falling back to open.
+   */
+  EXOTEL_WEBHOOK_TOKEN: z.string().optional(),
+  /** The approved template sent in reply to a missed call. */
+  EXOTEL_WELCOME_TEMPLATE: z.string().default('clinic_welcome'),
+
   // ---- Dashboard web login ----
   // Named DASHBOARD_* to keep them clearly distinct from SESSION_TTL_MINUTES
   // above, which governs the unrelated WhatsApp conversation state.

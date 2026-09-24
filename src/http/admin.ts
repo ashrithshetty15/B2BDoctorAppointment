@@ -255,7 +255,11 @@ adminRouter.patch('/admin/doctor/:id', requireAdminKey, async (req, res) => {
       ? { whatsappPhoneNumberId: body.whatsappPhoneNumberId }
       : {}),
     ...(whatsappNumber ? { whatsappNumber } : {}),
-    ...(body.missedCallNumber ? { missedCallNumber: body.missedCallNumber } : {}),
+    // Digits only: the webhook strips non-digits from Exotel's CallTo before
+    // matching, so a stored '+91 …' can never be found.
+    ...(body.missedCallNumber
+      ? { missedCallNumber: body.missedCallNumber.replace(/\D/g, '') }
+      : {}),
     ...(body.workingHours ? { workingHours: body.workingHours as object } : {}),
     ...(leaveDates ? { leaveDates: leaveDates as Date[] } : {}),
   };
