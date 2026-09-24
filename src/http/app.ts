@@ -75,6 +75,22 @@ export function createApp() {
   // NOTE: urlencoded is deliberately absent from the global config — see above.
   app.use(express.json({ limit: '100kb' }));
 
+  /**
+   * The bare domain is a front door, not a 404.
+   *
+   * Every route here lives under a prefix — /app, /admin, /display — so the
+   * root matched nothing and a receptionist who typed app.clinicforyou.org got
+   * `{"error":"Not found"}`, which reads as a broken service rather than a
+   * wrong address.
+   *
+   * /app/login rather than /app: the login page serves all three audiences and
+   * needs no session, whereas /app requires an admin one and would bounce a
+   * doctor straight back out.
+   */
+  app.get('/', (_req, res) => {
+    res.redirect(302, '/app/login');
+  });
+
   app.get('/health', async (_req, res) => {
     try {
       await prisma.$queryRaw`SELECT 1`;
