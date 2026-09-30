@@ -167,7 +167,12 @@ const en: TemplateSet = {
   sessionExpired: () => 'Your session timed out, so we are starting again.',
   errorGeneric: () =>
     'Sorry, something went wrong on our side. Please try again in a moment, or call the clinic.',
-  unknownInput: () => 'Sorry, I did not understand that. Please reply with one of the numbers shown above.',
+  // The language hint rides on this message deliberately: a patient who cannot
+  // read the prompts is, by definition, the one sending input we cannot parse,
+  // so this is the moment they need the way out. Nothing else ever told them
+  // the escape hatch existed.
+  unknownInput: () =>
+    'Sorry, I did not understand that. Please reply with one of the numbers shown above.\n\n_To change language, send *language* or *ಭಾಷೆ*._',
   selectDoctor: () => 'Which doctor would you like to see?',
   slotCancelHint: () => '_Reply *cancel* to cancel your appointment._',
   selectDoctorInvalid: () => 'Please choose one of the doctors shown above.',
@@ -304,8 +309,11 @@ const kn: TemplateSet = {
   sessionExpired: () => 'ನಿಮ್ಮ ಸಂವಾದದ ಸಮಯ ಮುಗಿದಿದೆ, ಆದ್ದರಿಂದ ಮೊದಲಿನಿಂದ ಶುರು ಮಾಡುತ್ತೇವೆ.',
   errorGeneric: () =>
     'ಕ್ಷಮಿಸಿ, ನಮ್ಮ ಕಡೆಯಿಂದ ಏನೋ ತಪ್ಪಾಗಿದೆ. ಸ್ವಲ್ಪ ಹೊತ್ತಿನ ನಂತರ ಪುನಃ ಪ್ರಯತ್ನಿಸಿ, ಅಥವಾ ಕ್ಲಿನಿಕ್‌ಗೆ ಫೋನ್ ಮಾಡಿ.',
+  // English kept alongside ಭಾಷೆ on purpose: a patient stuck in Kannada by
+  // mistake may not read this line at all, and "English" is the one word on it
+  // they will recognise.
   unknownInput: () =>
-    'ಕ್ಷಮಿಸಿ, ನನಗೆ ಅರ್ಥವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮೇಲೆ ತೋರಿಸಿರುವ ಸಂಖ್ಯೆಗಳಲ್ಲಿ ಒಂದನ್ನು ಒತ್ತಿ.',
+    'ಕ್ಷಮಿಸಿ, ನನಗೆ ಅರ್ಥವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮೇಲೆ ತೋರಿಸಿರುವ ಸಂಖ್ಯೆಗಳಲ್ಲಿ ಒಂದನ್ನು ಒತ್ತಿ.\n\n_ಭಾಷೆ ಬದಲಾಯಿಸಲು *ಭಾಷೆ* ಅಥವಾ *language* ಎಂದು ಕಳುಹಿಸಿ._',
   selectDoctor: () => 'ಯಾವ ವೈದ್ಯರನ್ನು ನೀವು ಭೇಟಿ ಮಾಡಲು ಬಯಸುವಿರಿ?',
   slotCancelHint: () => '_ರದ್ದು ಮಾಡಲು *ರದ್ದು* ಎಂದು ಕಳುಹಿಸಿ._',
   selectDoctorInvalid: () => 'ದಯವಿಟ್ಟು ಮೇಲೆ ತೋರಿಸಿದ ವೈದ್ಯರಲ್ಲಿ ಒಬ್ಬರನ್ನು ಆಯ್ಕೆ ಮಾಡಿ.',

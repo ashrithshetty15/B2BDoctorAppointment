@@ -28,7 +28,40 @@ export type OnboardingOutcome =
       patch: { name?: string; language?: Language };
     };
 
-const LANGUAGE_WORDS = ['lang', 'language', 'bhashe', 'bhaashe', 'kannada', 'english'];
+/**
+ * The words that reopen the language menu.
+ *
+ * Kannada script matters more than the Latin spellings here, not less. Picking
+ * Kannada rewrites every prompt into Kannada, so the patient most likely to
+ * want out is the one least able to type 'language' — and the list used to hold
+ * Latin words only. They typed ಭಾಷೆ, the exact word this app's own prompt uses
+ * ("ನಿಮ್ಮ ಭಾಷೆ ಆಯ್ಕೆ ಮಾಡಿ"), and got "sorry, I didn't understand".
+ *
+ * languageFromWord below already accepted ಕನ್ನಡ and ಇಂಗ್ಲಿಷ್, but only once the
+ * menu was open — which was the part they could not reach.
+ *
+ * Romanised spellings are here because that is how a great many people type
+ * Kannada on a phone keyboard.
+ */
+const LANGUAGE_WORDS = [
+  // English
+  'lang',
+  'language',
+  'english',
+  'kannada',
+  // Romanised Kannada
+  'bhashe',
+  'bhaashe',
+  'bhasha',
+  'bhaasha',
+  'basha',
+  // Kannada script
+  'ಭಾಷೆ',
+  'ಕನ್ನಡ',
+  'ಇಂಗ್ಲಿಷ್',
+  'ಇಂಗ್ಲೀಷ್',
+  'ಆಂಗ್ಲ',
+];
 
 export function isLanguageSwitchRequest(input: string): boolean {
   return LANGUAGE_WORDS.includes(clean(input));
