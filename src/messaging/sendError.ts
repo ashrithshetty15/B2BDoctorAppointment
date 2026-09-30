@@ -50,6 +50,32 @@ export function isAuthorizationFailure(err: unknown): err is SendError {
   return err instanceof SendError && err.code !== undefined && AUTHORIZATION_CODES.has(err.code);
 }
 
+/**
+ * Codes that mean this template cannot be sent from this number, ever, as
+ * written.
+ *
+ * Separate from AUTHORIZATION_CODES because the remedy is different: the number
+ * is fine, the template is not. Templates are per-WABA assets, so the usual
+ * cause is a template approved on one clinic's account and absent from another's
+ * — and retrying that is 200 doomed Graph calls a sweep, every ten minutes,
+ * until the row ages out of the 30-day window.
+ */
+const PERMANENT_TEMPLATE_CODES = new Set([
+  132000, // Number of parameters does not match the expected number
+  132001, // Template does not exist in this language, or is not approved
+  132005, // Translated text too long
+  132007, // Template format character policy violated
+  132012, // Template parameter format mismatch
+  132015, // Template is paused
+  132016, // Template is disabled
+]);
+
+export function isPermanentTemplateFailure(err: unknown): err is SendError {
+  return (
+    err instanceof SendError && err.code !== undefined && PERMANENT_TEMPLATE_CODES.has(err.code)
+  );
+}
+
 /** Pull `{ error: { message, code } }` out of a provider error body. */
 export function parseProviderError(bodyText: string): { message?: string; code?: number } {
   try {

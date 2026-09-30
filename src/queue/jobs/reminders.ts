@@ -2,6 +2,7 @@ import type { Job } from 'bullmq';
 import { env } from '../../config/env';
 import { prisma } from '../../db/prisma';
 import { getMessagingAdapter } from '../../messaging';
+import { isPermanentTemplateFailure } from '../../messaging/sendError';
 import { sweepChannelHealth } from '../../domain/channelHealth';
 import { outboundChannelFor } from '../../domain/doctors';
 import { doctorsWithBusyFeed, syncBusyFeed } from '../../domain/externalBusy';
@@ -227,16 +228,45 @@ export async function sweepDueFollowUps(): Promise<number> {
   });
 
   let sent = 0;
+  /**
+   * Senders whose template is missing or unusable, learned during this sweep.
+   *
+   * Templates are per-WABA assets and the template name is one global env var,
+   * so the moment a second clinic has its own WhatsApp account the name can be
+   * approved for one and absent for the other. Without this, that clinic's
+   * every due row is attempted on every sweep — up to 200 refusals each time,
+   * every ten minutes, until the rows age past the 30-day floor.
+   *
+   * Scoped to one sweep deliberately: the next one re-checks, so a template
+   * that gets approved starts working without a deploy or a restart.
+   */
+  const unusableSenders = new Set<string>();
+
   for (const appointment of due) {
     try {
       const channel = outboundChannelFor(appointment.doctor);
+      if (channel && unusableSenders.has(channel)) continue;
       await adapter.sendTemplate({
         to: appointment.patient.phone,
         templateName,
         // The patient's own language, not the clinic's default. The template
         // must be approved in this language or Meta refuses it.
         languageCode: appointment.patient.language === 'KN' ? 'kn' : 'en_US',
-        params: [appointment.patient.name ?? '', appointment.doctor.name],
+        // Third parameter is the date of the visit being followed up, and it is
+        // load-bearing rather than cosmetic: Meta classifies a reminder that
+        // names the specific prior interaction as UTILITY (Rs 0.115) and a
+        // generic "book your next visit" as MARKETING (Rs 0.8631) — a 7.5x
+        // difference on every message. Removing it risks the whole template
+        // being recategorised.
+        //
+        // Renders in English for Kannada patients too: formatDateForPatient
+        // takes no locale. A date is the one string where that is tolerable,
+        // and localising it is a separate change with its own risk.
+        params: [
+          appointment.patient.name ?? '',
+          appointment.doctor.name,
+          formatDateForPatient(appointment.date),
+        ],
         // What makes it one tap: the button comes back naming this visit, so
         // the bot opens booking with this doctor instead of asking which.
         buttonPayload: followUpPayload(appointment.id),
@@ -250,6 +280,25 @@ export async function sweepDueFollowUps(): Promise<number> {
     } catch (err) {
       // Left unstamped so the next sweep retries, and so the console keeps
       // showing it as pending rather than claiming the patient was told.
+      if (isPermanentTemplateFailure(err)) {
+        // No amount of retrying fixes a template that is absent, paused or
+        // takes a different number of parameters. Stop attempting this sender
+        // for the rest of the sweep, and say so at error level — this one needs
+        // a human to approve or fix a template, and a warn would be lost among
+        // ordinary transient noise.
+        unusableSenders.add(err.channelAddress);
+        logger.error(
+          {
+            err,
+            appointmentId: appointment.id,
+            templateName,
+            channelAddress: err.channelAddress,
+            code: err.code,
+          },
+          'Follow-up template unusable for this sender; skipping it for this sweep',
+        );
+        continue;
+      }
       logger.warn({ err, appointmentId: appointment.id }, 'Follow-up send failed');
     }
   }

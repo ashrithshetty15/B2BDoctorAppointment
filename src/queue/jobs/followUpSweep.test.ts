@@ -20,7 +20,12 @@ vi.mock('../../db/prisma', () => ({
 vi.mock('../../messaging', () => ({
   getMessagingAdapter: () => ({ sendTemplate: (...a: unknown[]) => sendTemplate(...a) }),
 }));
-vi.mock('../../domain/doctors', () => ({ outboundChannelFor: () => 'pn-clinic' }));
+// A function rather than a constant: templates are per-WABA assets, so a test
+// needs two clinics sending from two different numbers.
+vi.mock('../../domain/doctors', () => ({
+  outboundChannelFor: (d: { clinic?: { whatsappPhoneNumberId?: string } }) =>
+    d?.clinic?.whatsappPhoneNumberId ?? 'pn-clinic',
+}));
 vi.mock('../../domain/channelHealth', () => ({ sweepChannelHealth: async () => 0 }));
 vi.mock('../queues', () => ({
   enqueueOutbound: vi.fn(),
@@ -30,6 +35,7 @@ vi.mock('../../utils/logger', () => ({
   logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
+import { SendError } from '../../messaging/sendError';
 import { sweepDueFollowUps } from './reminders';
 
 /**
@@ -44,6 +50,10 @@ import { sweepDueFollowUps } from './reminders';
 
 const row = {
   id: 'appt-1',
+  // The date of the visit being followed up. NOT NULL in the schema, so a real
+  // row always carries it — the fixture omitted it, and the template's third
+  // parameter then rendered as the string "Invalid DateTime" to a patient.
+  date: new Date('2026-09-14T00:00:00.000Z'),
   patient: { phone: '919000000001', name: 'Asha', language: 'EN' },
   doctor: { id: 'doc-1', name: 'Arjun Rao', clinic: { name: 'Lakeview' } },
 };
@@ -114,10 +124,27 @@ describe('what the sweep sends', () => {
       to: '919000000001',
       templateName: 'followup_reminder',
       languageCode: 'en_US',
-      params: ['Asha', 'Arjun Rao'],
+      params: ['Asha', 'Arjun Rao', 'Mon, 14 Sep'],
       buttonPayload: 'FU:appt-1',
     });
     expect(update.mock.calls[0]![0]).toMatchObject({ where: { id: 'appt-1' } });
+  });
+
+  /**
+   * The third parameter names the visit being followed up, and it is what earns
+   * the template its UTILITY category — Rs 0.115 a message against Rs 0.8631 as
+   * MARKETING. A reminder that names no specific prior interaction reads to
+   * Meta's classifier as re-engagement.
+   */
+  it('names the visit being followed up, not just the doctor', async () => {
+    findMany.mockResolvedValue([row]);
+
+    await sweepDueFollowUps();
+
+    const params = (sendTemplate.mock.calls[0]![0] as { params: string[] }).params;
+    expect(params).toHaveLength(3);
+    expect(params[2]).toBe('Mon, 14 Sep');
+    expect(params[2]).not.toMatch(/Invalid/);
   });
 
   /** Approved per language: the wrong code is a refused send. */
@@ -160,5 +187,64 @@ describe('what the sweep sends', () => {
     expect(await sweepDueFollowUps()).toBe(0);
     expect(findMany).not.toHaveBeenCalled();
     expect(sendTemplate).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * One template name, many WhatsApp accounts.
+ *
+ * The template name is a single global env var, but templates are per-WABA
+ * assets — so the moment a second clinic brings its own WhatsApp account, the
+ * name can be approved for one and missing from the other. Retrying the missing
+ * one is pointless: it fails identically for every row, on every sweep, until
+ * the rows age past the 30-day floor.
+ */
+describe('a template missing from one clinic s WhatsApp account', () => {
+  const ours = { ...row, id: 'a1', doctor: { ...row.doctor, clinic: { whatsappPhoneNumberId: 'pn-ours' } } };
+  const theirs = (id: string) => ({
+    ...row,
+    id,
+    doctor: { ...row.doctor, clinic: { whatsappPhoneNumberId: 'pn-theirs' } },
+  });
+
+  const templateMissing = () =>
+    new SendError({
+      message: 'Template name does not exist in the translation',
+      status: 400,
+      code: 132001,
+      channelAddress: 'pn-theirs',
+    });
+
+  it('stops attempting that sender after the first refusal', async () => {
+    findMany.mockResolvedValue([theirs('b1'), theirs('b2'), theirs('b3')]);
+    sendTemplate.mockRejectedValue(templateMissing());
+
+    expect(await sweepDueFollowUps()).toBe(0);
+    // Tried once, learned, and did not burn two more doomed calls.
+    expect(sendTemplate).toHaveBeenCalledTimes(1);
+  });
+
+  /** The clinic whose template IS approved must keep being served. */
+  it('still sends for every other clinic', async () => {
+    findMany.mockResolvedValue([theirs('b1'), ours, theirs('b2')]);
+    sendTemplate.mockImplementation((m: { channelAddress?: string }) =>
+      m.channelAddress === 'pn-theirs'
+        ? Promise.reject(templateMissing())
+        : Promise.resolve({ providerMessageId: 'wamid.ok' }),
+    );
+
+    expect(await sweepDueFollowUps()).toBe(1);
+    expect(update.mock.calls[0]![0]).toMatchObject({ where: { id: 'a1' } });
+  });
+
+  /** A transient failure must NOT poison the sender for the rest of the sweep. */
+  it('keeps trying a sender that failed for an ordinary reason', async () => {
+    findMany.mockResolvedValue([theirs('b1'), theirs('b2')]);
+    sendTemplate
+      .mockRejectedValueOnce(new Error('socket hang up'))
+      .mockResolvedValue({ providerMessageId: 'wamid.ok' });
+
+    expect(await sweepDueFollowUps()).toBe(1);
+    expect(sendTemplate).toHaveBeenCalledTimes(2);
   });
 });
