@@ -137,7 +137,16 @@ export function bookingsPage(opts: {
         ${opts.rows.length > 0
           ? html`<div class="stats">
               <div class="s">
-                <div class="n">${opts.rows.length}</div>
+                <!--
+                  Cancelled appointments are listed below, struck through, because
+                  the desk wants the history — but they are not booked, and
+                  counting every row made a day with 2 bookings and 1 cancellation
+                  read as "3 Booked".
+
+                  No-shows still count: they were booked, and the day's own tile
+                  breaks them out, so "3 booked, 2 seen, 1 no-show" reconciles.
+                -->
+                <div class="n">${opts.rows.filter((r) => r.status !== 'CANCELLED').length}</div>
                 <div class="l">${s.bookedCount}</div>
               </div>
               <div class="s">

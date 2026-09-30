@@ -363,7 +363,16 @@ model Appointment {
   documents Document[]
 
   @@unique([doctorId, date, tokenNumber], name: "doctor_date_token")
-  @@unique([doctorId, slotStart], name: "doctor_slot_start")
+  /// NOT declared here, deliberately: the unique index on (doctor_id, slot_start)
+  /// is PARTIAL — `WHERE status NOT IN ('CANCELLED','NO_SHOW')` — and Prisma
+  /// cannot express a partial unique index. Declaring it as a plain @@unique
+  /// would make the next `prisma migrate` recreate it unconditionally and bring
+  /// back the bug where a cancelled appointment held its slot forever.
+  ///
+  /// It lives in migrations/20260927120000_slot_unique_excludes_cancelled.
+  /// Nothing queries it by name, so the generated client loses nothing; the
+  /// database still raises P2002 on a real clash, which is what bookSlot and
+  /// moveSlot catch.
   @@index([doctorId, date, status])
   @@index([patientId, date])
   @@index([status, slotStart])
