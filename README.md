@@ -252,15 +252,80 @@ conversations so no patient is stranded in a step the new flow does not own.
    the endpoint logs a warning — never run production that way).
 2. Point Meta's webhook at `https://<host>/webhook` with the same verify token.
    `GET /webhook` answers the handshake.
-3. Set each doctor's `whatsappPhoneNumberId` to the Meta `phone_number_id` that
-   patients message — that is how an inbound message is routed to a doctor.
+3. Set the **clinic's** `whatsappPhoneNumberId` to the Meta `phone_number_id`
+   that patients message — that is the routing key for every inbound message.
+   Editable at **/app/clinics**. The matching field on a doctor row is a legacy
+   fallback and should not be relied on for a new clinic.
 
 Note: WhatsApp only allows free-form messages inside a 24-hour customer service
 window. Replies to a patient's own message are fine; unprompted pushes (queue
 updates, reminders, delay broadcasts) to someone who has not messaged in 24h
-need approved **message templates** at the Meta end. The code is ready for it —
-`OutboundJob` already carries `templateName` — but registering those templates
-and sending them as `type: "template"` is not built yet.
+need approved **message templates** at the Meta end.
+
+---
+
+## Missed call via Exotel
+
+A patient rings the clinic's number, the call is hung up without connecting, and
+they get a WhatsApp message seconds later. A missed call is the one action every
+patient in India already knows how to perform, and it costs them nothing.
+
+The shape, per clinic:
+
+```
+patient dials the clinic's advertised number
+  -> call forwards to that clinic's own ExoPhone
+  -> Exotel hangs up after 1-2 rings and calls our Passthru URL
+  -> we match CallTo (the ExoPhone) to Clinic.missedCallNumber
+  -> we send clinic_welcome from that clinic's WhatsApp sender
+```
+
+`CallTo` is the ExoPhone that was dialled, which is why **one shared webhook
+serves every clinic**: give each clinic its own ExoPhone and the dialled number
+identifies the practice unambiguously.
+
+### Once, for the deployment
+
+Set `EXOTEL_WEBHOOK_TOKEN` (see `.env.example`). The route answers `503` to
+everything while it is unset — it fails closed rather than reverting to open.
+
+### Per clinic
+
+1. Buy an ExoPhone for the clinic. This is a per-number rental and is the
+   running cost of the feature.
+2. In App Bazaar, create a flow whose first applet is a **Passthru** pointing at
+   `https://<host>/call-webhook?token=<EXOTEL_WEBHOOK_TOKEN>`, in **async** mode
+   so the call is not held open waiting on us.
+3. Set the flow to hang up after 1–2 rings, so the caller is never charged and
+   no agent leg is dialled.
+4. Assign the flow to that clinic's ExoPhone.
+5. Ask the clinic to set conditional call forwarding (busy / unanswered) from
+   its advertised number to the ExoPhone.
+6. At **/app/clinics**, set that clinic's **missed-call number** to the ExoPhone,
+   and make sure its WhatsApp phone number ID is set too — the reply is sent from
+   the clinic's own sender, so a clinic with no sender cannot answer a missed call.
+
+Numbers are stored digits-only; the webhook strips non-digits from `CallTo`
+before matching, so a stored `+91 …` would never be found. The form normalises
+this for you.
+
+### Checking it
+
+```bash
+curl "https://<host>/call-webhook?token=$EXOTEL_WEBHOOK_TOKEN\
+&CallSid=test-1&CallFrom=919876543210&CallTo=<exophone>"
+```
+
+`200` with a message id means it worked. `404` means no clinic holds that
+`CallTo` — the log line records the exact digits the lookup used, so read it back
+from there rather than guessing the format. `401` is a bad token, `503` means
+none is configured.
+
+Two behaviours worth knowing: the `CallSid` is **claimed before** the send and
+released if the send fails, so duplicate deliveries cannot double-message a
+patient while a genuine failure is still retryable; and one caller is limited to
+5 replies an hour, keyed on `CallFrom` rather than the source IP — every request
+arrives from Exotel, so an IP bucket would count all clinics together.
 
 ---
 
@@ -292,15 +357,20 @@ and sending them as `type: "template"` is not built yet.
 
 ## Known gaps
 
-- **SLOT conversation flow** — stub pending §4 (engine, templates, reminders and
-  step names are all in place).
-- **WhatsApp message templates** for pushes outside the 24-hour window (above).
-- **Interactive buttons.** The adapter already flattens button/list replies to
-  text, but outbound messages are plain text with numbered menus. Sending real
-  quick-reply buttons is an adapter-only change.
-- **Integration tests.** Unit coverage is real (38 tests) but nothing exercises
-  Postgres or Redis; no container runtime was available on the build machine.
-  A `docker compose`-backed test would be the first thing to add.
+- **One WhatsApp identity for the whole deployment.** `WHATSAPP_ACCESS_TOKEN` is
+  a single global credential, so every clinic's number must sit under the same
+  WABA. Inbound routing is already per-clinic (`Clinic.whatsappPhoneNumberId`),
+  but sending is not: a per-clinic token is what a Meta Tech Provider needs, and
+  it does not exist yet. Note the related sharp edge — the adapter falls back to
+  `WHATSAPP_PHONE_NUMBER_ID` when a send carries no `channelAddress`, which means
+  a forgotten channel sends from **another clinic's number**.
+- **`Patient.phone` is globally unique**, so one patient row is shared across
+  every clinic they message: `name`, `language` and `lastVisitAt` are written by
+  whichever clinic spoke to them last.
+- **Integration tests.** Unit coverage is real (612 tests across 53 files) but
+  nothing exercises Postgres or Redis. A `docker compose`-backed test would be
+  the first thing to add — and it would also give somewhere safe to rehearse a
+  migration, which matters because local `.env` and Railway share one database.
 - **Inbound is processed synchronously** inside the webhook request (a handful of
   queries). All sends are already queued, so this is fine at MVP volume; if turns
   get slow, add an inbound queue and return `200` immediately.
