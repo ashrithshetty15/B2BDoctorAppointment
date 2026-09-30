@@ -92,14 +92,25 @@ export async function clinicForNewDoctor(input: {
 
   // A clinic created before it had a number of its own adopts the one supplied
   // with this doctor, rather than leaving the practice unroutable.
-  if (!existing.whatsappPhoneNumberId && input.whatsappPhoneNumberId) {
-    return prisma.clinic.update({
-      where: { id: existing.id },
-      data: {
-        whatsappPhoneNumberId: input.whatsappPhoneNumberId,
-        ...(input.whatsappNumber ? { whatsappNumber: input.whatsappNumber } : {}),
-      },
-    });
+  //
+  // Each key is adopted independently. Bundling them behind a single
+  // `!existing.whatsappPhoneNumberId` test is what left a clinic with a WhatsApp
+  // number but no missed-call number: the second doctor supplied the ExoPhone,
+  // the branch was already satisfied, and the value was dropped on the floor.
+  const adopt = {
+    ...(!existing.whatsappPhoneNumberId && input.whatsappPhoneNumberId
+      ? { whatsappPhoneNumberId: input.whatsappPhoneNumberId }
+      : {}),
+    ...(!existing.whatsappNumber && input.whatsappNumber
+      ? { whatsappNumber: input.whatsappNumber }
+      : {}),
+    ...(!existing.missedCallNumber && input.missedCallNumber
+      ? { missedCallNumber: input.missedCallNumber }
+      : {}),
+  };
+
+  if (Object.keys(adopt).length > 0) {
+    return prisma.clinic.update({ where: { id: existing.id }, data: adopt });
   }
 
   return existing;

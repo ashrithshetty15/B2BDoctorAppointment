@@ -113,3 +113,65 @@ describe('clinicForNewDoctor', () => {
     expect(clinicUpdate).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * The missed-call routing key.
+ *
+ * Every clinic row in production had a null missed_call_number, so an authentic
+ * Exotel call reached the webhook, authenticated, and then fell through to
+ * "No clinic for this number" — the feature could not route at all. The number
+ * was being written to the Doctor row instead, and the adopt branch below was
+ * gated behind whatsappPhoneNumberId so it never filled the gap either.
+ */
+describe('the Exotel number reaches the clinic', () => {
+  it('persists the missed-call number when the clinic is created', async () => {
+    await clinicForNewDoctor({
+      clinicName: 'New Practice',
+      missedCallNumber: '918130819820',
+    });
+
+    expect(clinicCreate.mock.calls[0]?.[0]?.data?.missedCallNumber).toBe('918130819820');
+  });
+
+  it('adopts a missed-call number for a clinic that had none', async () => {
+    clinicFindFirst.mockResolvedValueOnce({ ...LAKEVIEW, missedCallNumber: null });
+
+    await clinicForNewDoctor({
+      clinicName: 'Lakeview Clinic',
+      missedCallNumber: '918130819820',
+    });
+
+    expect(clinicUpdate.mock.calls[0]?.[0]?.data?.missedCallNumber).toBe('918130819820');
+  });
+
+  /**
+   * The regression that mattered: the clinic already has a WhatsApp number, so
+   * the old single-key guard was satisfied and the ExoPhone was silently dropped.
+   */
+  it('adopts the ExoPhone even when the WhatsApp number is already set', async () => {
+    clinicFindFirst.mockResolvedValueOnce({ ...LAKEVIEW, missedCallNumber: null });
+
+    await clinicForNewDoctor({
+      clinicName: 'Lakeview Clinic',
+      whatsappPhoneNumberId: 'pn-1',
+      missedCallNumber: '918130819820',
+    });
+
+    expect(clinicUpdate).toHaveBeenCalled();
+    const data = clinicUpdate.mock.calls[0]?.[0]?.data;
+    expect(data?.missedCallNumber).toBe('918130819820');
+    // …and the number it already had is left alone.
+    expect(data?.whatsappPhoneNumberId).toBeUndefined();
+  });
+
+  it('does not overwrite an ExoPhone the clinic already has', async () => {
+    clinicFindFirst.mockResolvedValueOnce({ ...LAKEVIEW, missedCallNumber: '911111111111' });
+
+    await clinicForNewDoctor({
+      clinicName: 'Lakeview Clinic',
+      missedCallNumber: '918130819820',
+    });
+
+    expect(clinicUpdate).not.toHaveBeenCalled();
+  });
+});

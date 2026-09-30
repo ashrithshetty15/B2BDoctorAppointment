@@ -21,6 +21,15 @@ export function createRateLimiter(opts: {
   max: number;
   /** Render the refusal instead of the default JSON — used by HTML pages. */
   onLimit?: (req: Request, res: Response, retryAfterSecs: number) => void;
+  /**
+   * What to count per. Defaults to req.ip.
+   *
+   * The missed-call webhook needs this: every Exotel request arrives from
+   * Exotel's own address, so an IP-keyed bucket would count all clinics
+   * together and let one busy practice lock out the rest. It keys on the
+   * caller's number instead. Returning '' opts a request out of limiting.
+   */
+  keyOf?: (req: Request) => string;
 }) {
   const buckets = new Map<string, Bucket>();
 
@@ -37,7 +46,15 @@ export function createRateLimiter(opts: {
     if (buckets.size > MAX_TRACKED_KEYS) prune(now);
 
     // req.ip is meaningful because app.set('trust proxy', 1) is configured.
-    const key = req.ip ?? 'unknown';
+    const key = opts.keyOf ? opts.keyOf(req) : (req.ip ?? 'unknown');
+
+    // An empty key means "not something we can attribute" — let it through
+    // rather than lumping every such request into one shared bucket.
+    if (!key) {
+      next();
+      return;
+    }
+
     const bucket = buckets.get(key);
 
     if (!bucket || bucket.resetAt <= now) {

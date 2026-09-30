@@ -46,6 +46,42 @@ export function normalisePhone(input: unknown): PhoneResult {
   return { ok: true, digits };
 }
 
+/**
+ * The same dialled number, written every way it might arrive.
+ *
+ * Exotel reports `CallTo` in whatever form the carrier hands it, and an ExoPhone
+ * like Bangalore's 08047288908 can turn up as "08047288908", "8047288908" or
+ * "+918047288908". The missed-call webhook matches that value against a stored
+ * `missedCallNumber` by equality, so a number typed into the console in one form
+ * and reported in another simply never matches: the call is authenticated,
+ * falls through to "no clinic for this number", and the patient gets silence.
+ * Nothing about that failure looks like a formatting problem from the outside.
+ *
+ * `normalisePhone` above does not help here — it strips punctuation, but still
+ * treats 08047288908 and 918047288908 as two different numbers.
+ *
+ * A small candidate set rather than a suffix comparison, deliberately: this runs
+ * on every incoming call, and `LIKE '%…'` cannot use the unique index on
+ * `missed_call_number`, whereas an `IN` of four exact strings can.
+ */
+export function dialledNumberCandidates(input: string): string[] {
+  const digits = String(input ?? '').replace(/\D/g, '');
+  if (!digits) return [];
+
+  // Reduce to the subscriber number: drop the country code, then any trunk zero.
+  //
+  // The length guard is load-bearing. Jalaja's own mobile, 9180354172, begins
+  // with "91" and is exactly ten digits — stripping it blindly would leave
+  // "80354172" and match the wrong clinic, or none at all.
+  let core = digits;
+  if (core.startsWith('91') && core.length > 10) core = core.slice(2);
+  core = core.replace(/^0+/, '');
+
+  if (!core) return [digits];
+
+  return [...new Set([digits, core, `0${core}`, `91${core}`])];
+}
+
 /** Operator-facing explanation, so a rejected paste says what to do about it. */
 export function phoneError(reason: Exclude<PhoneResult, { ok: true }>['reason']): string {
   switch (reason) {

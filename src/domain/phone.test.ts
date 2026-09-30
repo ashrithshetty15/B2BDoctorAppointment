@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalisePhone } from './phone';
+import { dialledNumberCandidates, normalisePhone } from './phone';
 
 const digits = (input: string) => {
   const r = normalisePhone(input);
@@ -69,5 +69,59 @@ describe('normalisePhone', () => {
   it('is idempotent', () => {
     const once = digits('+91 98765 43210')!;
     expect(digits(once)).toBe(once);
+  });
+});
+
+/**
+ * Matching the number Exotel says was dialled.
+ *
+ * Exotel reports CallTo as the carrier hands it, so one ExoPhone arrives as
+ * "08047288908" or "+918047288908" on different calls. The webhook matches it
+ * against a stored missedCallNumber by equality, so a mismatch in form reads as
+ * "no clinic for this number" — authenticated, routed, and silent.
+ */
+describe('dialledNumberCandidates', () => {
+  const EXOPHONE_FORMS = ['08047288908', '8047288908', '+91 80 4728 8908', '918047288908'];
+
+  it.each(EXOPHONE_FORMS)('matches a clinic stored as 918047288908 when Exotel says %s', (form) => {
+    expect(dialledNumberCandidates(form)).toContain('918047288908');
+  });
+
+  it.each(EXOPHONE_FORMS)('matches a clinic stored as 08047288908 when Exotel says %s', (form) => {
+    expect(dialledNumberCandidates(form)).toContain('08047288908');
+  });
+
+  /** Every spelling of one number must agree, or the two lookups disagree. */
+  it('gives every form of the same number an identical candidate set', () => {
+    const sets = EXOPHONE_FORMS.map((f) => [...dialledNumberCandidates(f)].sort().join(','));
+    expect(new Set(sets).size).toBe(1);
+  });
+
+  /**
+   * The guard that earns its keep: this mobile starts with "91" and is exactly
+   * ten digits. Stripping a country code blindly would leave "80354172" and
+   * match nothing — or worse, something else.
+   */
+  it('does not mistake the leading 91 of a ten-digit mobile for a country code', () => {
+    const c = dialledNumberCandidates('9180354172');
+    expect(c).toContain('9180354172');
+    expect(c).toContain('919180354172');
+    expect(c).not.toContain('80354172');
+  });
+
+  it('shares no candidate with a genuinely different number', () => {
+    const a = dialledNumberCandidates('918047288908');
+    const b = dialledNumberCandidates('919731028452');
+    expect(a.filter((x) => b.includes(x))).toEqual([]);
+  });
+
+  it('has nothing to try for an empty or junk value', () => {
+    expect(dialledNumberCandidates('')).toEqual([]);
+    expect(dialledNumberCandidates('abc')).toEqual([]);
+  });
+
+  /** All zeroes reduce to no core; it must not produce "0" or "91" as a match. */
+  it('does not invent candidates from a number that is only zeroes', () => {
+    expect(dialledNumberCandidates('000')).toEqual(['000']);
   });
 });

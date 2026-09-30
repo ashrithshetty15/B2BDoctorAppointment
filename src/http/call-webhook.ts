@@ -1,9 +1,12 @@
-import { Request, Response, Router } from 'express';
+import crypto from 'node:crypto';
+import { type NextFunction, Request, Response, Router } from 'express';
 import { env } from '../config/env';
 import { prisma } from '../db/prisma';
+import { dialledNumberCandidates } from '../domain/phone';
 import { logger } from '../utils/logger';
 import { getMessagingAdapter } from '../messaging';
 import type { TemplateMessage } from '../messaging/types';
+import { createRateLimiter } from './middleware/rateLimit';
 
 /**
  * Missed-call trigger. A patient rings the clinic's Exotel number, the call is
@@ -38,6 +41,39 @@ function field(req: Request, name: string): string {
 const digits = (value: string) => value.replace(/\D/g, '');
 
 /**
+ * Constant-time secret comparison.
+ *
+ * timingSafeEqual throws on a length mismatch, which would itself leak the
+ * secret's length, so both sides are hashed to a fixed 32 bytes first.
+ */
+function secretsMatch(given: string, expected: string): boolean {
+  const a = crypto.createHash('sha256').update(given).digest();
+  const b = crypto.createHash('sha256').update(expected).digest();
+  return crypto.timingSafeEqual(a, b);
+}
+
+/**
+ * One caller, one clinic reply, a few times an hour.
+ *
+ * Every distinct CallSid sends a WhatsApp template, and a template costs the
+ * clinic money. The CallSid dedupe stops Exotel's retries of the *same* call
+ * but does nothing about someone redialling in a loop, so without this a single
+ * number could run up a bill from the clinic's own sender.
+ *
+ * Keyed on the caller, not the IP: every request here comes from Exotel, so an
+ * IP bucket would count all clinics together.
+ *
+ * Honest about its limits — it is per-process and resets on deploy, so it
+ * blunts a runaway dialler rather than guaranteeing a spend ceiling. A hard cap
+ * would need a counter in Postgres or Redis.
+ */
+const missedCallLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  keyOf: (req) => digits(field(req, 'CallFrom')),
+});
+
+/**
  * Who owns this number.
  *
  * Clinic first, because a missed call knows which *number* was dialled and not
@@ -47,7 +83,18 @@ const digits = (value: string) => value.replace(/\D/g, '');
  * stays as a fallback for numbers configured before this existed.
  */
 async function clinicForMissedCall(callTo: string) {
-  const clinic = await prisma.clinic.findUnique({ where: { missedCallNumber: callTo } });
+  // Every form the same ExoPhone might be written in. Exotel reports CallTo as
+  // the carrier hands it — "08047288908" or "+918047288908" for one number — so
+  // an equality match against whatever an operator happened to type would fail
+  // silently and look exactly like an unconfigured clinic.
+  //
+  // findFirst rather than findUnique: `in` is not a unique-where input. The
+  // column is still unique, so at most one row can match.
+  const candidates = dialledNumberCandidates(callTo);
+
+  const clinic = await prisma.clinic.findFirst({
+    where: { missedCallNumber: { in: candidates } },
+  });
   if (clinic) {
     return {
       clinicId: clinic.id,
@@ -56,7 +103,9 @@ async function clinicForMissedCall(callTo: string) {
     };
   }
 
-  const doctor = await prisma.doctor.findUnique({ where: { missedCallNumber: callTo } });
+  const doctor = await prisma.doctor.findFirst({
+    where: { missedCallNumber: { in: candidates } },
+  });
   if (doctor) {
     return {
       clinicId: doctor.clinicId ?? undefined,
@@ -68,31 +117,38 @@ async function clinicForMissedCall(callTo: string) {
   return null;
 }
 
-async function handleMissedCall(req: Request, res: Response): Promise<void> {
-  /**
-   * The only thing standing between this URL and anyone on the internet.
-   *
-   * There was no authentication of any kind. Anyone who learned a clinic's
-   * missed-call number could call this with any CallFrom they liked and have us
-   * send a template to a stranger — from the clinic's own number, at the
-   * clinic's cost, against the clinic's sender reputation. Exotel passes
-   * arbitrary query parameters through untouched, so a shared secret in the URL
-   * is both the smallest fix and the one Exotel can actually carry.
-   *
-   * Fails closed: with no token configured the endpoint refuses everything
-   * rather than quietly reverting to open.
-   */
+/**
+ * The only thing standing between this URL and anyone on the internet.
+ *
+ * There was no authentication of any kind. Anyone who learned a clinic's
+ * missed-call number could call this with any CallFrom they liked and have us
+ * send a template to a stranger — from the clinic's own number, at the clinic's
+ * cost, against the clinic's sender reputation. Exotel passes arbitrary query
+ * parameters through untouched, so a shared secret in the URL is both the
+ * smallest fix and the one Exotel can actually carry.
+ *
+ * Fails closed: with no token configured the endpoint refuses everything rather
+ * than quietly reverting to open.
+ *
+ * Its own middleware so that it runs *before* the rate limiter. The other way
+ * round, an unauthenticated flood could spend a real patient's hourly budget
+ * and lock them out of the clinic they were trying to reach.
+ */
+function requireExotelToken(req: Request, res: Response, next: NextFunction): void {
   if (!env.EXOTEL_WEBHOOK_TOKEN) {
     logger.error('Missed-call webhook hit but EXOTEL_WEBHOOK_TOKEN is not set; refusing');
     res.status(503).json({ error: 'Not configured' });
     return;
   }
-  if (field(req, 'token') !== env.EXOTEL_WEBHOOK_TOKEN) {
+  if (!secretsMatch(field(req, 'token'), env.EXOTEL_WEBHOOK_TOKEN)) {
     logger.warn('Rejected missed-call webhook: bad or missing token');
     res.status(401).json({ error: 'Unauthorized' });
     return;
   }
+  next();
+}
 
+async function handleMissedCall(req: Request, res: Response): Promise<void> {
   const callSid = field(req, 'CallSid');
   const callFrom = digits(field(req, 'CallFrom'));
   const callTo = digits(field(req, 'CallTo'));
@@ -109,23 +165,47 @@ async function handleMissedCall(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const seen = await prisma.processedMessage
-    .findUnique({ where: { providerMessageId: callSid } })
-    .catch(() => null);
-
-  if (seen) {
+  /**
+   * Claim the call before sending, not after.
+   *
+   * Reading first and writing after the send left a window: two deliveries of
+   * the same CallSid arriving together both saw no row, and both sent — the
+   * patient got the welcome message twice and the clinic paid for both. The
+   * insert is atomic on the primary key, so exactly one delivery can win it.
+   *
+   * The row is removed again if the send fails, which preserves the original
+   * intent: a transient failure is retried by Exotel rather than being
+   * swallowed as "already handled".
+   */
+  try {
+    await prisma.processedMessage.create({ data: { providerMessageId: callSid } });
+  } catch {
     logger.debug({ callSid }, 'Duplicate call event, ignoring');
     res.json({ ok: true });
     return;
   }
 
+  let claimed = true;
+  const releaseClaim = async () => {
+    if (!claimed) return;
+    claimed = false;
+    await prisma.processedMessage
+      .delete({ where: { providerMessageId: callSid } })
+      .catch(() => null);
+  };
+
   try {
     const clinic = await clinicForMissedCall(callTo);
     if (!clinic) {
-      // callTo is logged deliberately: it is the exact value the lookup used,
-      // so configuring a new number is a matter of reading it back from here
-      // rather than guessing which format Exotel sends.
-      logger.warn({ callTo }, 'No clinic found for missed-call number');
+      // Both the raw value and every form tried are logged deliberately: this
+      // is the one branch where a formatting mismatch and a genuinely
+      // unconfigured number look identical, so configuring a new clinic is a
+      // matter of reading these back rather than guessing.
+      logger.warn(
+        { callTo, tried: dialledNumberCandidates(callTo) },
+        'No clinic found for missed-call number',
+      );
+      await releaseClaim();
       res.status(404).json({ error: 'No clinic for this number' });
       return;
     }
@@ -139,6 +219,7 @@ async function handleMissedCall(req: Request, res: Response): Promise<void> {
     const adapter = getMessagingAdapter();
     if (!adapter.sendTemplate) {
       logger.error({ adapter: adapter.name }, 'Adapter does not support templates');
+      await releaseClaim();
       res.status(500).json({ error: 'Messaging adapter does not support templates' });
       return;
     }
@@ -151,10 +232,7 @@ async function handleMissedCall(req: Request, res: Response): Promise<void> {
     };
 
     const result = await adapter.sendTemplate(templateMsg);
-
-    // Written only after the send succeeds, so a transient failure is retried
-    // by Exotel rather than being swallowed as "already handled".
-    await prisma.processedMessage.create({ data: { providerMessageId: callSid } });
+    claimed = false; // The send landed; the claim is now a real dedupe record.
 
     logger.info(
       { patientId: patient.id, clinicId: clinic.clinicId, templateMessageId: result.providerMessageId },
@@ -163,6 +241,9 @@ async function handleMissedCall(req: Request, res: Response): Promise<void> {
 
     res.json({ ok: true, messageId: result.providerMessageId });
   } catch (error) {
+    // Give the CallSid back so Exotel's retry is processed rather than being
+    // mistaken for a duplicate of a call that never actually got a message.
+    await releaseClaim();
     logger.error(
       { callSid, error: error instanceof Error ? error.message : String(error) },
       'Failed to process missed call',
@@ -172,5 +253,6 @@ async function handleMissedCall(req: Request, res: Response): Promise<void> {
 }
 
 // GET is what Exotel's Passthru actually sends; POST is kept for everything else.
-callWebhookRouter.get('/call-webhook', handleMissedCall);
-callWebhookRouter.post('/call-webhook', handleMissedCall);
+// Order matters: authenticate, then count, then act.
+callWebhookRouter.get('/call-webhook', requireExotelToken, missedCallLimiter, handleMissedCall);
+callWebhookRouter.post('/call-webhook', requireExotelToken, missedCallLimiter, handleMissedCall);

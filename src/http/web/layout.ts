@@ -568,6 +568,14 @@ th,td{text-align:left;padding:var(--s3) var(--s2);border-bottom:1px solid var(--
 th{font-size:var(--t-xs);text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);
   font-weight:650}
 td.num{font-variant-numeric:tabular-nums}
+/* Opt-in horizontal scroll for a table too wide to fit a phone. Scoped to a
+   wrapper rather than applied to every table: the bookings, patients and
+   reports tables are laid out to fit already, and giving each of them a scroll
+   container would change three screens to fix one.
+   (No backticks in this comment -- the whole stylesheet is a JS template
+   literal, so one would end the string and break the build.) */
+.tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tablewrap table{min-width:520px}
 .bar{height:8px;border-radius:var(--r-pill);background:var(--accent);min-width:2px}
 
 .row{display:flex;gap:var(--s4);flex-wrap:wrap}
@@ -726,7 +734,10 @@ export interface LayoutOptions {
 
 const ADMIN_NAV: { brand: string; links: NavLink[]; logoutAction: string } = {
   brand: 'Clinic Console',
-  links: [{ href: '/app/doctors', label: 'Doctors' }],
+  links: [
+    { href: '/app/doctors', label: 'Doctors' },
+    { href: '/app/clinics', label: 'Clinics' },
+  ],
   logoutAction: '/app/logout',
 };
 

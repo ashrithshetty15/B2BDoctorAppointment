@@ -26,8 +26,11 @@ import {
 import { safeNextPath } from './web/negotiate';
 import {
   DAYS,
+  type ClinicFormValues,
   type Day,
   type DoctorFormValues,
+  clinicFormPage,
+  clinicsPage,
   doctorDetailPage,
   doctorFormPage,
   doctorsPage,
@@ -338,6 +341,17 @@ appConsoleRouter.post(
       clinic = await clinicForNewDoctor({
         clinicName: data.clinicName,
         ...(whatsappNumber ? { whatsappNumber } : {}),
+        // Both routing keys belong to the practice, not to one of its doctors:
+        // inbound WhatsApp resolves on Clinic.whatsappPhoneNumberId and a missed
+        // call on Clinic.missedCallNumber. Omitting them here is what left every
+        // clinic row with a null missed_call_number, so no Exotel call could ever
+        // be matched to a clinic.
+        ...(values.whatsappPhoneNumberId
+          ? { whatsappPhoneNumberId: values.whatsappPhoneNumberId }
+          : {}),
+        ...(values.missedCallNumber
+          ? { missedCallNumber: digitsOnly(values.missedCallNumber) }
+          : {}),
       });
     } catch (err) {
       if (err instanceof ClinicFullError) {
@@ -579,6 +593,149 @@ appConsoleRouter.post(
 
     // Shown once, via the redirect, then never again.
     res.redirect(302, `/app/doctors/${id}?key=${encodeURIComponent(apiKey)}`);
+  },
+);
+
+// ---- clinics ----
+//
+// The clinic is the tenant — inbound WhatsApp resolves on
+// Clinic.whatsappPhoneNumberId and a missed call on Clinic.missedCallNumber —
+// but until now it had no screen at all. Both columns could only be written by
+// scripts/backfillClinics.ts or by hand, which is why every clinic in production
+// ran with a null ExoPhone and no missed call could be routed.
+
+appConsoleRouter.get('/app/clinics', requireAdminSession, async (req, res) => {
+  const clinics = await prisma.clinic.findMany({
+    orderBy: { createdAt: 'desc' },
+    include: { _count: { select: { doctors: true } } },
+  });
+  const flash = typeof req.query['flash'] === 'string' ? req.query['flash'] : undefined;
+  res.type('html').send(
+    clinicsPage({
+      clinics,
+      csrfToken: req.adminCsrfToken ?? '',
+      ...(flash ? { flash } : {}),
+    }),
+  );
+});
+
+function clinicValues(clinic: {
+  name: string;
+  whatsappPhoneNumberId: string | null;
+  whatsappNumber: string | null;
+  missedCallNumber: string | null;
+  timezone: string;
+  defaultLanguage: string;
+  status: string;
+}): ClinicFormValues {
+  return {
+    name: clinic.name,
+    whatsappPhoneNumberId: clinic.whatsappPhoneNumberId ?? '',
+    whatsappNumber: clinic.whatsappNumber ?? '',
+    missedCallNumber: clinic.missedCallNumber ?? '',
+    timezone: clinic.timezone,
+    defaultLanguage: clinic.defaultLanguage,
+    status: clinic.status,
+  };
+}
+
+appConsoleRouter.get('/app/clinics/:id/edit', requireAdminSession, async (req, res) => {
+  const clinic = await prisma.clinic.findUnique({ where: { id: req.params.id ?? '' } });
+  if (!clinic) {
+    res
+      .status(404)
+      .type('html')
+      .send(
+        errorPage({
+          title: 'Not found',
+          message: 'No clinic with that id.',
+          backHref: '/app/clinics',
+        }),
+      );
+    return;
+  }
+
+  const flash = typeof req.query['flash'] === 'string' ? req.query['flash'] : undefined;
+  res.type('html').send(
+    clinicFormPage({
+      clinicId: clinic.id,
+      values: clinicValues(clinic),
+      csrfToken: req.adminCsrfToken ?? '',
+      ...(flash ? { flash } : {}),
+    }),
+  );
+});
+
+appConsoleRouter.post(
+  '/app/clinics/:id/edit',
+  requireAdminSession,
+  requireFormCsrf,
+  async (req, res) => {
+    const id = req.params.id ?? '';
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const str = (key: string) => (typeof body[key] === 'string' ? (body[key] as string).trim() : '');
+
+    const values: ClinicFormValues = {
+      name: str('name'),
+      whatsappPhoneNumberId: str('whatsappPhoneNumberId'),
+      whatsappNumber: str('whatsappNumber'),
+      missedCallNumber: str('missedCallNumber'),
+      timezone: str('timezone') || 'Asia/Kolkata',
+      defaultLanguage: str('defaultLanguage') === 'KN' ? 'KN' : 'EN',
+      status: str('status') === 'DISABLED' ? 'DISABLED' : 'ACTIVE',
+    };
+
+    const csrfToken = req.adminCsrfToken ?? '';
+    const reject = (error: string, status = 400) =>
+      res
+        .status(status)
+        .type('html')
+        .send(clinicFormPage({ clinicId: id, values, csrfToken, error }));
+
+    if (values.name.length < 2) {
+      reject('Clinic name must be at least 2 characters.');
+      return;
+    }
+
+    // Digits only on both dialable fields. The missed-call webhook strips
+    // non-digits from Exotel's CallTo before matching, so a stored '+91 98…'
+    // could never be found — the number would look right and never work.
+    const whatsappNumber = values.whatsappNumber ? digitsOnly(values.whatsappNumber) : null;
+    const missedCallNumber = values.missedCallNumber ? digitsOnly(values.missedCallNumber) : null;
+
+    try {
+      await prisma.clinic.update({
+        where: { id },
+        data: {
+          name: values.name,
+          whatsappPhoneNumberId: values.whatsappPhoneNumberId || null,
+          whatsappNumber,
+          missedCallNumber,
+          timezone: values.timezone,
+          defaultLanguage: values.defaultLanguage as 'EN' | 'KN',
+          status: values.status as 'ACTIVE' | 'DISABLED',
+        },
+      });
+    } catch (err) {
+      // whatsappPhoneNumberId and missedCallNumber are both unique. Two clinics
+      // pointed at one ExoPhone is a real operator slip, and it must read as a
+      // correctable mistake rather than as a 500.
+      const code = (err as { code?: string }).code;
+      if (code === 'P2002') {
+        reject(
+          'Another clinic already uses that WhatsApp phone number ID or missed-call number.',
+          409,
+        );
+        return;
+      }
+      if (code === 'P2025') {
+        reject('No clinic with that id.', 404);
+        return;
+      }
+      throw err;
+    }
+
+    res.redirect(302, '/app/clinics?flash=Clinic+saved');
   },
 );
 

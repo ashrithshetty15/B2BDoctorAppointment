@@ -1,4 +1,4 @@
-import type { Doctor } from '@prisma/client';
+import type { Clinic, Doctor } from '@prisma/client';
 import { type RawHtml, html, page } from './layout';
 
 export const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
@@ -368,6 +368,190 @@ export function doctorFormPage(opts: {
           <a href="${editing ? `/app/doctors/${opts.doctorId}` : '/app/doctors'}"
             ><button class="secondary" type="button">Cancel</button></a
           >
+        </form>
+      </div>
+    `,
+  );
+}
+
+export interface ClinicFormValues {
+  name: string;
+  whatsappPhoneNumberId: string;
+  whatsappNumber: string;
+  missedCallNumber: string;
+  timezone: string;
+  defaultLanguage: string;
+  status: string;
+}
+
+/**
+ * The clinic list.
+ *
+ * The clinic — not the doctor — is the tenant: inbound WhatsApp resolves on
+ * Clinic.whatsappPhoneNumberId and a missed call on Clinic.missedCallNumber.
+ * Neither had any screen at all, so both were only reachable by editing the
+ * database, and every clinic in production ran with a null ExoPhone.
+ *
+ * The two routing columns are therefore the point of this table, and a missing
+ * one is shown as a warning rather than left blank — "not set" and "set" must
+ * not look alike, for the same reason UNKNOWN channel health is shown as a fault.
+ */
+export function clinicsPage(opts: {
+  clinics: (Clinic & { _count?: { doctors: number } })[];
+  csrfToken: string;
+  flash?: string;
+}): string {
+  const missing = (label: string) => html`<span class="pill disabled">${label}</span>`;
+
+  return page(
+    { title: 'Clinics', csrfToken: opts.csrfToken, nav: true },
+    html`
+      <div class="card">
+        <h2>Clinics</h2>
+        <p class="sub">${opts.clinics.length} clinic${opts.clinics.length === 1 ? '' : 's'}</p>
+        ${opts.flash ? html`<div class="ok">${opts.flash}</div>` : ''}
+        ${opts.clinics.length === 0
+          ? html`<p class="muted">No clinics yet. One is created with the first doctor.</p>`
+          : html`
+              <div class="tablewrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Clinic</th>
+                    <th>Doctors</th>
+                    <th>WhatsApp sender</th>
+                    <th>Missed call</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${opts.clinics.map(
+                    (c) => html`
+                      <tr>
+                        <td><a href="/app/clinics/${c.id}/edit">${c.name}</a></td>
+                        <td>${c._count?.doctors ?? 0}</td>
+                        <td>
+                          ${c.whatsappPhoneNumberId
+                            ? html`<code>${c.whatsappPhoneNumberId}</code>`
+                            : missing('not set')}
+                        </td>
+                        <td>
+                          ${c.missedCallNumber
+                            ? html`<code>${c.missedCallNumber}</code>`
+                            : missing('not set')}
+                        </td>
+                        <td>
+                          <span class="pill ${c.status === 'ACTIVE' ? 'active' : 'disabled'}"
+                            >${c.status}</span
+                          >
+                        </td>
+                      </tr>
+                    `,
+                  )}
+                </tbody>
+              </table>
+              </div>
+            `}
+      </div>
+    `,
+  );
+}
+
+export function clinicFormPage(opts: {
+  values: ClinicFormValues;
+  clinicId: string;
+  csrfToken: string;
+  error?: string;
+  flash?: string;
+}): string {
+  return page(
+    { title: 'Edit clinic', csrfToken: opts.csrfToken, nav: true },
+    html`
+      <div class="card">
+        <h2>Edit clinic</h2>
+        <p class="sub">
+          These two numbers are how patients reach this clinic. Both must be set for
+          WhatsApp booking and missed-call replies to work.
+        </p>
+        ${opts.error ? html`<div class="err">${opts.error}</div>` : ''}
+        ${opts.flash ? html`<div class="ok">${opts.flash}</div>` : ''}
+
+        <form method="post" action="/app/clinics/${opts.clinicId}/edit">
+          <input type="hidden" name="_csrf" value="${opts.csrfToken}" />
+
+          <label for="name">Clinic name</label>
+          <input id="name" name="name" type="text" value="${opts.values.name}" />
+
+          <div class="row">
+            <div>
+              <label for="whatsappPhoneNumberId">
+                WhatsApp phone number ID
+                <span class="hint">Meta's opaque id — routes inbound messages</span>
+              </label>
+              <input
+                id="whatsappPhoneNumberId"
+                name="whatsappPhoneNumberId"
+                type="text"
+                value="${opts.values.whatsappPhoneNumberId}"
+              />
+            </div>
+            <div>
+              <label for="whatsappNumber">
+                WhatsApp number <span class="hint">dialable — builds the wa.me link and QR</span>
+              </label>
+              <input
+                id="whatsappNumber"
+                name="whatsappNumber"
+                type="text"
+                value="${opts.values.whatsappNumber}"
+              />
+            </div>
+          </div>
+
+          <label for="missedCallNumber">
+            Missed-call number (ExoPhone)
+            <span class="hint">the Exotel number this clinic's calls forward to</span>
+          </label>
+          <input
+            id="missedCallNumber"
+            name="missedCallNumber"
+            type="text"
+            value="${opts.values.missedCallNumber}"
+          />
+
+          <div class="row">
+            <div>
+              <label for="timezone">Timezone</label>
+              <input
+                id="timezone"
+                name="timezone"
+                type="text"
+                value="${opts.values.timezone}"
+              />
+            </div>
+            <div>
+              <label for="defaultLanguage">Default language</label>
+              <select id="defaultLanguage" name="defaultLanguage">
+                ${['EN', 'KN'].map(
+                  (l) =>
+                    html`<option value="${l}" ${opts.values.defaultLanguage === l ? 'selected' : ''}>
+                      ${l}
+                    </option>`,
+                )}
+              </select>
+            </div>
+          </div>
+
+          <label for="status">Status</label>
+          <select id="status" name="status">
+            ${['ACTIVE', 'DISABLED'].map(
+              (s) =>
+                html`<option value="${s}" ${opts.values.status === s ? 'selected' : ''}>${s}</option>`,
+            )}
+          </select>
+
+          <button type="submit">Save clinic</button>
+          <a href="/app/clinics" class="muted" style="margin-left:12px">Cancel</a>
         </form>
       </div>
     `,

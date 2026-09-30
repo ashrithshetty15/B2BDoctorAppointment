@@ -49,6 +49,12 @@ const createDoctorBody = z.object({
   whatsappPhoneNumberId: z.string().optional(),
   /** Dialable form, for the wa.me link and QR. Normalised to digits on write. */
   whatsappNumber: z.string().optional(),
+  /**
+   * Exotel ExoPhone for this clinic. The schema is .strict(), so until this was
+   * declared the field was rejected outright and the only way to set a missed-call
+   * number was to edit the database by hand.
+   */
+  missedCallNumber: z.string().optional(),
   dailyTokenCap: z.coerce.number().int().min(1).max(500).optional(),
   consultDurationMins: z.coerce.number().int().min(1).max(180).optional(),
   defaultLanguage: z.enum(['EN', 'KN']).optional(),
@@ -88,6 +94,11 @@ adminRouter.post('/admin/doctor', requireAdminKey, async (req, res) => {
       clinicName: body.clinicName,
       whatsappPhoneNumberId: body.whatsappPhoneNumberId,
       whatsappNumber,
+      // Digits only: the webhook strips non-digits from Exotel's CallTo before
+      // matching, so a stored '+91 …' could never be found.
+      ...(body.missedCallNumber
+        ? { missedCallNumber: body.missedCallNumber.replace(/\D/g, '') }
+        : {}),
       timezone: body.timezone,
       defaultLanguage: body.defaultLanguage,
     });
