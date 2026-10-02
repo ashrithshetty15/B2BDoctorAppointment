@@ -46,7 +46,7 @@ vi.mock('../utils/logger', () => ({
   logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn(), debug: vi.fn() },
 }));
 
-import { resolveClinicForChannel } from './clinics';
+import { outboundChannelForClinic, resolveClinicForChannel } from './clinics';
 
 const PLATFORM = 'pn-platform';
 const DENTIN = { id: 'dentin', name: 'ClinicForYou Demo', whatsappPhoneNumberId: 'pn-dentin', code: null };
@@ -187,5 +187,33 @@ describe('a clinic on the shared platform number', () => {
     doctorFindMany.mockResolvedValue([]);
 
     expect(await resolveClinicForChannel(PLATFORM, inbound('Book an appointment C-AAAAA'))).toBeNull();
+  });
+});
+
+/**
+ * Routing a patient in is only half of it. A clinic with no number of its own
+ * has no sender either, and the fallback underneath is the global default — in
+ * the live deployment a +1 555 test number, which would answer a Bangalore
+ * patient from a US test line. Inbound tests cannot see this, so it is pinned
+ * here next to them.
+ */
+describe('which number a shared-number clinic answers from', () => {
+  const asClinic = (c: { whatsappPhoneNumberId: string | null }) =>
+    c as Parameters<typeof outboundChannelForClinic>[0];
+
+  it('answers from the platform number', () => {
+    expect(outboundChannelForClinic(asClinic(SHARED_A))).toBe(PLATFORM);
+  });
+
+  it('still answers from its own number when it has one', () => {
+    expect(outboundChannelForClinic(asClinic(DENTIN))).toBe('pn-dentin');
+  });
+
+  /** No platform number configured: unchanged, so the adapter default applies. */
+  it('falls back to the adapter default only when there is no platform number', () => {
+    env['PLATFORM_PHONE_NUMBER_ID'] = undefined;
+
+    expect(outboundChannelForClinic(asClinic(SHARED_A))).toBeUndefined();
+    expect(outboundChannelForClinic(asClinic(DENTIN))).toBe('pn-dentin');
   });
 });

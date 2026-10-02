@@ -320,9 +320,19 @@ async function findClinic(
   return null;
 }
 
-/** Sender address to use when messaging this clinic's patients. */
+/**
+ * Sender address to use when messaging this clinic's patients.
+ *
+ * A clinic with no number of its own is, by definition, one the shared platform
+ * number serves — so that is who its messages must come from. Without this the
+ * send falls through to the global default sender, which is a different number
+ * entirely: in this deployment the +1 555 test number, so every reply to a
+ * shared-number clinic would arrive from a US test line, if it arrived at all.
+ *
+ * Unset PLATFORM_PHONE_NUMBER_ID and this is exactly the old behaviour.
+ */
 export function outboundChannelForClinic(clinic: Clinic): string | undefined {
-  return clinic.whatsappPhoneNumberId ?? undefined;
+  return clinic.whatsappPhoneNumberId ?? env.PLATFORM_PHONE_NUMBER_ID ?? undefined;
 }
 
 /** The front-desk key: one sign-in covering every doctor at a clinic. */

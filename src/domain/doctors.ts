@@ -86,9 +86,19 @@ export type DoctorWithChannel = Doctor & {
  *
  * Callers must load `clinic`. Falling back to the doctor's own column keeps
  * single-doctor rows working while the two coexist.
+ *
+ * Last comes the shared platform number, for a clinic that has no number of its
+ * own because that number is what serves it. Without it a reminder for such a
+ * clinic reaches the environment fallback — the very outcome the paragraph above
+ * calls a different clinic's number.
  */
 export function outboundChannelFor(doctor: DoctorWithChannel): string | undefined {
-  return doctor.clinic?.whatsappPhoneNumberId ?? doctor.whatsappPhoneNumberId ?? undefined;
+  return (
+    doctor.clinic?.whatsappPhoneNumberId ??
+    doctor.whatsappPhoneNumberId ??
+    env.PLATFORM_PHONE_NUMBER_ID ??
+    undefined
+  );
 }
 
 /**
