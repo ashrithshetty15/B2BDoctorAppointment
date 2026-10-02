@@ -1,7 +1,9 @@
 import crypto from 'node:crypto';
-import type { Clinic, Doctor } from '@prisma/client';
+import type { Clinic, Doctor, Language } from '@prisma/client';
 import { env } from '../config/env';
 import { prisma } from '../db/prisma';
+import { parseClinicCode } from './clinicCode';
+import { resolveSharedNumberClinic } from './sharedNumberRouting';
 import { logger } from '../utils/logger';
 
 /**
@@ -125,8 +127,9 @@ export async function activeDoctors(clinicId: string): Promise<Doctor[]> {
 
 export async function resolveClinicForChannel(
   channelAddress: string,
+  inbound?: { text: string; phone: string },
 ): Promise<ClinicWithDoctors | null> {
-  const clinic = await findClinic(channelAddress);
+  const clinic = await findClinic(channelAddress, inbound);
   if (!clinic) return null;
 
   const doctors = await activeDoctors(clinic.id);
@@ -140,7 +143,137 @@ export async function resolveClinicForChannel(
   return { clinic, doctors };
 }
 
-async function findClinic(channelAddress: string): Promise<Clinic | null> {
+
+/**
+ * Resolving a clinic on the shared platform number.
+ *
+ * The deeplink's code is the only thing in an inbound message that can name a
+ * clinic, and it arrives once — on the first message. After that the session
+ * carries it, and a patient with history can be recognised without one.
+ *
+ * The ASK case returns null deliberately rather than guessing: the engine then
+ * declines to handle the turn, exactly as it does for an unknown number. Asking
+ * the patient which clinic they mean is a conversation, and it belongs in a
+ * flow rather than in a routing function that can only answer yes or no.
+ */
+async function findClinicOnSharedNumber(text: string, phone: string): Promise<Clinic | null> {
+  const code = parseClinicCode(text);
+
+  const [byCode, liveSession, priorIds] = await Promise.all([
+    code ? prisma.clinic.findUnique({ where: { code } }) : Promise.resolve(null),
+    prisma.conversationSession.findFirst({
+      where: { phone, expiresAt: { gt: new Date() }, clinicId: { not: null } },
+      orderBy: { updatedAt: 'desc' },
+      select: { clinicId: true },
+    }),
+    clinicsPatientHasUsed(phone),
+  ]);
+
+  const decision = resolveSharedNumberClinic({
+    codeInText: code,
+    clinicForCode: byCode?.id ?? null,
+    sessionClinicId: liveSession?.clinicId ?? null,
+    priorClinicIds: priorIds,
+  });
+
+  switch (decision.kind) {
+    case 'CODE':
+    case 'SESSION':
+    case 'ONLY_PRIOR':
+      return prisma.clinic.findUnique({ where: { id: decision.clinicId } });
+    case 'ASK':
+      logger.info({ phone, choices: decision.choices.length }, 'Shared number: patient uses several clinics');
+      return null;
+    default:
+      logger.info({ phone }, 'Shared number: no code and no history; patient needs their clinic link');
+      return null;
+  }
+}
+
+/**
+ * Why the shared number could not name a clinic, and what to say about it.
+ *
+ * Returns null when this is not the platform number: an unknown number stays
+ * silent, because there is no clinic whose voice we could answer in. On the
+ * platform number there is — the platform is the sender, and a patient who
+ * writes in without a code has reached *us*, not nobody. Silence there is a
+ * dead end, and this is the number printed on cards and QR codes, so cold
+ * messages are expected traffic rather than an error.
+ *
+ * Only called after resolution has already failed, so the extra queries land on
+ * the rare path and the happy path pays nothing.
+ */
+export async function sharedNumberPrompt(
+  channelAddress: string,
+  phone: string,
+): Promise<{ clinicNames: string[]; language: Language } | null> {
+  if (!channelAddress || channelAddress !== env.PLATFORM_PHONE_NUMBER_ID) return null;
+
+  const patient = await prisma.patient.findUnique({
+    where: { phone },
+    select: { id: true, language: true },
+  });
+  const priorIds = patient ? await clinicIdsForPatient(patient.id) : [];
+
+  // Named only when there is a real choice to put to them. One prior clinic
+  // would have resolved already, and none means they have no history to list.
+  const clinics =
+    priorIds.length > 1
+      ? await prisma.clinic.findMany({
+          where: { id: { in: priorIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+
+  return {
+    // Most recent first, matching the order the resolver considered them in.
+    clinicNames: priorIds
+      .map((id) => clinics.find((c) => c.id === id)?.name)
+      .filter((n): n is string => Boolean(n)),
+    language: patient?.language ?? 'EN',
+  };
+}
+
+/** Clinics this phone has booked with, most recent first. */
+async function clinicsPatientHasUsed(phone: string): Promise<string[]> {
+  const patient = await prisma.patient.findUnique({ where: { phone }, select: { id: true } });
+  if (!patient) return [];
+
+  return clinicIdsForPatient(patient.id);
+}
+
+async function clinicIdsForPatient(patientId: string): Promise<string[]> {
+  const appointments = await prisma.appointment.findMany({
+    where: { patientId },
+    orderBy: { createdAt: 'desc' },
+    select: { doctor: { select: { clinicId: true } } },
+    take: 50,
+  });
+
+  const seen: string[] = [];
+  for (const a of appointments) {
+    const id = a.doctor.clinicId;
+    if (id && !seen.includes(id)) seen.push(id);
+  }
+  return seen;
+}
+
+async function findClinic(
+  channelAddress: string,
+  inbound?: { text: string; phone: string },
+): Promise<Clinic | null> {
+  /**
+   * The shared platform number, if this message arrived on it.
+   *
+   * Checked first and separately because this number belongs to no clinic: a
+   * lookup by phone_number_id would find nothing and fall through to the
+   * refusal below, which is correct for an unknown number and wrong for this
+   * one. Clinics with their own number never reach this branch.
+   */
+  if (channelAddress && channelAddress === env.PLATFORM_PHONE_NUMBER_ID && inbound) {
+    return findClinicOnSharedNumber(inbound.text, inbound.phone);
+  }
+
   if (channelAddress) {
     const byChannel = await prisma.clinic.findUnique({
       where: { whatsappPhoneNumberId: channelAddress },

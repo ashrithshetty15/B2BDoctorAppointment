@@ -30,6 +30,13 @@ export type TemplateSet = {
   btnChooseDoctor: () => string;
   doctorOnLeave: (p: { doctorName: string; date: string }) => string;
   notConfigured: () => string;
+  /**
+   * Shared platform number only: the message named no clinic and the patient
+   * has no history to infer one from. Without this they would get silence.
+   */
+  clinicLinkNeeded: () => string;
+  /** Shared platform number only: the patient uses more than one clinic. */
+  chooseClinic: (p: { clinics: string }) => string;
   /** Substituted for the "now serving" value before the day's first consult. */
   nowServingNone: () => string;
 
@@ -181,6 +188,10 @@ const en: TemplateSet = {
     `Dr. ${doctorName} is not available on ${date}. Please try another day.`,
   notConfigured: () =>
     'This clinic is not set up for WhatsApp booking yet. Please call the clinic directly.',
+  clinicLinkNeeded: () =>
+    'Hello! To book an appointment, please use the WhatsApp link or scan the QR code from your clinic — that is what tells us which clinic you mean.',
+  chooseClinic: ({ clinics }) =>
+    `You have booked with more than one clinic before:\n\n${clinics}\n\nPlease open the WhatsApp link or scan the QR code for the clinic you want, so we book you at the right one.`,
   nowServingNone: () => 'not started yet',
 
   // ---- TOKEN mode ----
@@ -322,6 +333,10 @@ const kn: TemplateSet = {
     `ಡಾ. ${doctorName} ${date} ದಿನ ಲಭ್ಯವಿಲ್ಲ. ದಯವಿಟ್ಟು ಬೇರೆ ದಿನ ಪ್ರಯತ್ನಿಸಿ.`,
   notConfigured: () =>
     'ಈ ಕ್ಲಿನಿಕ್ ಇನ್ನೂ WhatsApp ಬುಕಿಂಗ್‌ಗೆ ಸಿದ್ಧವಾಗಿಲ್ಲ. ದಯವಿಟ್ಟು ಕ್ಲಿನಿಕ್‌ಗೆ ನೇರವಾಗಿ ಫೋನ್ ಮಾಡಿ.',
+  clinicLinkNeeded: () =>
+    'ನಮಸ್ಕಾರ! ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಬುಕ್ ಮಾಡಲು, ದಯವಿಟ್ಟು ನಿಮ್ಮ ಕ್ಲಿನಿಕ್ ನೀಡಿದ WhatsApp ಲಿಂಕ್ ಬಳಸಿ ಅಥವಾ ಅವರ QR ಕೋಡ್ ಸ್ಕ್ಯಾನ್ ಮಾಡಿ — ಅದರಿಂದ ನೀವು ಯಾವ ಕ್ಲಿನಿಕ್ ಎಂದು ನಮಗೆ ತಿಳಿಯುತ್ತದೆ.',
+  chooseClinic: ({ clinics }) =>
+    `ನೀವು ಈ ಹಿಂದೆ ಒಂದಕ್ಕಿಂತ ಹೆಚ್ಚು ಕ್ಲಿನಿಕ್‌ಗಳಲ್ಲಿ ಬುಕ್ ಮಾಡಿದ್ದೀರಿ:\n\n${clinics}\n\nದಯವಿಟ್ಟು ನಿಮಗೆ ಬೇಕಾದ ಕ್ಲಿನಿಕ್‌ನ WhatsApp ಲಿಂಕ್ ಬಳಸಿ ಅಥವಾ ಅವರ QR ಕೋಡ್ ಸ್ಕ್ಯಾನ್ ಮಾಡಿ, ಇದರಿಂದ ಸರಿಯಾದ ಕ್ಲಿನಿಕ್‌ನಲ್ಲಿ ಬುಕ್ ಆಗುತ್ತದೆ.`,
   nowServingNone: () => 'ಇನ್ನೂ ಶುರುವಾಗಿಲ್ಲ',
 
   // ---- TOKEN mode ----

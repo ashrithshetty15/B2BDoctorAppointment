@@ -20,6 +20,19 @@ const schema = z.object({
   WHATSAPP_API_VERSION: z.string().default('v21.0'),
   WHATSAPP_ACCESS_TOKEN: z.string().optional(),
   WHATSAPP_PHONE_NUMBER_ID: z.string().optional(),
+
+  /**
+   * phone_number_id of the SHARED platform number, if there is one.
+   *
+   * Clinics that bring their own WhatsApp number are identified by it, as they
+   * always have been. Clinics with no WABA of their own are served by this one
+   * instead, and a code in the deeplink says which clinic a patient means.
+   *
+   * Unset means no shared number exists and routing behaves exactly as before —
+   * which is the state Dentin and Jalaja run in, and why this is safe to deploy
+   * before any shared number is provisioned.
+   */
+  PLATFORM_PHONE_NUMBER_ID: z.string().optional(),
   WHATSAPP_VERIFY_TOKEN: z.string().default('change-me'),
   WHATSAPP_APP_SECRET: z.string().optional(),
 

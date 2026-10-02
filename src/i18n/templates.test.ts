@@ -33,6 +33,8 @@ describe('templates', () => {
       toTime: '02:30 PM',
       // slotStatusMany renders a pre-built list of the appointments they hold.
       lines: '• *Fri, 11 Sep · 10:30 AM*',
+      // chooseClinic renders a pre-built list of the clinics they have used.
+      clinics: '• Sunrise Clinic\n• Jalaja Clinic',
     };
 
     for (const lang of languages) {

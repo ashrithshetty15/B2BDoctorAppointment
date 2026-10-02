@@ -64,8 +64,14 @@ model Clinic {
   id   String @id @default(uuid())
   name String
 
-  /// Meta `phone_number_id` that patients message. THE routing key.
+  /// Meta `phone_number_id` that patients message. THE routing key for a clinic
+  /// that brings its own WhatsApp number.
   whatsappPhoneNumberId String? @unique @map("whatsapp_phone_number_id")
+
+  /// Deeplink code, for a clinic served by the SHARED platform number instead.
+  /// Null for clinics with their own number — the two are alternatives, and a
+  /// clinic that upgrades to its own number simply stops needing this.
+  code String? @unique @map("code")
 
   /// Dialable form, digits only — builds the wa.me link and booking QR.
   whatsappNumber String? @map("whatsapp_number")

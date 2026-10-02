@@ -1,7 +1,7 @@
 import type { BookingMode, Clinic, Doctor, Language, Patient } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db/prisma';
-import { outboundChannelForClinic, resolveClinicForChannel } from '../domain/clinics';
+import { outboundChannelForClinic, resolveClinicForChannel, sharedNumberPrompt } from '../domain/clinics';
 import { doctorForFollowUpTap, markFollowUpTapped, parseFollowUpPayload } from '../domain/followUp';
 import { findOrCreatePatient } from '../domain/patients';
 import { t } from '../i18n/templates';
@@ -51,8 +51,46 @@ export async function handleInboundMessage(inbound: InboundMessage): Promise<Han
     return { handled: false, replies: [], reason: 'DUPLICATE' };
   }
 
-  const resolved = await resolveClinicForChannel(inbound.channelAddress);
+  const resolved = await resolveClinicForChannel(inbound.channelAddress, {
+    text: inbound.text,
+    phone: inbound.from,
+  });
   if (!resolved) {
+    /**
+     * On the shared platform number, answer anyway.
+     *
+     * Elsewhere silence is right: an unknown number gives us no clinic to speak
+     * as, and guessing one would hand a patient to the wrong practice. The
+     * platform number is the exception — we are the sender there, so we can say
+     * we need their clinic's link without pretending to be any clinic. This is
+     * also the number on every printed QR code, so a patient arriving without a
+     * code is ordinary traffic, and leaving them staring at a sent tick is the
+     * one outcome worse than asking.
+     */
+    const prompt = await sharedNumberPrompt(inbound.channelAddress, inbound.from);
+    if (prompt) {
+      const reply: Reply =
+        prompt.clinicNames.length > 1
+          ? {
+              templateName: 'chooseClinic',
+              text: t(prompt.language, 'chooseClinic', {
+                clinics: prompt.clinicNames.map((n) => `• ${n}`).join('\n'),
+              }),
+            }
+          : {
+              templateName: 'clinicLinkNeeded',
+              text: t(prompt.language, 'clinicLinkNeeded'),
+            };
+
+      await enqueueOutboundBulk([
+        { to: inbound.from, text: reply.text, templateName: reply.templateName, channelAddress: inbound.channelAddress },
+      ]);
+      // Marked processed: the patient got an answer, so a Meta retry would only
+      // send it twice.
+      await markProcessed(inbound.providerMessageId);
+      return { handled: true, replies: [reply] };
+    }
+
     logger.warn(
       { channelAddress: inbound.channelAddress },
       'Inbound message could not be mapped to a clinic; set DEFAULT_DOCTOR_ID or Clinic.whatsappPhoneNumberId',
