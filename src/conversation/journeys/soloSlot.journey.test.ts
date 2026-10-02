@@ -69,7 +69,7 @@ describe('one doctor, slot mode', () => {
     const dates = await say('1');
     expect(dates.step).toBe('SLOT_AWAITING_DATE');
     expect(dates.replies[0]).toBe(
-      'Which day would you like to come in?\n[Mon, 21 Sep] [Tue, 22 Sep] [Wed, 23 Sep]',
+      'Dr. Arjun Rao — which day would you like to come in?\n[Mon, 21 Sep] [Tue, 22 Sep] [Wed, 23 Sep]',
     );
 
     const times = await say('1');

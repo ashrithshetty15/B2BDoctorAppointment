@@ -37,6 +37,14 @@ export type TemplateSet = {
   clinicLinkNeeded: () => string;
   /** Shared platform number only: the patient uses more than one clinic. */
   chooseClinic: (p: { clinics: string }) => string;
+  /**
+   * Shared platform number only: a deeplink code just named this clinic.
+   *
+   * On a clinic's own number the chat header already says who the patient is
+   * talking to. On the shared number every clinic answers under one platform
+   * name, so without this the patient cannot tell which practice they are in.
+   */
+  clinicIntro: (p: { clinicName: string }) => string;
   /** Substituted for the "now serving" value before the day's first consult. */
   nowServingNone: () => string;
 
@@ -79,7 +87,7 @@ export type TemplateSet = {
 
   // ---- SLOT mode ----
   slotMainMenu: (p: { doctorName: string }) => string;
-  slotPickDate: () => string;
+  slotPickDate: (p: { doctorName: string }) => string;
   slotPickPeriod: (p: { date: string }) => string;
   slotPickTime: (p: { date: string }) => string;
   slotNoneAvailable: (p: { date: string }) => string;
@@ -190,6 +198,7 @@ const en: TemplateSet = {
     'This clinic is not set up for WhatsApp booking yet. Please call the clinic directly.',
   clinicLinkNeeded: () =>
     'Hello! To book an appointment, please use the WhatsApp link or scan the QR code from your clinic — that is what tells us which clinic you mean.',
+  clinicIntro: ({ clinicName }) => `You are booking at *${clinicName}*.`,
   chooseClinic: ({ clinics }) =>
     `You have booked with more than one clinic before:\n\n${clinics}\n\nPlease open the WhatsApp link or scan the QR code for the clinic you want, so we book you at the right one.`,
   nowServingNone: () => 'not started yet',
@@ -236,7 +245,7 @@ const en: TemplateSet = {
   // message was three times longer than it needed to be. The numbers still work
   // as input for anyone who types them.
   slotMainMenu: ({ doctorName }) => `Dr. ${doctorName}\n\nHow can we help you today?`,
-  slotPickDate: () => 'Which day would you like to come in?',
+  slotPickDate: ({ doctorName }) => `Dr. ${doctorName} — which day would you like to come in?`,
   slotPickPeriod: ({ date }) => `${date}\n\nWhat time of day suits you?`,
   slotPickTime: ({ date }) => `Available times on ${date} — pick one below.`,
   slotNoneAvailable: ({ date }) =>
@@ -335,6 +344,7 @@ const kn: TemplateSet = {
     'ಈ ಕ್ಲಿನಿಕ್ ಇನ್ನೂ WhatsApp ಬುಕಿಂಗ್‌ಗೆ ಸಿದ್ಧವಾಗಿಲ್ಲ. ದಯವಿಟ್ಟು ಕ್ಲಿನಿಕ್‌ಗೆ ನೇರವಾಗಿ ಫೋನ್ ಮಾಡಿ.',
   clinicLinkNeeded: () =>
     'ನಮಸ್ಕಾರ! ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಬುಕ್ ಮಾಡಲು, ದಯವಿಟ್ಟು ನಿಮ್ಮ ಕ್ಲಿನಿಕ್ ನೀಡಿದ WhatsApp ಲಿಂಕ್ ಬಳಸಿ ಅಥವಾ ಅವರ QR ಕೋಡ್ ಸ್ಕ್ಯಾನ್ ಮಾಡಿ — ಅದರಿಂದ ನೀವು ಯಾವ ಕ್ಲಿನಿಕ್ ಎಂದು ನಮಗೆ ತಿಳಿಯುತ್ತದೆ.',
+  clinicIntro: ({ clinicName }) => `ನೀವು *${clinicName}* ನಲ್ಲಿ ಬುಕ್ ಮಾಡುತ್ತಿದ್ದೀರಿ.`,
   chooseClinic: ({ clinics }) =>
     `ನೀವು ಈ ಹಿಂದೆ ಒಂದಕ್ಕಿಂತ ಹೆಚ್ಚು ಕ್ಲಿನಿಕ್‌ಗಳಲ್ಲಿ ಬುಕ್ ಮಾಡಿದ್ದೀರಿ:\n\n${clinics}\n\nದಯವಿಟ್ಟು ನಿಮಗೆ ಬೇಕಾದ ಕ್ಲಿನಿಕ್‌ನ WhatsApp ಲಿಂಕ್ ಬಳಸಿ ಅಥವಾ ಅವರ QR ಕೋಡ್ ಸ್ಕ್ಯಾನ್ ಮಾಡಿ, ಇದರಿಂದ ಸರಿಯಾದ ಕ್ಲಿನಿಕ್‌ನಲ್ಲಿ ಬುಕ್ ಆಗುತ್ತದೆ.`,
   nowServingNone: () => 'ಇನ್ನೂ ಶುರುವಾಗಿಲ್ಲ',
@@ -377,7 +387,7 @@ const kn: TemplateSet = {
 
   // ---- SLOT mode ----
   slotMainMenu: ({ doctorName }) => `ಡಾ. ${doctorName}\n\nಇಂದು ನಾವು ಹೇಗೆ ಸಹಾಯ ಮಾಡಬಹುದು?`,
-  slotPickDate: () => 'ಯಾವ ದಿನ ಬರಲು ಇಷ್ಟಪಡುತ್ತೀರಿ?',
+  slotPickDate: ({ doctorName }) => `ಡಾ. ${doctorName} — ಯಾವ ದಿನ ಬರಲು ಇಷ್ಟಪಡುತ್ತೀರಿ?`,
   slotPickPeriod: ({ date }) => `${date}\n\nದಿನದ ಯಾವ ಸಮಯ ನಿಮಗೆ ಅನುಕೂಲ?`,
   slotPickTime: ({ date }) => `${date} ದಿನ ಲಭ್ಯವಿರುವ ಸಮಯಗಳು — ಕೆಳಗೆ ಒಂದನ್ನು ಆಯ್ಕೆ ಮಾಡಿ.`,
   slotNoneAvailable: ({ date }) =>

@@ -205,3 +205,29 @@ describe('switching doctor', () => {
     expect(saveSession.mock.calls[0]?.[0]?.step).toBe(Steps.SELECT_DOCTOR);
   });
 });
+
+/**
+ * On a clinic's own number the chat header names the clinic, so the bot never
+ * had to. The shared platform number takes that away: every clinic answers
+ * under one name, and a patient who taps a link has no way to tell which
+ * practice they just reached.
+ */
+describe('naming the clinic when a deeplink code chose it', () => {
+  it('opens with the clinic name', async () => {
+    resolveClinicForChannel.mockResolvedValue({ clinic, doctors: DOCTORS, boundByCode: true });
+
+    const out = await handleInboundMessage(inbound('Book an appointment C-AAAAA'));
+
+    expect(out.replies[0]?.templateName).toBe('clinicIntro');
+    expect(out.replies[0]?.text).toContain('Lakeview Clinic');
+  });
+
+  /** A clinic with its own number is already named by the thread it arrives in. */
+  it('stays quiet when the clinic came from its own phone_number_id', async () => {
+    resolveClinicForChannel.mockResolvedValue({ clinic, doctors: DOCTORS, boundByCode: false });
+
+    const out = await handleInboundMessage(inbound('hi'));
+
+    expect(out.replies.map((r) => r.templateName)).not.toContain('clinicIntro');
+  });
+});

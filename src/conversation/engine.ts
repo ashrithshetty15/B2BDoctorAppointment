@@ -17,6 +17,7 @@ import { slotFlow } from './flows/slot';
 import { tokenFlow } from './flows/token';
 import { loadSession, saveSession } from './session';
 import { Steps } from './steps';
+import { reply } from './types';
 import type { ConversationContext, ConversationFlow, Effect, Reply, StepResult } from './types';
 
 /**
@@ -97,7 +98,7 @@ export async function handleInboundMessage(inbound: InboundMessage): Promise<Han
     );
     return { handled: false, replies: [], reason: 'NO_DOCTOR' };
   }
-  const { clinic, doctors } = resolved;
+  const { clinic, doctors, boundByCode } = resolved;
 
   const patient = await findOrCreatePatient(inbound.from, { language: clinic.defaultLanguage });
 
@@ -113,7 +114,7 @@ export async function handleInboundMessage(inbound: InboundMessage): Promise<Han
   await Promise.all(doctors.map((d) => markInboundSeen(patient.id, d.id)));
 
   try {
-    const replies = await runTurn(clinic, doctors, patient, inbound);
+    const replies = await runTurn(clinic, doctors, patient, inbound, boundByCode);
     await markProcessed(inbound.providerMessageId);
     return { handled: true, replies };
   } catch (err) {
@@ -139,6 +140,7 @@ async function runTurn(
   doctors: Doctor[],
   patientRow: Patient,
   inbound: InboundMessage,
+  boundByCode = false,
 ): Promise<Reply[]> {
   const session = await loadSession(inbound.from, clinic.id, patientRow.language);
   const today = clinicToday(clinic.timezone);
@@ -192,6 +194,21 @@ async function runTurn(
     if (onboarding.patch.name || onboarding.patch.language) {
       patient = { ...patient, ...onboarding.patch } as Patient;
     }
+    /**
+     * Say which clinic, when a deeplink code just chose one and nothing else
+     * will say it.
+     *
+     * Onboarding names the clinic itself when it speaks — askName and
+     * welcomeBack both carry it — so this fires only when onboarding stayed
+     * silent, which is the case of an already-known patient resuming. On a
+     * clinic's own number that silence is fine, because the chat header is the
+     * clinic. On the shared number it leaves the patient in a thread named
+     * after the platform with no idea whose appointment book they are in.
+     */
+    if (boundByCode && onboarding.prefixReplies.length === 0) {
+      prefix.push(reply('clinicIntro', t(language, 'clinicIntro', { clinicName: clinic.name })));
+    }
+
     prefix.push(...onboarding.prefixReplies);
 
     // Which doctor, before any flow runs — a flow's every branch assumes one.

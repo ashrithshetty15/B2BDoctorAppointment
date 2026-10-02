@@ -186,7 +186,12 @@ async function askForDate(ctx: ConversationContext, extraFirst?: Reply[]): Promi
     nextStep: Steps.SLOT_AWAITING_DATE,
     replies: [
       ...(extraFirst ?? []),
-      replyWithList('slotPickDate', t(ctx.language, 'slotPickDate'), t(ctx.language, 'btnChooseDate'), rows),
+      replyWithList(
+        'slotPickDate',
+        t(ctx.language, 'slotPickDate', { doctorName: ctx.doctor.name }),
+        t(ctx.language, 'btnChooseDate'),
+        rows,
+      ),
     ],
     // The chosen dates are re-derived on the next turn from this list, so store
     // the dates themselves rather than trusting the ordering to survive.

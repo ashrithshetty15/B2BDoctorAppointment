@@ -31,6 +31,15 @@ export interface ClinicWithDoctors {
   clinic: Clinic;
   /** Bookable doctors, stable order so the offered numbers do not shuffle. */
   doctors: Doctor[];
+  /**
+   * This turn's clinic came from a deeplink code on the shared number.
+   *
+   * Worth knowing because on that number the thread cannot say which practice
+   * the patient is in: every clinic answers under the one platform name, so
+   * unlike a clinic with its own number, the chat header names nobody. The bot
+   * has to say it instead, and this is the moment it can.
+   */
+  boundByCode: boolean;
 }
 
 export class ClinicFullError extends Error {
@@ -129,9 +138,10 @@ export async function resolveClinicForChannel(
   channelAddress: string,
   inbound?: { text: string; phone: string },
 ): Promise<ClinicWithDoctors | null> {
-  const clinic = await findClinic(channelAddress, inbound);
-  if (!clinic) return null;
+  const found = await findClinic(channelAddress, inbound);
+  if (!found) return null;
 
+  const { clinic, boundByCode } = found;
   const doctors = await activeDoctors(clinic.id);
   if (doctors.length === 0) {
     // A clinic whose doctors are all disabled has nothing to offer. Better to
@@ -140,7 +150,7 @@ export async function resolveClinicForChannel(
     return null;
   }
 
-  return { clinic, doctors };
+  return { clinic, doctors, boundByCode };
 }
 
 
@@ -156,7 +166,10 @@ export async function resolveClinicForChannel(
  * the patient which clinic they mean is a conversation, and it belongs in a
  * flow rather than in a routing function that can only answer yes or no.
  */
-async function findClinicOnSharedNumber(text: string, phone: string): Promise<Clinic | null> {
+async function findClinicOnSharedNumber(
+  text: string,
+  phone: string,
+): Promise<FoundClinic | null> {
   const code = parseClinicCode(text);
 
   const [byCode, liveSession, priorIds] = await Promise.all([
@@ -179,8 +192,10 @@ async function findClinicOnSharedNumber(text: string, phone: string): Promise<Cl
   switch (decision.kind) {
     case 'CODE':
     case 'SESSION':
-    case 'ONLY_PRIOR':
-      return prisma.clinic.findUnique({ where: { id: decision.clinicId } });
+    case 'ONLY_PRIOR': {
+      const clinic = await prisma.clinic.findUnique({ where: { id: decision.clinicId } });
+      return clinic ? { clinic, boundByCode: decision.kind === 'CODE' } : null;
+    }
     case 'ASK':
       logger.info({ phone, choices: decision.choices.length }, 'Shared number: patient uses several clinics');
       return null;
@@ -258,10 +273,16 @@ async function clinicIdsForPatient(patientId: string): Promise<string[]> {
   return seen;
 }
 
+/** A resolved clinic, plus how we got there. */
+interface FoundClinic {
+  clinic: Clinic;
+  boundByCode: boolean;
+}
+
 async function findClinic(
   channelAddress: string,
   inbound?: { text: string; phone: string },
-): Promise<Clinic | null> {
+): Promise<FoundClinic | null> {
   /**
    * The shared platform number, if this message arrived on it.
    *
@@ -278,7 +299,7 @@ async function findClinic(
     const byChannel = await prisma.clinic.findUnique({
       where: { whatsappPhoneNumberId: channelAddress },
     });
-    if (byChannel) return byChannel;
+    if (byChannel) return { clinic: byChannel, boundByCode: false };
 
     // Transitional: the number may still only be on the doctor row, if this is
     // running between the migration and the backfill. Removed once every clinic
@@ -287,7 +308,7 @@ async function findClinic(
       where: { whatsappPhoneNumberId: channelAddress },
       include: { clinic: true },
     });
-    if (legacy?.clinic) return legacy.clinic;
+    if (legacy?.clinic) return { clinic: legacy.clinic, boundByCode: false };
 
     /**
      * A real number matching no clinic is refused rather than guessed at.
@@ -311,11 +332,14 @@ async function findClinic(
       where: { id: env.DEFAULT_DOCTOR_ID },
       include: { clinic: true },
     });
-    if (d?.clinic) return d.clinic;
+    if (d?.clinic) return { clinic: d.clinic, boundByCode: false };
   }
 
   const count = await prisma.clinic.count();
-  if (count === 1) return prisma.clinic.findFirst();
+  if (count === 1) {
+    const only = await prisma.clinic.findFirst();
+    return only ? { clinic: only, boundByCode: false } : null;
+  }
 
   return null;
 }

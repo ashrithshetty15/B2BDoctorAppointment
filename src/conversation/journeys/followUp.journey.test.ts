@@ -77,7 +77,8 @@ describe('answering a follow-up reminder', () => {
     const tapped = await say(followUpPayload(visit.id));
 
     expect(tapped.step).toBe('SLOT_AWAITING_DATE');
-    expect(tapped.replies[0]).toContain('Which day would you like to come in?');
+    // Names Kavya, not the Arjun they picked a moment ago: the tap settled it.
+    expect(tapped.replies[0]).toContain('Dr. Kavya Shetty — which day would you like to come in?');
     // Never asked. That is the feature.
     expect(tapped.replies.join()).not.toContain('Which doctor');
   });
@@ -130,7 +131,7 @@ describe('answering a follow-up reminder', () => {
     const tapped = await say(followUpPayload(visit.id));
 
     expect(tapped.step).toBe('SLOT_AWAITING_DATE');
-    expect(tapped.replies[0]).toContain('Which day');
+    expect(tapped.replies[0]).toContain('Dr. Arjun Rao — which day');
   });
 
   /**
