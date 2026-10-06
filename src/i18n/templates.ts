@@ -41,6 +41,14 @@ export type TemplateSet = {
    * this chat cannot act on being told to find a link.
    */
   chooseClinic: () => string;
+  /**
+   * Same question, when more clinics were found than a WhatsApp list can hold.
+   *
+   * Separate from chooseClinic so the ordinary case stays clean: a patient with
+   * three clinics should not be told what to do if theirs is missing when it
+   * plainly is not.
+   */
+  chooseClinicMore: () => string;
   btnChooseClinic: () => string;
   /**
    * Shared platform number only: a deeplink code just named this clinic.
@@ -206,6 +214,8 @@ const en: TemplateSet = {
   clinicIntro: ({ clinicName }) => `You are booking at *${clinicName}*.`,
   chooseClinic: () =>
     'You have booked with more than one clinic before. Which one would you like today?',
+  chooseClinicMore: () =>
+    'You have booked with several clinics before. Choose one below — or if yours is not listed, open its booking link.',
   btnChooseClinic: () => 'Choose a clinic',
   nowServingNone: () => 'not started yet',
 
@@ -353,6 +363,8 @@ const kn: TemplateSet = {
   clinicIntro: ({ clinicName }) => `ನೀವು *${clinicName}* ನಲ್ಲಿ ಬುಕ್ ಮಾಡುತ್ತಿದ್ದೀರಿ.`,
   chooseClinic: () =>
     'ನೀವು ಈ ಹಿಂದೆ ಒಂದಕ್ಕಿಂತ ಹೆಚ್ಚು ಕ್ಲಿನಿಕ್‌ಗಳಲ್ಲಿ ಬುಕ್ ಮಾಡಿದ್ದೀರಿ. ಇಂದು ಯಾವುದರಲ್ಲಿ ಬುಕ್ ಮಾಡಬೇಕು?',
+  chooseClinicMore: () =>
+    'ನೀವು ಹಲವು ಕ್ಲಿನಿಕ್‌ಗಳಲ್ಲಿ ಬುಕ್ ಮಾಡಿದ್ದೀರಿ. ಕೆಳಗಿನಿಂದ ಒಂದನ್ನು ಆಯ್ಕೆ ಮಾಡಿ — ಅಥವಾ ನಿಮ್ಮದು ಪಟ್ಟಿಯಲ್ಲಿ ಇಲ್ಲದಿದ್ದರೆ, ಅದರ ಬುಕಿಂಗ್ ಲಿಂಕ್ ತೆರೆಯಿರಿ.',
   btnChooseClinic: () => 'ಕ್ಲಿನಿಕ್ ಆಯ್ಕೆಮಾಡಿ',
   nowServingNone: () => 'ಇನ್ನೂ ಶುರುವಾಗಿಲ್ಲ',
 

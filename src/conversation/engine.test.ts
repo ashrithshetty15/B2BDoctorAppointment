@@ -298,3 +298,50 @@ describe('asking which clinic, on the shared number', () => {
     expect(out.replies[0]?.list).toBeUndefined();
   });
 });
+
+/**
+ * More clinics than a WhatsApp list can carry.
+ *
+ * The adapter slices at ten silently, so an eleventh clinic would vanish with
+ * nothing said -- and since the rows replaced the "use your clinic's link"
+ * paragraph, the patient would have no route to it and no explanation.
+ */
+describe('when a patient has more clinics than the list holds', () => {
+  const many = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      name: `Clinic ${i + 1}`,
+      code: `C-AAA${String(i).padStart(2, '0')}`,
+    }));
+
+  it('keeps ten rows, the ten most recent', async () => {
+    resolveClinicForChannel.mockResolvedValue(null);
+    sharedNumberPrompt.mockResolvedValue({ clinics: many(14), language: 'EN' });
+
+    const out = await handleInboundMessage(inbound('hi'));
+
+    expect(out.replies[0]?.list?.rows).toHaveLength(10);
+    // Most-recent-first ordering is preserved, so the ten kept are the likeliest.
+    expect(out.replies[0]?.list?.rows[0]?.title).toBe('Clinic 1');
+    expect(out.replies[0]?.list?.rows[9]?.title).toBe('Clinic 10');
+  });
+
+  it('says the list is not everything', async () => {
+    resolveClinicForChannel.mockResolvedValue(null);
+    sharedNumberPrompt.mockResolvedValue({ clinics: many(14), language: 'EN' });
+
+    const out = await handleInboundMessage(inbound('hi'));
+
+    expect(out.replies[0]?.text).toContain('not listed');
+  });
+
+  /** Ten exactly still fits, so nothing is lost and nothing needs saying. */
+  it('stays quiet about it when they all fit', async () => {
+    resolveClinicForChannel.mockResolvedValue(null);
+    sharedNumberPrompt.mockResolvedValue({ clinics: many(10), language: 'EN' });
+
+    const out = await handleInboundMessage(inbound('hi'));
+
+    expect(out.replies[0]?.list?.rows).toHaveLength(10);
+    expect(out.replies[0]?.text).not.toContain('not listed');
+  });
+});

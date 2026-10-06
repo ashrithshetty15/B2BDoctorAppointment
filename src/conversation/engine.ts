@@ -5,7 +5,7 @@ import { outboundChannelForClinic, resolveClinicForChannel, sharedNumberPrompt }
 import { doctorForFollowUpTap, markFollowUpTapped, parseFollowUpPayload } from '../domain/followUp';
 import { findOrCreatePatient } from '../domain/patients';
 import { t } from '../i18n/templates';
-import type { InboundMessage } from '../messaging/types';
+import { MAX_LIST_ROWS, type InboundMessage } from '../messaging/types';
 import { cancelReminders, enqueueOutboundBulk, enqueueTokenQueueRecalc } from '../queue/queues';
 import { logger } from '../utils/logger';
 import { clinicToday } from '../utils/time';
@@ -81,13 +81,26 @@ export async function handleInboundMessage(inbound: InboundMessage): Promise<Han
        * path -- no extra step, no extra state, and the same route a scanned QR
        * takes.
        */
+      /**
+       * Truncated here rather than left to the adapter.
+       *
+       * WhatsApp allows ten list rows and the adapter slices silently, so an
+       * eleventh clinic would simply not appear -- and because the rows replaced
+       * the old "use your clinic's link" paragraph, the patient would be left
+       * with no way to reach it and nothing explaining why. Clinics arrive
+       * most-recent-first, so the ten kept are the ten they are likeliest to
+       * mean, and the copy changes to say the list is not everything.
+       */
+      const shown = prompt.clinics.slice(0, MAX_LIST_ROWS);
+      const truncated = prompt.clinics.length > shown.length;
+
       const reply: Reply =
         prompt.clinics.length > 1
           ? replyWithList(
               'chooseClinic',
-              t(prompt.language, 'chooseClinic'),
+              t(prompt.language, truncated ? 'chooseClinicMore' : 'chooseClinic'),
               t(prompt.language, 'btnChooseClinic'),
-              prompt.clinics.map((c) => ({ id: c.code, title: c.name })),
+              shown.map((c) => ({ id: c.code, title: c.name })),
             )
           : {
               templateName: 'clinicLinkNeeded',
