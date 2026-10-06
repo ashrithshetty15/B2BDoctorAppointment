@@ -16,6 +16,7 @@ const loadSession = vi.fn();
 const resolveClinicForChannel = vi.fn();
 const enqueueOutboundBulk = vi.fn();
 const slotHandle = vi.fn();
+const sharedNumberPrompt = vi.fn();
 
 vi.mock('./session', () => ({
   loadSession: (...a: unknown[]) => loadSession(...a),
@@ -25,6 +26,7 @@ vi.mock('./session', () => ({
 vi.mock('../domain/clinics', () => ({
   resolveClinicForChannel: (...a: unknown[]) => resolveClinicForChannel(...a),
   outboundChannelForClinic: () => 'pn-clinic',
+  sharedNumberPrompt: (...a: unknown[]) => sharedNumberPrompt(...a),
 }));
 
 vi.mock('../domain/patients', () => ({
@@ -75,6 +77,7 @@ vi.mock('../utils/logger', () => ({
 }));
 
 import { handleInboundMessage } from './engine';
+import { parseClinicCode } from '../domain/clinicCode';
 import { Steps } from './steps';
 
 const clinic = { id: 'c1', name: 'Lakeview Clinic', timezone: 'Asia/Kolkata', defaultLanguage: 'EN' } as unknown as Clinic;
@@ -108,6 +111,7 @@ beforeEach(() => {
   loadSession.mockReset().mockResolvedValue(session());
   enqueueOutboundBulk.mockReset().mockResolvedValue(undefined);
   resolveClinicForChannel.mockReset().mockResolvedValue({ clinic, doctors: DOCTORS });
+  sharedNumberPrompt.mockReset().mockResolvedValue(null);
   slotHandle.mockReset().mockResolvedValue({ nextStep: 'SLOT_MENU', replies: [], data: {} });
 });
 
@@ -229,5 +233,68 @@ describe('naming the clinic when a deeplink code chose it', () => {
     const out = await handleInboundMessage(inbound('hi'));
 
     expect(out.replies.map((r) => r.templateName)).not.toContain('clinicIntro');
+  });
+});
+
+/**
+ * A patient who has used several clinics and arrives with no code.
+ *
+ * The reply they used to get listed the clinic names and then told them to open
+ * their clinic's link or scan its QR code -- advice that cannot be acted on from
+ * inside the chat, since the link is the thing they do not have. The names are
+ * list rows now, and each row's id is the clinic's code, so tapping one sends
+ * exactly what the deeplink would have.
+ */
+describe('asking which clinic, on the shared number', () => {
+  const PRIOR = [
+    { name: 'Lakeview Clinic', code: 'C-S994X' },
+    { name: 'ClinicForYou Demo', code: 'C-EZ2KN' },
+  ];
+
+  it('offers the clinics as rows whose ids are their codes', async () => {
+    resolveClinicForChannel.mockResolvedValue(null);
+    sharedNumberPrompt.mockResolvedValue({ clinics: PRIOR, language: 'EN' });
+
+    const out = await handleInboundMessage(inbound('hi'));
+
+    expect(out.handled).toBe(true);
+    const reply = out.replies[0]!;
+    expect(reply.templateName).toBe('chooseClinic');
+    expect(reply.list?.rows).toEqual([
+      { id: 'C-S994X', title: 'Lakeview Clinic' },
+      { id: 'C-EZ2KN', title: 'ClinicForYou Demo' },
+    ]);
+  });
+
+  /** The row id has to survive the round trip as an ordinary inbound code. */
+  it('sends a row id the code parser reads back', async () => {
+    resolveClinicForChannel.mockResolvedValue(null);
+    sharedNumberPrompt.mockResolvedValue({ clinics: PRIOR, language: 'EN' });
+
+    const out = await handleInboundMessage(inbound('hi'));
+
+    for (const row of out.replies[0]!.list!.rows) {
+      expect(parseClinicCode(row.id)).toBe(row.id);
+    }
+  });
+
+  it('enqueues the list rather than text alone', async () => {
+    resolveClinicForChannel.mockResolvedValue(null);
+    sharedNumberPrompt.mockResolvedValue({ clinics: PRIOR, language: 'EN' });
+
+    await handleInboundMessage(inbound('hi'));
+
+    expect(enqueueOutboundBulk.mock.calls[0]?.[0]?.[0]?.list?.rows).toHaveLength(2);
+  });
+
+  /** One prior clinic resolves on its own, so there is nothing to ask. */
+  it('asks for a link when there is no history to offer', async () => {
+    resolveClinicForChannel.mockResolvedValue(null);
+    sharedNumberPrompt.mockResolvedValue({ clinics: [], language: 'EN' });
+
+    const out = await handleInboundMessage(inbound('hi'));
+
+    expect(out.replies[0]?.templateName).toBe('clinicLinkNeeded');
+    expect(out.replies[0]?.list).toBeUndefined();
   });
 });

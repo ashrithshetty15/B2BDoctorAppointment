@@ -218,10 +218,27 @@ async function findClinicOnSharedNumber(
  * Only called after resolution has already failed, so the extra queries land on
  * the rare path and the happy path pays nothing.
  */
+export interface PriorClinic {
+  name: string;
+  /**
+   * The deeplink code, which is also what the picker's row id carries.
+   *
+   * Tapping a row sends its id as the message text, so a row id of C-EZ2KN
+   * arrives looking exactly like a scanned QR code and resolves through the
+   * ordinary code path. That is why choosing a clinic needs no extra step and
+   * no extra state: the answer to the question is indistinguishable from the
+   * link they were asked for.
+   *
+   * A clinic with no code cannot be offered, because there would be nothing to
+   * send when the row was tapped.
+   */
+  code: string;
+}
+
 export async function sharedNumberPrompt(
   channelAddress: string,
   phone: string,
-): Promise<{ clinicNames: string[]; language: Language } | null> {
+): Promise<{ clinics: PriorClinic[]; language: Language } | null> {
   if (!channelAddress || channelAddress !== env.PLATFORM_PHONE_NUMBER_ID) return null;
 
   const patient = await prisma.patient.findUnique({
@@ -230,21 +247,22 @@ export async function sharedNumberPrompt(
   });
   const priorIds = patient ? await clinicIdsForPatient(patient.id) : [];
 
-  // Named only when there is a real choice to put to them. One prior clinic
-  // would have resolved already, and none means they have no history to list.
-  const clinics =
+  // Listed only when there is a real choice to put to them. One prior clinic
+  // would have resolved already, and none means they have no history to show.
+  const rows =
     priorIds.length > 1
       ? await prisma.clinic.findMany({
-          where: { id: { in: priorIds } },
-          select: { id: true, name: true },
+          where: { id: { in: priorIds }, code: { not: null } },
+          select: { id: true, name: true, code: true },
         })
       : [];
 
   return {
     // Most recent first, matching the order the resolver considered them in.
-    clinicNames: priorIds
-      .map((id) => clinics.find((c) => c.id === id)?.name)
-      .filter((n): n is string => Boolean(n)),
+    clinics: priorIds
+      .map((id) => rows.find((c) => c.id === id))
+      .filter((c): c is { id: string; name: string; code: string } => Boolean(c?.code))
+      .map((c) => ({ name: c.name, code: c.code })),
     language: patient?.language ?? 'EN',
   };
 }

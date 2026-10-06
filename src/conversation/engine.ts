@@ -17,7 +17,7 @@ import { slotFlow } from './flows/slot';
 import { tokenFlow } from './flows/token';
 import { loadSession, saveSession } from './session';
 import { Steps } from './steps';
-import { reply } from './types';
+import { reply, replyWithList } from './types';
 import type { ConversationContext, ConversationFlow, Effect, Reply, StepResult } from './types';
 
 /**
@@ -70,21 +70,38 @@ export async function handleInboundMessage(inbound: InboundMessage): Promise<Han
      */
     const prompt = await sharedNumberPrompt(inbound.channelAddress, inbound.from);
     if (prompt) {
+      /**
+       * Offered as a tappable list, not as instructions.
+       *
+       * Telling a patient who is already in this chat to open their clinic's
+       * link or scan its QR code is advice they cannot act on: the link is the
+       * thing they do not have, which is exactly why they are here. Each row's
+       * id is the clinic's code, so tapping one sends precisely what the
+       * deeplink would have sent, and it resolves through the ordinary code
+       * path -- no extra step, no extra state, and the same route a scanned QR
+       * takes.
+       */
       const reply: Reply =
-        prompt.clinicNames.length > 1
-          ? {
-              templateName: 'chooseClinic',
-              text: t(prompt.language, 'chooseClinic', {
-                clinics: prompt.clinicNames.map((n) => `• ${n}`).join('\n'),
-              }),
-            }
+        prompt.clinics.length > 1
+          ? replyWithList(
+              'chooseClinic',
+              t(prompt.language, 'chooseClinic'),
+              t(prompt.language, 'btnChooseClinic'),
+              prompt.clinics.map((c) => ({ id: c.code, title: c.name })),
+            )
           : {
               templateName: 'clinicLinkNeeded',
               text: t(prompt.language, 'clinicLinkNeeded'),
             };
 
       await enqueueOutboundBulk([
-        { to: inbound.from, text: reply.text, templateName: reply.templateName, channelAddress: inbound.channelAddress },
+        {
+          to: inbound.from,
+          text: reply.text,
+          templateName: reply.templateName,
+          channelAddress: inbound.channelAddress,
+          ...(reply.list?.rows.length ? { list: reply.list } : {}),
+        },
       ]);
       // Marked processed: the patient got an answer, so a Meta retry would only
       // send it twice.

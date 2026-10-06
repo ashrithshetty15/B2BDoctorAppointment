@@ -36,7 +36,12 @@ export type TemplateSet = {
    */
   clinicLinkNeeded: () => string;
   /** Shared platform number only: the patient uses more than one clinic. */
-  chooseClinic: (p: { clinics: string }) => string;
+  /**
+   * The clinic names are list rows now rather than text, because a patient in
+   * this chat cannot act on being told to find a link.
+   */
+  chooseClinic: () => string;
+  btnChooseClinic: () => string;
   /**
    * Shared platform number only: a deeplink code just named this clinic.
    *
@@ -199,8 +204,9 @@ const en: TemplateSet = {
   clinicLinkNeeded: () =>
     'Hello! To book an appointment, please use the WhatsApp link or scan the QR code from your clinic — that is what tells us which clinic you mean.',
   clinicIntro: ({ clinicName }) => `You are booking at *${clinicName}*.`,
-  chooseClinic: ({ clinics }) =>
-    `You have booked with more than one clinic before:\n\n${clinics}\n\nPlease open the WhatsApp link or scan the QR code for the clinic you want, so we book you at the right one.`,
+  chooseClinic: () =>
+    'You have booked with more than one clinic before. Which one would you like today?',
+  btnChooseClinic: () => 'Choose a clinic',
   nowServingNone: () => 'not started yet',
 
   // ---- TOKEN mode ----
@@ -345,8 +351,9 @@ const kn: TemplateSet = {
   clinicLinkNeeded: () =>
     'ನಮಸ್ಕಾರ! ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಬುಕ್ ಮಾಡಲು, ದಯವಿಟ್ಟು ನಿಮ್ಮ ಕ್ಲಿನಿಕ್ ನೀಡಿದ WhatsApp ಲಿಂಕ್ ಬಳಸಿ ಅಥವಾ ಅವರ QR ಕೋಡ್ ಸ್ಕ್ಯಾನ್ ಮಾಡಿ — ಅದರಿಂದ ನೀವು ಯಾವ ಕ್ಲಿನಿಕ್ ಎಂದು ನಮಗೆ ತಿಳಿಯುತ್ತದೆ.',
   clinicIntro: ({ clinicName }) => `ನೀವು *${clinicName}* ನಲ್ಲಿ ಬುಕ್ ಮಾಡುತ್ತಿದ್ದೀರಿ.`,
-  chooseClinic: ({ clinics }) =>
-    `ನೀವು ಈ ಹಿಂದೆ ಒಂದಕ್ಕಿಂತ ಹೆಚ್ಚು ಕ್ಲಿನಿಕ್‌ಗಳಲ್ಲಿ ಬುಕ್ ಮಾಡಿದ್ದೀರಿ:\n\n${clinics}\n\nದಯವಿಟ್ಟು ನಿಮಗೆ ಬೇಕಾದ ಕ್ಲಿನಿಕ್‌ನ WhatsApp ಲಿಂಕ್ ಬಳಸಿ ಅಥವಾ ಅವರ QR ಕೋಡ್ ಸ್ಕ್ಯಾನ್ ಮಾಡಿ, ಇದರಿಂದ ಸರಿಯಾದ ಕ್ಲಿನಿಕ್‌ನಲ್ಲಿ ಬುಕ್ ಆಗುತ್ತದೆ.`,
+  chooseClinic: () =>
+    'ನೀವು ಈ ಹಿಂದೆ ಒಂದಕ್ಕಿಂತ ಹೆಚ್ಚು ಕ್ಲಿನಿಕ್‌ಗಳಲ್ಲಿ ಬುಕ್ ಮಾಡಿದ್ದೀರಿ. ಇಂದು ಯಾವುದರಲ್ಲಿ ಬುಕ್ ಮಾಡಬೇಕು?',
+  btnChooseClinic: () => 'ಕ್ಲಿನಿಕ್ ಆಯ್ಕೆಮಾಡಿ',
   nowServingNone: () => 'ಇನ್ನೂ ಶುರುವಾಗಿಲ್ಲ',
 
   // ---- TOKEN mode ----
